@@ -317,46 +317,33 @@ Lemma context_reorder : forall Gamma x y U V t T,
    x <> y ->
    (extend (extend Gamma x U) y V |- t \in T <->
     extend (extend Gamma y V) x U |- t \in T).
-Proof.
+Proof with (eauto using extend_eq, extend_neq).
   intros. split; intros H1.
   Case "->".
-    apply context_invariance with (extend (extend Gamma x U) y V).
-    assumption. intros.
-    destruct (eq_id_dec x0 y).
+    apply context_invariance with (extend (extend Gamma x U) y V)...
+    intros. destruct (eq_id_dec x0 y).
     SCase "x0 = y".
-      rewrite e. rewrite extend_eq.
-      rewrite extend_neq. rewrite extend_eq. reflexivity.
-      assumption.
+      rewrite e. rewrite extend_eq. rewrite extend_neq...
     SCase "x0 <> y".
-      rewrite extend_neq.
+      rewrite extend_neq...
       destruct (eq_id_dec x0 x).
       SSCase "x0 = x".
-        rewrite e. rewrite extend_eq. rewrite extend_eq. reflexivity.
+        rewrite e. rewrite extend_eq...
       SSCase "x0 <> x".
-        repeat(rewrite extend_neq). reflexivity.
-        intros Hc. rewrite Hc in n. apply n. reflexivity.
-        intros Hc. rewrite Hc in n0. apply n0. reflexivity.
-        intros Hc. rewrite Hc in n0. apply n0. reflexivity.
-        intros Hc. rewrite Hc in n. apply n. reflexivity.
+        repeat(rewrite extend_neq)...
   Case "<-".
-    apply context_invariance with (extend (extend Gamma y V) x U).
-    assumption. intros.
-    destruct (eq_id_dec x0 x).
+    apply context_invariance with (extend (extend Gamma y V) x U)...
+    intros. destruct (eq_id_dec x0 x).
     SCase "x0 = x".
       rewrite e. rewrite extend_eq.
-      rewrite extend_neq. rewrite extend_eq. reflexivity.
-      intros Hc. rewrite Hc in H. apply H. reflexivity.
+      rewrite extend_neq...
     SCase "x0 <> x".
-      rewrite extend_neq.
+      rewrite extend_neq...
       destruct (eq_id_dec x0 y).
       SSCase "x0 = y".
-        rewrite e. rewrite extend_eq. rewrite extend_eq. reflexivity.
+        rewrite e. rewrite extend_eq...
       SSCase "x0 <> y".
-        repeat(rewrite extend_neq). reflexivity.
-        intros Hc. rewrite Hc in n. apply n. reflexivity.
-        intros Hc. rewrite Hc in n0. apply n0. reflexivity.
-        intros Hc. rewrite Hc in n0. apply n0. reflexivity.
-        intros Hc. rewrite Hc in n. apply n. reflexivity.
+        repeat(rewrite extend_neq)...
 Qed.
 
 Lemma substitution_preserves_typing : forall Gamma x U t v T,
