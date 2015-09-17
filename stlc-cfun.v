@@ -132,9 +132,9 @@ Inductive has_type : context -> tm -> ty -> Prop :=
   | T_Abs : forall Gamma x T11 T12 t12,
       extend Gamma x T11 |- t12 \in T12 ->
       Gamma |- tabs x T11 t12 \in TArrow T11 T12
-  | T_Cap : forall x T11 T12 t12,
+  | T_Cap : forall Gamma x T11 T12 t12,
       extend empty x T11 |- t12 \in T12 ->
-      empty |- tcap x T11 t12 \in TArrow T11 T12
+      Gamma |- tcap x T11 t12 \in TArrow T11 T12
   | T_App : forall T11 T12 Gamma t1 t2,
       Gamma |- t1 \in TArrow T11 T12 ->
       Gamma |- t2 \in T11 ->
@@ -318,9 +318,11 @@ Proof.
     inversion H1; subst.
     apply IHappears_free_in in H7.
     rewrite extend_neq in H7; assumption.
-    admit.
   Case "afi_cap".
-    inversion H1.
+    inversion H1. subst.
+    apply IHappears_free_in in H7.
+    rewrite extend_neq in H7; eauto.
+    destruct H7 as [T H7]. inversion H7.
 Qed.
 
 Lemma context_invariance : forall Gamma Gamma' t T,
@@ -412,14 +414,16 @@ Theorem preservation : forall t t' T,
      empty |- t \in T  ->
      t ==> t'  ->
      empty |- t' \in T.
-Proof.
+Proof with eauto.
   intros t t' T H1 H2. generalize dependent T.
   step_cases(induction H2) Case; intros U H3;
     try(inversion H3; subst; eauto).
   Case "ST_AppAbs".
     inversion H4; subst.
-    apply substitution_preserves_typing with (U := T11).
-    assumption. assumption.
+    apply substitution_preserves_typing with (U := T11)...
+  Case "ST_AppCap".
+    inversion H4; subst.
+    apply substitution_preserves_typing with (U := T11)...
 Qed.
 
 Definition normal_form {X:Type} (R:relation X) (t:X) : Prop :=
