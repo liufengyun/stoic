@@ -19,11 +19,15 @@ Inductive tm : Type :=
 
 Tactic Notation "t_cases" tactic(first) ident(c) :=
   first;
-  [ Case_aux c "tvar" | Case_aux c "tapp"
-    | Case_aux c "tabs" | Case_aux c "tnat"
-    | Case_aux c "tcap" | Case_aux c "tsucc"
-    | Case_aux c "tpred" | Case_aux c "tmult"
-    | Case_aux c "tif0" ].
+  [ Case_aux c "tvar"
+  | Case_aux c "tapp"
+  | Case_aux c "tabs"
+  | Case_aux c "tnat"
+  | Case_aux c "tcap"
+  | Case_aux c "tsucc"
+  | Case_aux c "tpred"
+  | Case_aux c "tmult"
+  | Case_aux c "tif0" ].
 
 Inductive value : tm -> Prop :=
   | v_abs : forall x T t,
@@ -109,14 +113,21 @@ where "t1 '==>' t2" := (step t1 t2).
 
 Tactic Notation "step_cases" tactic(first) ident(c) :=
   first;
-  [ Case_aux c "ST_AppAbs" | Case_aux c "ST_AppCap"
-    | Case_aux c "ST_App1" | Case_aux c "ST_App2"
-    | Case_aux c "ST_Succ" | Case_aux c "ST_SuccNat"
-    | Case_aux c "ST_Pred" | Case_aux c "ST_PredNat"
-    | Case_aux c "ST_PredZero" | Case_aux c "ST_MultNatNat"
-    | Case_aux c "ST_Mult1" | Case_aux c "ST_Mult2"
-    | Case_aux c "ST_If0True" | Case_aux c "ST_If0False"
-    | Case_aux c "ST_If0"
+  [ Case_aux c "ST_AppAbs"
+  | Case_aux c "ST_AppCap"
+  | Case_aux c "ST_App1"
+  | Case_aux c "ST_App2"
+  | Case_aux c "ST_Succ"
+  | Case_aux c "ST_SuccNat"
+  | Case_aux c "ST_Pred"
+  | Case_aux c "ST_PredNat"
+  | Case_aux c "ST_PredZero"
+  | Case_aux c "ST_MultNatNat"
+  | Case_aux c "ST_Mult1"
+  | Case_aux c "ST_Mult2"
+  | Case_aux c "ST_If0True"
+  | Case_aux c "ST_If0False"
+  | Case_aux c "ST_If0"
   ].
 
 Hint Constructors step.
@@ -161,11 +172,15 @@ where "Gamma '|-' t '\in' T" := (has_type Gamma t T).
 
 Tactic Notation "has_type_cases" tactic(first) ident(c) :=
   first;
-  [ Case_aux c "T_Var" | Case_aux c "T_Abs"
-    | Case_aux c "T_Cap" | Case_aux c "T_App"
-    | Case_aux c "T_Nat" | Case_aux c "T_Succ"
-    | Case_aux c "T_Pred" | Case_aux c "T_Mult"
-    | Case_aux c "T_If0"
+  [ Case_aux c "T_Var"
+  | Case_aux c "T_Abs"
+  | Case_aux c "T_Cap"
+  | Case_aux c "T_App"
+  | Case_aux c "T_Nat"
+  | Case_aux c "T_Succ"
+  | Case_aux c "T_Pred"
+  | Case_aux c "T_Mult"
+  | Case_aux c "T_If0"
  ].
 
 Hint Constructors has_type.
@@ -291,13 +306,16 @@ Inductive appears_free_in : id -> tm -> Prop :=
 Tactic Notation "afi_cases" tactic(first) ident(c) :=
   first;
   [ Case_aux c "afi_var"
-  | Case_aux c "afi_app1" | Case_aux c "afi_app2"
+  | Case_aux c "afi_app1"
+  | Case_aux c "afi_app2"
   | Case_aux c "afi_abs"
   | Case_aux c "afi_cap"
   | Case_aux c "afi_succ"
   | Case_aux c "afi_pred"
-  | Case_aux c "afi_mult1" | Case_aux c "afi_mult2"
-  | Case_aux c "afi_if1" | Case_aux c "afi_if2"
+  | Case_aux c "afi_mult1"
+  | Case_aux c "afi_mult2"
+  | Case_aux c "afi_if1"
+  | Case_aux c "afi_if2"
   | Case_aux c "afi_if3" ].
 
 Hint Constructors appears_free_in.
