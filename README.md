@@ -24,6 +24,24 @@ abstraction to deal with the first three problems. This project
 focuses on the last problem, namely to control side effects of
 closures based on a type system.
 
+For example, in the following example, the type system would report an
+error on `foo`, as it's not allowed to capture any variables in the
+environment, including `c`(but also `print`?):
+
+``` scala
+def map(xs: List[Int], f: Int => Int)(implicit c: IO): List[Int]
+def pmap(xs: List[Int], f: Int (=>) Int): List[Int]                //  (=>) means f is closed
+def print(x: Any)(implicit c: IO): ()
+
+def bar(xs: List[Int])(implicit c: IO) = {
+    map(xs, { x => print(x); x })
+}
+
+def foo(xs: List[Int])(implicit c: IO) = {
+    pmap(xs, { x => print(x); x })
+}
+```
+
 ## Steps
 
 | Milestones                   |          Description             |         status      |
