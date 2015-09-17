@@ -158,109 +158,75 @@ Lemma canonical_forms_nat : forall t,
   empty |- t \in TNat ->
   value t ->
   exists n, t = tnat n.
-Proof.
+Proof with eauto.
   intros t HT HVal.
-  inversion HVal; subst; try inversion HT.
-  subst. exists n. reflexivity.
+  inversion HVal; subst; try inversion HT...
 Qed.
 
 Lemma canonical_forms_fun : forall t T1 T2,
   empty |- t \in (TArrow T1 T2) ->
   value t ->
   exists x u, t = tabs x T1 u.
-Proof.
+Proof with eauto.
   intros t T1 T2 HT HVal.
-  inversion HVal; intros; subst; try inversion HT; subst; auto.
-  exists x. exists t0.  auto.
+  inversion HVal; subst; try inversion HT; subst...
 Qed.
 
 Theorem progress : forall t T,
      empty |- t \in T ->
      value t \/ exists t', t ==> t'.
-Proof.
+Proof with eauto.
   intros t T H1. remember empty as Gamma.
-  has_type_cases(induction H1) Case; subst Gamma; eauto.
+  has_type_cases(induction H1) Case; subst Gamma...
   Case "T_Var".
     unfold empty in H. inversion H.
   Case "T_App". right.
-    destruct IHhas_type1. reflexivity.
+    destruct IHhas_type1...
     SCase "value t1".
-      destruct IHhas_type2. reflexivity.
+      destruct IHhas_type2...
       SSCase "value t2".
-        destruct (canonical_forms_fun t1 T11 T12 H1_ H).
-        destruct H1.
-        exists ([x:=t2] x0).
-        rewrite H1. apply ST_AppAbs.
-        assumption.
+        destruct (canonical_forms_fun t1 T11 T12 H1_ H)...
+        destruct H1...
+        exists ([x:=t2] x0)...
+        rewrite H1...
       SSCase "t2 ==> t2'".
-        destruct H0 as [t2' H0'].
-        exists (tapp t1 t2').
-        apply ST_App2.
-        assumption. assumption.
+        destruct H0 as [t2' H0']...
     SCase "t1 ==> t1'".
-      destruct H as [t1' H].
-      exists (tapp t1' t2).
-      apply ST_App1.
-      assumption.
+      destruct H as [t1' H]...
   Case "T_Succ". right.
-    destruct IHhas_type. reflexivity.
+    destruct IHhas_type...
     SCase "value t1".
-      destruct (canonical_forms_nat t1 H1 H) as [n H3].
-      exists (tnat (S n)).
-      rewrite H3. apply ST_SuccNat.
+      destruct (canonical_forms_nat t1 H1 H) as [n H3]...
+      exists (tnat (S n))...
+      rewrite H3...
     SCase "t1 ==> t1'".
-      destruct H as [t1' H].
-      exists (tsucc t1').
-      apply ST_Succ.
-      assumption.
+      destruct H as [t1' H]...
   Case "T_Pred". right.
-    destruct IHhas_type. reflexivity.
+    destruct IHhas_type...
     SCase "value t1".
-      destruct (canonical_forms_nat t1 H1 H) as [n H3].
-      rewrite H3. destruct n.
-      SSCase "n = 0".
-        exists (tnat 0).
-        apply ST_PredZero.
-      SSCase "n = S n".
-        exists (tnat n).
-        apply ST_PredNat.
+      destruct (canonical_forms_nat t1 H1 H) as [n H3]...
+      rewrite H3. destruct n...
     SCase "t1 ==> t1'".
-      destruct H as [t1' H].
-      exists (tpred t1').
-      apply ST_Pred. assumption.
+      destruct H as [t1' H]...
   Case "T_Mult". right.
-    destruct IHhas_type1. reflexivity.
+    destruct IHhas_type1...
     SCase "value t1".
-      destruct IHhas_type2. reflexivity.
+      destruct IHhas_type2...
       SSCase "value t2".
-        destruct (canonical_forms_nat t1 H1_ H) as [n H3].
-        destruct (canonical_forms_nat t2 H1_0 H0) as [m H4].
-        subst. exists (tnat (n * m)).
-        apply ST_MultNatNat.
+        destruct (canonical_forms_nat t1 H1_ H) as [n H3]...
+        destruct (canonical_forms_nat t2 H1_0 H0) as [m H4]...
+        subst...
       SSCase "t2 ==> t2'".
-        destruct H0 as [t2' H0].
-        exists (tmult t1 t2').
-        apply ST_Mult2. assumption.
+        destruct H0 as [t2' H0]...
     SCase "t1 ==> t1'".
-      destruct H as [t1' H].
-      exists (tmult t1' t2).
-      apply ST_Mult1.
-      assumption.
+      destruct H as [t1' H]...
   Case "T_If0". right.
-    destruct IHhas_type1. reflexivity.
+    destruct IHhas_type1...
     SCase "value t1".
-      destruct (canonical_forms_nat t1 H1_ H) as [n H4].
-      rewrite H4. destruct n.
-      SSCase "n = 0".
-        exists t2.
-        apply ST_If0True.
-      SSCase "n = S n".
-        exists t3.
-        apply ST_If0False.
+      destruct (canonical_forms_nat t1 H1_ H) as [n H4]...
+      rewrite H4. destruct n...
     SCase "t1 ==> t1'".
-      destruct H as [t1' H].
-      exists (tif0 t1' t2 t3).
-      apply ST_If0. assumption.
+      destruct H as [t1' H]...
 Qed.
 
 Inductive appears_free_in : id -> tm -> Prop :=
