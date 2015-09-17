@@ -32,7 +32,7 @@ Tactic Notation "t_cases" tactic(first) ident(c) :=
 Inductive value : tm -> Prop :=
   | v_abs : forall x T t,
       value (tabs x T t)
-  | v_caps : forall x T t,
+  | v_caps : forall x T t,              (* capsule lambda *)
       value (tcap x T t)
   | v_nat : forall (n:nat),
       value (tnat n).
@@ -47,7 +47,7 @@ Fixpoint subst (x:id) (s:tm) (t:tm) : tm :=
       if eq_id_dec x x' then s else t
   | tabs x' T t1 =>
       tabs x' T (if eq_id_dec x x' then t1 else ([x:=s] t1))
-  | tcap x' T t1 =>
+  | tcap x' T t1 =>                      (* capsule lambda *)
       t
   | tapp t1 t2 =>
       tapp ([x:=s] t1) ([x:=s] t2)
@@ -71,7 +71,7 @@ Inductive step : tm -> tm -> Prop :=
   | ST_AppAbs : forall x T t12 v2,
          value v2 ->
          (tapp (tabs x T t12) v2) ==> [x:=v2]t12
-  | ST_AppCap : forall x T t12 v2,
+  | ST_AppCap : forall x T t12 v2,                  (* capsule lambda *)
          value v2 ->
          (tapp (tcap x T t12) v2) ==> [x:=v2]t12
   | ST_App1 : forall t1 t1' t2,
@@ -143,7 +143,7 @@ Inductive has_type : context -> tm -> ty -> Prop :=
   | T_Abs : forall Gamma x T11 T12 t12,
       extend Gamma x T11 |- t12 \in T12 ->
       Gamma |- tabs x T11 t12 \in TArrow T11 T12
-  | T_Cap : forall Gamma x T11 T12 t12,
+  | T_Cap : forall Gamma x T11 T12 t12,             (* capsule lambda *)
       extend empty x T11 |- t12 \in T12 ->
       Gamma |- tcap x T11 t12 \in TArrow T11 T12
   | T_App : forall T11 T12 Gamma t1 t2,
