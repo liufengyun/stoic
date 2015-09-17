@@ -353,35 +353,29 @@ Lemma substitution_preserves_typing : forall Gamma x U t v T,
 Proof with eauto.
   intros. generalize dependent Gamma.
   generalize dependent T.
-  t_cases(induction t) Case; intros; try(inversion H; subst; simpl); eauto.
+  t_cases(induction t) Case; intros; try(inversion H; subst; simpl)...
   Case "tvar".
-    simpl. destruct (eq_id_dec x i).
+    destruct (eq_id_dec x i)...
     SCase "x = i".
       rewrite e in H.
       inversion H. subst.
       rewrite extend_eq in H3. inversion H3.
-      rewrite <- H2. apply context_invariance with empty.
-      assumption. intros.
-      apply (free_in_context x v U empty) in H1.
-      destruct H1. inversion H1.
-      assumption.
+      rewrite <- H2. apply context_invariance with empty...
+      intros. apply (free_in_context x v U empty) in H1...
+      destruct H1. solve by inversion.
     SCase "x <> i".
       inversion H. subst.
-      rewrite extend_neq in H3.
-      apply T_Var. assumption. assumption.
+      rewrite extend_neq in H3...
   Case "tabs".
-    simpl. destruct (eq_id_dec x i).
+    destruct (eq_id_dec x i).
     SCase "x = i".
-      apply context_invariance with (extend Gamma x U).
-      assumption. intros.
-      inversion H1. subst.
-      rewrite extend_neq. reflexivity. assumption.
+      apply context_invariance with (extend Gamma x U)...
+      intros. inversion H1. subst.
+      rewrite extend_neq...
     SCase "x <> i".
       inversion H. subst.
       apply T_Abs. apply (IHt T12).
-      eapply context_reorder.
-      intros Hc. rewrite Hc in n. apply n. reflexivity.
-      assumption.
+      eapply context_reorder...
 Qed.
 
 Theorem preservation : forall t t' T,
