@@ -5,8 +5,10 @@ to control effects of closures.
 
 ## Motivation
 
-The primary concern is distributed data-parallel computation like
-Spark, where sending a function over the wire is very common.
+The primary concern of this project is to provide a type-safe solution
+for distributed data-parallel computation like
+[Spark](https://spark.apache.org), where sending a function over the
+wire is very common.
 
 When sending a function over the wire, it's important to defend
 against following closure-related hazards:
@@ -26,7 +28,7 @@ closures based on a type system.
 
 | Milestones                   |          Description             |         status      |
 | ---------------------------- | -------------------------------- | --------------------|
-|  Milestone 1                 |    STLC + closed functions       |                     |
+|  Milestone 1                 |    STLC + closed functions       |     working         |
 |  Milestone 2                 |    System F + closed functions   |                     |
 |  ...                         |                                  |                     |
 
