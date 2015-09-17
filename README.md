@@ -24,7 +24,7 @@ abstraction to deal with the first three problems. This project
 focuses on the last problem, namely to control side effects of
 closures based on a type system.
 
-## Project Steps
+## Steps
 
 | Milestones                   |          Description             |         status      |
 | ---------------------------- | -------------------------------- | --------------------|
@@ -35,3 +35,6 @@ closures based on a type system.
 ## Reference
 
 1. [Spores](http://infoscience.epfl.ch/record/191239)
+2. [Software Foundations](http://www.cis.upenn.edu/~bcpierce/sf)
+3. [Types and programming languages](https://www.cis.upenn.edu/~bcpierce/tapl/)
+4. [Certified Programming with Dependent Types](http://adam.chlipala.net/cpdt/)
