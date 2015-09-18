@@ -46,7 +46,7 @@ def foo(xs: List[Int])(implicit c: IO) = {
 
 | Milestones                   |          Description             |         status      |
 | ---------------------------- | -------------------------------- | --------------------|
-|  Milestone 1                 |    STLC + closed functions       |     working         |
+|  Milestone 1                 |    STLC + closed functions       |      Finished       |
 |  Milestone 2                 |    System F + closed functions   |                     |
 |  ...                         |                                  |                     |
 
