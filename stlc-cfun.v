@@ -32,7 +32,7 @@ Tactic Notation "t_cases" tactic(first) ident(c) :=
 Inductive value : tm -> Prop :=
   | v_abs : forall x T t,
       value (tabs x T t)
-  | v_caps : forall x T t,              (* capsule lambda *)
+  | v_cap : forall x T t,              (* capsule lambda *)
       value (tcap x T t)
   | v_nat : forall (n:nat),
       value (tnat n).
