@@ -52,14 +52,14 @@ Inductive value : tm -> Prop :=
       value (tabs x T t)
   | v_cap : forall x T t,              (* capsule lambda *)
       value (tcap x T t)
-  | v_ttabs : forall x t,
-      value (ttabs x t)
+  | v_ttabs : forall X t,
+      value (ttabs X t)
   | v_nat : forall (n:nat),
       value (tnat n).
 
 Hint Constructors value.
 
-Reserved Notation "'[' x '|->' s ']' t" (at level 20).
+Reserved Notation "'[' X '|->' S ']' T" (at level 20).
 
 Fixpoint subst_ty_ty (X:id) (S:ty) (T:ty) : ty :=
   match T with
@@ -72,7 +72,7 @@ Fixpoint subst_ty_ty (X:id) (S:ty) (T:ty) : ty :=
     | TNat => T
   end
 
-where "'[' x '|->' s ']' t" := (subst_ty_ty x s t).
+where "'[' X '|->' S ']' T" := (subst_ty_ty X S T).
 
 Reserved Notation "'[' x ':=' s ']' t" (at level 20).
 
@@ -105,7 +105,7 @@ Fixpoint subst_tm_tm (x:id) (s:tm) (t:tm) : tm :=
 where "'[' x ':=' s ']' t" := (subst_tm_tm x s t).
 
 
-Reserved Notation "'[' x ':=>' s ']' t" (at level 20).
+Reserved Notation "'[' X ':=>' S ']' t" (at level 20).
 
 Fixpoint subst_ty_tm (X:id) (S:ty) (t:tm) : tm :=
   match t with
@@ -133,7 +133,7 @@ Fixpoint subst_ty_tm (X:id) (S:ty) (t:tm) : tm :=
       tif0 ([X:=>S] t1) ([X:=>S] t2) ([X:=>S] t3)
   end
 
-where "'[' x ':=>' s ']' t" := (subst_ty_tm x s t).
+where "'[' X ':=>' S ']' t" := (subst_ty_tm X S t).
 
 Reserved Notation "t1 '==>' t2" (at level 40).
 
