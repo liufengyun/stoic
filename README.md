@@ -63,9 +63,9 @@ Prerequisite: Install `Coq v8.5beta2`.
 
 ### Makefile Tasks
 
+- compile project: `make`
 - clean project: `make clean`
 - compile libs: `make lib`
-- compile project: `make`
 - clean lib: `make libclean`
 
 ### Tips about Coq Version
