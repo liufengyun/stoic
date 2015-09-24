@@ -1,0 +1,6 @@
+[submodule "lib/tlc"]
+	path = lib/tlc
+	url = https://gforge.inria.fr/git/tlc/tlc.git
+[submodule "lib/ln"]
+	path = lib/ln
+	url = https://gforge.inria.fr/git/formalmetacoq/formalmetacoq.git
