@@ -50,9 +50,15 @@ def foo(xs: List[Int])(implicit c: IO) = {
 |  Milestone 2                 |    System F + closed functions   |                     |
 |  ...                         |                                  |                     |
 
+## Development
+
+- Coq v8.5beta2
+- [TLC](http://www.chargueraud.org/softs/tlc/)
+
 ## Reference
 
 1. [Spores](http://infoscience.epfl.ch/record/191239)
 2. [Software Foundations](http://www.cis.upenn.edu/~bcpierce/sf)
 3. [Types and programming languages](https://www.cis.upenn.edu/~bcpierce/tapl/)
 4. [Certified Programming with Dependent Types](http://adam.chlipala.net/cpdt/)
+5. [Locally Nameless](http://www.chargueraud.org/softs/ln/)
