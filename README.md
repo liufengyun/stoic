@@ -52,23 +52,47 @@ def foo(xs: List[Int])(implicit c: IO) = {
 
 ## Development
 
-Make sure `Coq v8.5beta2` is used.
+Prerequisite: Install `Coq v8.5beta2`.
+
+### Get Started
 
 1. clone the reop: `git clone git@github.com:liufengyun/typed-closure.git`
 1. init submodules: `git submodule init`
 1. compile libs: `make lib`
 1. compile project: `make`
 
-Other Make tasks:
+### Makefile Tasks
 
 - clean project: `make clean`
-- clean lib: `make cleanlib`
+- compile libs: `make lib`
+- compile project: `make`
+- clean lib: `make libclean`
 
-Tip: A `settings.sh` file can be used to specify the version of Coq to use:
+### Tips about Coq Version
+
+A `settings.sh` file can be used to specify the version of Coq to use:
 
     COQBIN=/path/to/coq/bin/
 
 If you do this, please also put a copy of `settings.sh` under `lib/tlc/src/`.
+
+### Compile Locally Nameless
+
+The locally-nameless project under `lib/ln/ln` is not compiled by default,
+as it's not required for compiling current project. Follow the steps below
+to compile the project if needed:
+
+1. put a `settings.sh` file under `lib/ln/ln`:
+
+    TLC=../../tlc/src/
+    COQBIN=/path/to/coq/bin/
+
+2. run `make`.
+
+If you want to play with `locally-nameless` in emacs, put a `.dir-locals.el`
+file under `lib/ln/ln`:
+
+    ((coq-mode . ((coq-prog-args . ("-emacs-U" "-R" "../tlc/src" "TLC")))))
 
 ## Reference
 
