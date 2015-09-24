@@ -52,8 +52,23 @@ def foo(xs: List[Int])(implicit c: IO) = {
 
 ## Development
 
-- Coq v8.5beta2
-- [TLC](http://www.chargueraud.org/softs/tlc/)
+Make sure `Coq v8.5beta2` is used.
+
+1. clone the reop: `git clone git@github.com:liufengyun/typed-closure.git`
+1. init submodules: `git submodule init`
+1. compile libs: `make lib`
+1. compile project: `make`
+
+Other Make tasks:
+
+- clean project: `make clean`
+- clean lib: `make cleanlib`
+
+Tip: A `settings.sh` file can be used to specify the version of Coq to use:
+
+    COQBIN=/path/to/coq/bin/
+
+If you do this, please also put a copy of `settings.sh` under `lib/tlc/src/`.
 
 ## Reference
 
@@ -62,3 +77,4 @@ def foo(xs: List[Int])(implicit c: IO) = {
 3. [Types and programming languages](https://www.cis.upenn.edu/~bcpierce/tapl/)
 4. [Certified Programming with Dependent Types](http://adam.chlipala.net/cpdt/)
 5. [Locally Nameless](http://www.chargueraud.org/softs/ln/)
+6. [TLC](http://www.chargueraud.org/softs/tlc/)
