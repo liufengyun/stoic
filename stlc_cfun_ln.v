@@ -23,6 +23,7 @@ Inductive trm : Set :=
   | trm_bvar : nat -> trm
   | trm_fvar : var -> trm
   | trm_abs  : trm -> trm
+  | trm_cap  : trm -> trm            (* capsule lambda - closed *)
   | trm_app  : trm -> trm -> trm.
 
 Coercion trm_bvar : nat >-> trm.
@@ -36,6 +37,7 @@ Fixpoint open_rec (k : nat) (u : trm) (t : trm) {struct t} : trm :=
   | trm_bvar i    => If k = i then u else (trm_bvar i)
   | trm_fvar x    => trm_fvar x
   | trm_abs t1    => trm_abs (open_rec (S k) u t1)
+  | trm_cap t1    => trm_cap (open_rec (S k) u t1)
   | trm_app t1 t2 => trm_app (open_rec k u t1) (open_rec k u t2)
   end.
 
@@ -54,6 +56,9 @@ Inductive term : trm -> Prop :=
   | term_abs : forall L t1,
       (forall x, x \notin L -> term (t1 ^ x)) ->
       term (trm_abs t1)
+  | term_cap: forall L t1,
+      (forall x, x \notin L -> term (t1 ^ x)) ->
+      term (trm_cap t1)
   | term_app : forall t1 t2,
       term t1 ->
       term t2 ->
@@ -64,15 +69,21 @@ Inductive term : trm -> Prop :=
 
 Inductive value : trm -> Prop :=
   | value_abs : forall t1,
-      term (trm_abs t1) -> value (trm_abs t1).
+      term (trm_abs t1) -> value (trm_abs t1)
+  | value_cap: forall t1,
+      term (trm_cap t1) -> value (trm_cap t1).
 
 Reserved Notation "t --> t'" (at level 68).
 
 Inductive red : trm -> trm -> Prop :=
-  | red_beta : forall t1 t2,
+  | red_beta_abs : forall t1 t2,
       term (trm_abs t1) ->
       value t2 ->
       (trm_app (trm_abs t1) t2) --> (t1 ^^ t2)
+  | red_beta_cap : forall t1 t2,
+      term (trm_cap t1) ->
+      value t2 ->
+      (trm_app (trm_cap t1) t2) --> (t1 ^^ t2)
   | red_app_1 : forall t1 t1' t2,
       term t2 ->
       t1 --> t1' ->
@@ -104,6 +115,11 @@ Inductive typing : ctx -> trm -> typ -> Prop :=
       (forall x, x \notin L ->
         (E & x ~ U) |= t1 ^ x ~: T) ->
       E |= (trm_abs t1) ~: (typ_arrow U T)
+  | typing_cap: forall L E U T t1,
+      ok E ->
+      (forall x, x \notin L ->
+        (empty & x ~ U) |= t1 ^ x ~: T) ->
+      E |= (trm_cap t1) ~: (typ_arrow U T)
   | typing_app : forall S T E t1 t2,
       E |= t1 ~: (typ_arrow S T) ->
       E |= t2 ~: S ->
@@ -139,6 +155,7 @@ Fixpoint fv (t : trm) {struct t} : vars :=
   | trm_bvar i    => \{}
   | trm_fvar x    => \{x}
   | trm_abs t1    => (fv t1)
+  | trm_cap t1    => (fv t1)
   | trm_app t1 t2 => (fv t1) \u (fv t2)
   end.
 
@@ -152,6 +169,7 @@ Fixpoint subst (z : var) (u : trm) (t : trm) {struct t} : trm :=
   | trm_bvar i    => trm_bvar i
   | trm_fvar x    => If x = z then u else (trm_fvar x)
   | trm_abs t1    => trm_abs ([ z ~> u ] t1)
+  | trm_cap t1    => trm_cap ([ z ~> u ] t1)
   | trm_app t1 t2 => trm_app ([ z ~> u ] t1) ([ z ~> u ] t2)
   end
 
@@ -209,6 +227,7 @@ Lemma open_rec_term : forall t u,
 Proof.
   induction 1; intros; simpl; fequals*. unfolds open.
   pick_fresh x. apply* (@open_rec_term_core t1 0 (trm_fvar x)).
+  pick_fresh x. apply* (@open_rec_term_core t1 0 (trm_fvar x)).
 Qed.
 
 Lemma subst_fresh : forall x t u,
@@ -246,11 +265,15 @@ Lemma term_abs_to_body : forall t1,
   term (trm_abs t1) -> body t1.
 Proof. intros. unfold body. inversion* H. Qed.
 
+Lemma term_cap_to_body : forall t1,
+  term (trm_cap t1) -> body t1.
+Proof. intros. unfold body. inversion* H. Qed.
+
 Lemma body_to_term_abs : forall t1,
   body t1 -> term (trm_abs t1).
 Proof. intros. inversion* H. Qed.
 
-Hint Resolve term_abs_to_body body_to_term_abs.
+Hint Resolve term_abs_to_body term_cap_to_body body_to_term_abs.
 
 Lemma subst_term : forall t z u,
   term u -> term t -> term ([z ~> u]t).
@@ -258,6 +281,7 @@ Proof.
   induction 2; simpls*.
   case_var*.
   apply_fresh term_abs. rewrite* subst_open_var.
+  apply_fresh term_cap. rewrite* subst_open_var.
 Qed.
 
 Hint Resolve subst_term.
@@ -314,6 +338,7 @@ Proof.
   induction Typ; intros G EQ Ok; subst.
   apply* typing_var. apply* binds_weaken.
   apply_fresh* typing_abs as y. apply_ih_bind* H0.
+  apply* typing_cap.
   apply* typing_app.
 Qed.
 
@@ -328,7 +353,9 @@ Proof.
     binds_get H0. apply_empty* typing_weaken.
     binds_cases H0; apply* typing_var.
   apply_fresh typing_abs as y.
-   rewrite* subst_open_var. apply_ih_bind* H0.
+    rewrite* subst_open_var. apply_ih_bind* H0.
+  apply_fresh typing_cap as y. apply* ok_remove.
+    rewrite* subst_open_var. apply_ih_bind* H1.
   apply* typing_app.
 Qed.
 
@@ -336,6 +363,8 @@ Lemma preservation_result : preservation_statement.
 Proof.
   introv Typ. gen t'.
   induction Typ; intros t' Red; inversions Red.
+  inversions Typ1. pick_fresh x. rewrite* (@subst_intro x).
+   apply_empty* typing_subst.
   inversions Typ1. pick_fresh x. rewrite* (@subst_intro x).
    apply_empty* typing_subst.
   apply* typing_app.
