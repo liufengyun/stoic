@@ -84,8 +84,10 @@ to compile the project if needed:
 
 1. put a `settings.sh` file under `lib/ln/ln`:
 
-    TLC=../../tlc/src/
-    COQBIN=/path/to/coq/bin/
+``` shell
+TLC=../../tlc/src/
+COQBIN=/path/to/coq/bin/
+```
 
 2. run `make`.
 
