@@ -254,6 +254,12 @@ Proof.
   rewrite* subst_fresh. simpl. case_var*.
 Qed.
 
+(* TODO *)
+Lemma closed_lambda_subst: forall x t S T z u,
+    empty & x ~ S |= t ^ x ~: T ->
+    empty & x ~ S |= [z ~> u] t ^ x ~: T.
+Proof. admit. Qed.
+
 
 (* ********************************************************************** *)
 (** ** Preservation of local closure *)
@@ -355,7 +361,7 @@ Proof.
   apply_fresh typing_abs as y.
     rewrite* subst_open_var. apply_ih_bind* H0.
   apply_fresh typing_cap as y. apply* ok_remove.
-    rewrite* subst_open_var. apply_ih_bind* H1.
+    rewrite* subst_open_var. apply* closed_lambda_subst.
   apply* typing_app.
 Qed.
 
@@ -367,6 +373,8 @@ Proof.
    apply_empty* typing_subst.
   inversions Typ1. pick_fresh x. rewrite* (@subst_intro x).
    apply_empty* typing_subst.
+   replace E with (empty & E) by (apply* concat_empty_l).
+   apply* typing_weaken. rewrite* concat_empty_l.
   apply* typing_app.
   apply* typing_app.
 Qed.
