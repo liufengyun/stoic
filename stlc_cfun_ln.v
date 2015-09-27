@@ -104,6 +104,17 @@ Definition ctx := env typ.
 (* ********************************************************************** *)
 (** ** Typing *)
 
+(** ** Free variables *)
+
+Fixpoint fv (t : trm) {struct t} : vars :=
+  match t with
+  | trm_bvar i    => \{}
+  | trm_fvar x    => \{x}
+  | trm_abs t1    => (fv t1)
+  | trm_cap t1    => (fv t1)
+  | trm_app t1 t2 => (fv t1) \u (fv t2)
+  end.
+
 Reserved Notation "E |= t ~: T" (at level 69).
 
 Inductive typing : ctx -> trm -> typ -> Prop :=
@@ -115,10 +126,10 @@ Inductive typing : ctx -> trm -> typ -> Prop :=
       (forall x, x \notin L ->
         (E & x ~ U) |= t1 ^ x ~: T) ->
       E |= (trm_abs t1) ~: (typ_arrow U T)
-  | typing_cap: forall L E U T t1,
+  | typing_cap: forall E U T t1,
       ok E ->
-      (forall x, x \notin L ->
-        (empty & x ~ U) |= t1 ^ x ~: T) ->
+      fv t1 = \{} ->
+      (forall x, x ~ U |= t1 ^ x ~: T) ->
       E |= (trm_cap t1) ~: (typ_arrow U T)
   | typing_app : forall S T E t1 t2,
       E |= t1 ~: (typ_arrow S T) ->
@@ -146,18 +157,6 @@ Definition progress_statement := forall t T,
 (* ********************************************************************** *)
 (* ********************************************************************** *)
 (** * Infrastructure *)
-
-(* ********************************************************************** *)
-(** ** Free variables *)
-
-Fixpoint fv (t : trm) {struct t} : vars :=
-  match t with
-  | trm_bvar i    => \{}
-  | trm_fvar x    => \{x}
-  | trm_abs t1    => (fv t1)
-  | trm_cap t1    => (fv t1)
-  | trm_app t1 t2 => (fv t1) \u (fv t2)
-  end.
 
 (* ********************************************************************** *)
 (** ** Substitution *)
@@ -254,12 +253,17 @@ Proof.
   rewrite* subst_fresh. simpl. case_var*.
 Qed.
 
-(* TODO *)
-Lemma closed_lambda_subst: forall x t S T z u,
-    empty & x ~ S |= t ^ x ~: T ->
-    empty & x ~ S |= [z ~> u] t ^ x ~: T.
-Proof. admit. Qed.
-
+Lemma closed_term_subst: forall t x u,
+    fv t = \{} ->
+    [x ~> u] t = t.
+Proof. intros t. induction t; intros x u H; inversions* H; subst.
+  false. applys* in_empty_elim. rewrites <- H1. applys* in_singleton_self.
+  simpl. rewrite* IHt.
+  simpl. rewrite* IHt.
+  simpl. rewrite* IHt1. rewrite* IHt2.
+  apply fset_extens. rewrite <- H1. apply subset_union_weak_r. apply subset_empty_l.
+  apply fset_extens. rewrite <- H1. apply subset_union_weak_l. apply subset_empty_l.
+Qed.
 
 (* ********************************************************************** *)
 (** ** Preservation of local closure *)
@@ -307,9 +311,12 @@ Hint Resolve open_term.
 Lemma typing_regular : forall E e T,
   typing E e T -> ok E /\ term e.
 Proof.
-  split; induction* H.
+  split. induction* H.
   pick_fresh y. forwards~ : (H0 y).
+
+  induction H. autos*. autos*. apply_fresh term_cap. apply H2. autos*.
 Qed.
+
 
 Lemma value_regular : forall e,
   value e -> term e.
@@ -360,8 +367,7 @@ Proof.
     binds_cases H0; apply* typing_var.
   apply_fresh typing_abs as y.
     rewrite* subst_open_var. apply_ih_bind* H0.
-  apply_fresh typing_cap as y. apply* ok_remove.
-    rewrite* subst_open_var. apply* closed_lambda_subst.
+  pick_fresh y. applys* typing_cap; rewrite* closed_term_subst.
   apply* typing_app.
 Qed.
 
@@ -375,6 +381,7 @@ Proof.
    apply_empty* typing_subst.
    replace E with (empty & E) by (apply* concat_empty_l).
    apply* typing_weaken. rewrite* concat_empty_l.
+   rewrite* concat_empty_l.
   apply* typing_app.
   apply* typing_app.
 Qed.
