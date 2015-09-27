@@ -391,10 +391,12 @@ Proof.
   introv Typ. gen_eq E: (empty:ctx). lets Typ': Typ.
   induction Typ; intros; subst.
   false* binds_empty_inv.
-  left*.
-  right. destruct~ IHTyp1 as [Val1 | [t1' Red1]].
+  left*. left*.
+  right.
+    destruct~ IHTyp1 as [Val1 | [t1' Red1]].
     destruct~ IHTyp2 as [Val2 | [t2' Red2]].
       inversions Typ1; inversions Val1. exists* (t0 ^^ t2).
+      exists* (t0 ^^ t2).
       exists* (trm_app t1 t2').
     exists* (trm_app t1' t2).
 Qed.
