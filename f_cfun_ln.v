@@ -111,7 +111,20 @@ Inductive term : trm -> Prop :=
 
 (** Environment is an associative list of bindings. *)
 
-Definition env := LibEnv.env typ.
+(** Binding are either mapping type or term variables.
+ [X ~<: T] is a subtyping asumption and [x ~: T] is
+ a typing assumption *)
+
+Inductive bind : Set :=
+  | bind_X : bind
+  | bind_typ : typ -> bind.
+
+Notation "[: X :]" := (X ~ bind_X)
+  (at level 23) : env_scope.
+Notation "x ~: T" := (x ~ bind_typ T)
+  (at level 24, left associativity) : env_scope.
+
+Definition env := LibEnv.env bind.
 
 (** Well-formedness of a pre-type T in an environment E:
   all the type variables of T must be bound via a
@@ -120,7 +133,7 @@ Definition env := LibEnv.env typ.
 
 Inductive wft : env -> typ -> Prop :=
   | wft_var : forall E X,
-      binds X (typ_fvar X) E ->
+      binds X bind_X E ->
       wft E (typ_fvar X)
   | wft_arrow : forall E T1 T2,
       wft E T1 ->
@@ -128,7 +141,7 @@ Inductive wft : env -> typ -> Prop :=
       wft E (typ_arrow T1 T2)
   | wft_all : forall L E T,
       (forall X, X \notin L ->
-        wft (E & X ~ (typ_fvar X)) (T open_tt_var X)) ->
+        wft (E & [: X :]) (T open_tt_var X)) ->
       wft E (typ_all T).
 
 (** A environment E is well-formed if it contains no duplicate bindings
@@ -139,20 +152,20 @@ Inductive okt : env -> Prop :=
   | okt_empty :
       okt empty
   | okt_X : forall E X,
-      okt E -> X # E -> okt (E & X ~ (typ_fvar X))
+      okt E -> X # E -> okt (E & [: X :])
   | okt_typ : forall E x T,
-      okt E -> wft E T -> x # E -> okt (E & x ~ T).
+      okt E -> wft E T -> x # E -> okt (E & x ~: T).
 
 (** Typing relation *)
 
 Inductive typing : env -> trm -> typ -> Prop :=
   | typing_var : forall E x T,
       okt E ->
-      binds x T E ->
+      binds x (bind_typ T) E ->
       typing E (trm_fvar x) T
   | typing_abs : forall L E V e1 T1,
       (forall x, x \notin L ->
-        typing (E & x ~ V) (e1 open_ee_var x) T1) ->
+        typing (E & x ~: V) (e1 open_ee_var x) T1) ->
       typing E (trm_abs V e1) (typ_arrow V T1)
   | typing_app : forall T1 E e1 e2 T2,
       typing E e1 (typ_arrow T1 T2) ->
@@ -160,7 +173,7 @@ Inductive typing : env -> trm -> typ -> Prop :=
       typing E (trm_app e1 e2) T2
   | typing_tabs : forall L E e1 T1,
       (forall X, X \notin L ->
-        typing (E & X ~ (typ_fvar X)) (e1 open_te_var X) (T1 open_tt_var X)) ->
+        typing (E & [: X :]) (e1 open_te_var X) (T1 open_tt_var X)) ->
       typing E (trm_tabs e1) (typ_all T1)
   | typing_tapp : forall T1 E e1 T,
       typing E e1 (typ_all T1) ->
