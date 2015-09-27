@@ -113,11 +113,41 @@ Inductive term : trm -> Prop :=
 
 Definition env := LibEnv.env typ.
 
+(** Well-formedness of a pre-type T in an environment E:
+  all the type variables of T must be bound via a
+  subtyping relation in E. This predicates implies
+  that T is a type *)
+
+Inductive wft : env -> typ -> Prop :=
+  | wft_var : forall E X,
+      binds X (typ_fvar X) E ->
+      wft E (typ_fvar X)
+  | wft_arrow : forall E T1 T2,
+      wft E T1 ->
+      wft E T2 ->
+      wft E (typ_arrow T1 T2)
+  | wft_all : forall L E T,
+      (forall X, X \notin L ->
+        wft (E & X ~ (typ_fvar X)) (T open_tt_var X)) ->
+      wft E (typ_all T).
+
+(** A environment E is well-formed if it contains no duplicate bindings
+  and if each type in it is well-formed with respect to the environment
+  it is pushed on to. *)
+
+Inductive okt : env -> Prop :=
+  | okt_empty :
+      okt empty
+  | okt_X : forall E X,
+      okt E -> X # E -> okt (E & X ~ (typ_fvar X))
+  | okt_typ : forall E x T,
+      okt E -> wft E T -> x # E -> okt (E & x ~ T).
+
 (** Typing relation *)
 
 Inductive typing : env -> trm -> typ -> Prop :=
   | typing_var : forall E x T,
-      ok E ->
+      okt E ->
       binds x T E ->
       typing E (trm_fvar x) T
   | typing_abs : forall L E V e1 T1,
