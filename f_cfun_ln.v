@@ -779,6 +779,7 @@ Proof.
 Qed.
 
 Hint Resolve wft_weaken_right.
+Hint Resolve wft_strengthen.
 Hint Resolve wft_from_okt_typ.
 Hint Immediate wft_from_env_has_typ.
 Hint Resolve wft_subst_tb.
@@ -840,6 +841,15 @@ Proof.
       applys* wft_strengthen.
       apply ok_from_okt in O.
       lets (? & H): (ok_push_inv O). eauto.
+Qed.
+
+Lemma okt_weaken : forall E F,
+  okt (E & F) -> okt E.
+Proof.
+  induction F using env_ind; rew_env_concat; introv Okt. auto.
+  lets(T & [H | H]): (okt_push_inv Okt); subst.
+  apply IHF. lets*: okt_push_sub_inv Okt.
+  apply IHF. lets*: okt_push_typ_inv Okt.
 Qed.
 
 (** Through type substitution *)
@@ -963,3 +973,129 @@ Hint Extern 1 (term ?e) =>
   | H: red ?e _ |- _ => apply (proj1 (red_regular H))
   | H: red _ ?e |- _ => apply (proj2 (red_regular H))
   end.
+
+(* ********************************************************************** *)
+(** * Properties of Typing *)
+
+(* ********************************************************************** *)
+(** Weakening (5) *)
+
+Lemma typing_weakening : forall E F G e T,
+   typing (E & G) e T ->
+   okt (E & F & G) ->
+   typing (E & F & G) e T.
+Proof.
+  introv Typ. gen F. inductions Typ; introv Ok.
+  apply* typing_var. apply* binds_weaken.
+  apply_fresh* typing_abs as x. forwards~ K: (H x).
+   apply_ih_bind (H0 x); eauto.
+  apply* typing_app.
+  apply_fresh* typing_tabs as X. forwards~ K: (H X).
+   apply_ih_bind (H0 X); eauto.
+  apply* typing_tapp.
+Qed.
+
+(************************************************************************ *)
+(** Preservation by Term Substitution (8) *)
+
+Lemma typing_through_subst_ee : forall U E F x T e u,
+  typing (E & x ~: U & F) e T ->
+  typing E u U ->
+  typing (E & F) (subst_ee x u e) T.
+Proof.
+  introv TypT TypU. inductions TypT; introv; simpl.
+  case_var.
+    binds_get H0. apply_empty* typing_weakening.
+    binds_cases H0; apply* typing_var.
+  apply_fresh* typing_abs as y.
+    rewrite* subst_ee_open_ee_var.
+    apply_ih_bind* H0. lets*: (typing_regular TypU).
+  apply* typing_app.
+  apply_fresh* typing_tabs as Y.
+    rewrite* subst_ee_open_te_var.
+    apply_ih_bind* H0.  lets*: (typing_regular TypU).
+  apply* typing_tapp.
+Qed.
+
+(************************************************************************ *)
+(** Preservation by Type Substitution (11) *)
+
+Lemma typing_through_subst_te : forall E F Z e T P,
+  typing (E & [: Z :] & F) e T ->
+  wft E P ->
+  typing (E & map (subst_tb Z P) F) (subst_te Z P e) (subst_tt Z P T).
+Proof.
+  introv Typ PsubQ.
+  inductions Typ; introv; simpls subst_tt; simpls subst_te.
+  apply* typing_var. rewrite* (@map_subst_tb_id E Z P).
+   binds_cases H0; unsimpl_map_bind*. eauto using okt_weaken.
+  apply_fresh* typing_abs as y.
+    unsimpl (subst_tb Z P (bind_typ V)).
+    rewrite* subst_te_open_ee_var.
+    apply_ih_map_bind* H0.
+  apply* typing_app.
+  apply_fresh* typing_tabs as Y.
+    unsimpl (subst_tb Z P bind_X).
+    rewrite* subst_te_open_te_var; eauto using wft_type.
+    rewrite* subst_tt_open_tt_var; eauto using wft_type.
+    apply_ih_map_bind* H0.
+  rewrite* subst_tt_open_tt; eauto using wft_type.
+Qed.
+
+(* ********************************************************************** *)
+(** * Preservation *)
+
+(* ********************************************************************** *)
+(** Inversions for Typing (13) *)
+
+Lemma typing_inv_abs : forall E S1 e1 T,
+  typing E (trm_abs S1 e1) T ->
+  forall U1 U2, T = (typ_arrow U1 U2) ->
+     U1 = S1
+  /\ exists S2, exists L, forall x, x \notin L ->
+     typing (E & x ~: S1) (e1 open_ee_var x) S2 /\ S2 = U2.
+Proof.
+  introv Typ. gen_eq e: (trm_abs S1 e1). gen S1 e1.
+  induction Typ; intros S1 b1 EQ U1 U2 Heq; inversions EQ.
+  inverts Heq. splits*.
+Qed.
+
+Lemma typing_inv_tabs : forall E e1 T,
+  typing E (trm_tabs e1) T ->
+  forall U1, T = (typ_all U1) ->
+     exists S1, exists L, forall X, X \notin L ->
+     typing (E & [: X :]) (e1 open_te_var X) (S1 open_tt_var X)
+     /\ (S1 open_tt_var X) = (U1 open_tt_var X).
+Proof.
+  intros E e1 T H. gen_eq e: (trm_tabs e1). gen e1.
+  induction H; intros b EQ U1 H2; inversion EQ.
+  inverts H2.
+   exists U1. let L1 := gather_vars in exists L1.
+   intros Y Fr. splits*. substs.
+   apply* H.
+Qed.
+
+(* ********************************************************************** *)
+(** Preservation Result (20) *)
+
+Lemma preservation_result : preservation.
+Proof.
+  introv Typ. gen e'. induction Typ; introv Red;
+   try solve [ inversion Red ].
+  (* case: app *)
+  inversions Red; try solve [ apply* typing_app ].
+  destruct~ (typing_inv_abs Typ1 (U1:=T1) (U2:=T2)) as [P1 [S2 [L P2]]].
+    pick_fresh X. forwards~ K: (P2 X). destruct K.
+     rewrite* (@subst_ee_intro X).
+     apply_empty (@typing_through_subst_ee V); substs*.
+       lets*: typing_regular Typ2.
+  (* case: tapp *)
+  inversions Red; try solve [ apply* typing_tapp ].
+  inversions Typ. pick_fresh X. forwards~ K: (H5 X).
+  rewrite* (@subst_te_intro X).
+  rewrite* (@subst_tt_intro X).
+  asserts_rewrite (E = E & map (subst_tb X T) empty).
+    rewrite map_empty. rewrite~ concat_empty_r.
+  apply* typing_through_subst_te.
+  rewrite* concat_empty_r.
+Qed.
