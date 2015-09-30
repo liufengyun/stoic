@@ -1046,37 +1046,6 @@ Qed.
 (** * Preservation *)
 
 (* ********************************************************************** *)
-(** Inversions for Typing (13) *)
-
-Lemma typing_inv_abs : forall E S1 e1 T,
-  typing E (trm_abs S1 e1) T ->
-  forall U1 U2, T = (typ_arrow U1 U2) ->
-     U1 = S1
-  /\ exists S2, exists L, forall x, x \notin L ->
-     typing (E & x ~: S1) (e1 open_ee_var x) S2 /\ S2 = U2.
-Proof.
-  introv Typ. gen_eq e: (trm_abs S1 e1). gen S1 e1.
-  induction Typ; intros S1 b1 EQ U1 U2 Heq; inversions EQ.
-  inverts Heq. splits*.
-Qed.
-
-Lemma typing_inv_tabs : forall E e1 T,
-  typing E (trm_tabs e1) T ->
-  forall U1, T = (typ_all U1) ->
-     exists S1, exists L, forall X, X \notin L ->
-     typing (E & [: X :]) (e1 open_te_var X) (S1 open_tt_var X)
-     /\ (S1 open_tt_var X) = (U1 open_tt_var X).
-Proof.
-  intros E e1 T H. gen_eq e: (trm_tabs e1). gen e1.
-  induction H; intros b EQ U1 H2; inversion EQ.
-  inverts H2.
-   exists U1. let L1 := gather_vars in exists L1.
-   intros Y Fr. splits*. substs.
-   apply* H.
-Qed.
-
-(* ********************************************************************** *)
-(** Preservation Result (20) *)
 
 Lemma preservation_result : preservation.
 Proof.
@@ -1084,10 +1053,9 @@ Proof.
    try solve [ inversion Red ].
   (* case: app *)
   inversions Red; try solve [ apply* typing_app ].
-  destruct~ (typing_inv_abs Typ1 (U1:=T1) (U2:=T2)) as [P1 [S2 [L P2]]].
-    pick_fresh X. forwards~ K: (P2 X). destruct K.
-     rewrite* (@subst_ee_intro X).
-     apply_empty (@typing_through_subst_ee V); substs*.
+  inversions Typ1. pick_fresh X. forwards~ K: (H2 X).
+  rewrite* (@subst_ee_intro X).
+  apply_empty typing_through_subst_ee; substs*.
        lets*: typing_regular Typ2.
   (* case: tapp *)
   inversions Red; try solve [ apply* typing_tapp ].
