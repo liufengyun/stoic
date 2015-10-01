@@ -215,7 +215,7 @@ Inductive typing : env -> trm -> typ -> Prop :=
         typing (E & x ~: V) (e1 open_ee_var x) T1) ->
       typing E (trm_abs V e1) (typ_arrow V T1)
   | typing_cap: forall E V e1 T1,   (* v1: don't allow capture type variable *)
-      ok E ->
+      okt E ->
       fv e1 = \{} ->
       (forall x, typing (x ~: V) (e1 open_ee_var x) T1) ->
       typing E (trm_cap V e1) (typ_arrow V T1)
