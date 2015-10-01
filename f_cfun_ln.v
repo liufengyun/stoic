@@ -112,24 +112,23 @@ Inductive term : trm -> Prop :=
 (** Environment is an associative list of bindings. *)
 
 (** Binding are either mapping type or term variables.
- [X ~<: T] is a subtyping asumption and [x ~: T] is
+ [: X :] is a type variable asumption and [x ~: T] is
  a typing assumption *)
 
 Inductive bind : Set :=
   | bind_X : bind
-  | bind_typ : typ -> bind.
+  | bind_x : typ -> bind.
 
 Notation "[: X :]" := (X ~ bind_X)
   (at level 23) : env_scope.
-Notation "x ~: T" := (x ~ bind_typ T)
+Notation "x ~: T" := (x ~ bind_x T)
   (at level 24, left associativity) : env_scope.
 
 Definition env := LibEnv.env bind.
 
-(** Well-formedness of a pre-type T in an environment E:
-  all the type variables of T must be bound via a
-  subtyping relation in E. This predicates implies
-  that T is a type *)
+(** Well-formedness of a pre-type T in an environment E: all the type
+  variables of T must be bound via [: T :] in E. This predicates
+  implies that T is a type *)
 
 Inductive wft : env -> typ -> Prop :=
   | wft_var : forall E X,
@@ -161,7 +160,7 @@ Inductive okt : env -> Prop :=
 Inductive typing : env -> trm -> typ -> Prop :=
   | typing_var : forall E x T,
       okt E ->
-      binds x (bind_typ T) E ->
+      binds x (bind_x T) E ->
       typing E (trm_fvar x) T
   | typing_abs : forall L E V e1 T1,
       (forall x, x \notin L ->
@@ -300,7 +299,7 @@ Fixpoint subst_ee (z : var) (u : trm) (e : trm) {struct e} : trm :=
 Definition subst_tb (Z : var) (P : typ) (b : bind) : bind :=
   match b with
   | bind_X => bind_X
-  | bind_typ T => bind_typ (subst_tt Z P T)
+  | bind_x T => bind_x (subst_tt Z P T)
   end.
 
 (* ********************************************************************** *)
@@ -741,7 +740,7 @@ Hint Extern 1 (ok _) => apply ok_from_okt.
 (** Extraction from a typing assumption in a well-formed environments *)
 
 Lemma wft_from_env_has_typ : forall x U E,
-  okt E -> binds x (bind_typ U) E -> wft E U.
+  okt E -> binds x (bind_x U) E -> wft E U.
 Proof.
   induction E using env_ind; intros Ok B.
   false* binds_empty_inv.
@@ -791,7 +790,7 @@ Hint Resolve wft_subst_tb.
 (** Inversion lemma *)
 
 Lemma okt_push_inv : forall E X B,
-  okt (E & X ~ B) -> exists T, B = bind_X \/ B = bind_typ T.
+  okt (E & X ~ B) -> exists T, B = bind_X \/ B = bind_x T.
 Proof.
   introv O. inverts O.
     false* empty_push_inv.
@@ -799,7 +798,7 @@ Proof.
     lets (?&?&?): (eq_push_inv H). subst*.
 Qed.
 
-Lemma okt_push_sub_inv : forall E X,
+Lemma okt_push_X_inv : forall E X,
   okt (E & [: X :]) -> okt E /\ X # E.
 Proof.
   introv O. inverts O.
@@ -808,7 +807,7 @@ Proof.
     lets (?&?&?): (eq_push_inv H). false.
 Qed.
 
-Lemma okt_push_typ_inv : forall E x T,
+Lemma okt_push_x_inv : forall E x T,
   okt (E & x ~: T) -> okt E /\ wft E T /\ x # E.
 Proof.
   introv O. inverts O.
@@ -817,11 +816,11 @@ Proof.
     lets (?&M&?): (eq_push_inv H). subst. inverts~ M.
 Qed.
 
-Lemma okt_push_typ_type : forall E x T,
+Lemma okt_push_x_type : forall E x T,
   okt (E & x ~: T) -> type T.
-Proof. intros. applys wft_type. forwards*: okt_push_typ_inv. Qed.
+Proof. intros. applys wft_type. forwards*: okt_push_x_inv. Qed.
 
-Hint Immediate okt_push_typ_type.
+Hint Immediate okt_push_x_type.
 
 (** Through strengthening *)
 
@@ -830,14 +829,14 @@ Lemma okt_strengthen : forall x T (E F:env),
   okt (E & F).
 Proof.
  introv O. induction F using env_ind.
-  rewrite concat_empty_r in *. lets*: (okt_push_typ_inv O).
+  rewrite concat_empty_r in *. lets*: (okt_push_x_inv O).
   rewrite concat_assoc in *.
    lets (U&[?|?]): okt_push_inv O; subst.
-      applys~ okt_X. apply IHF. applys* okt_push_sub_inv.
+      applys~ okt_X. apply IHF. applys* okt_push_X_inv.
       apply ok_from_okt in O.
       lets (? & H): (ok_push_inv O). eauto.
 
-      applys~ okt_typ. apply IHF. applys* okt_push_typ_inv.
+      applys~ okt_typ. apply IHF. applys* okt_push_x_inv.
       applys* wft_strengthen.
       apply ok_from_okt in O.
       lets (? & H): (ok_push_inv O). eauto.
@@ -848,8 +847,8 @@ Lemma okt_weaken : forall E F,
 Proof.
   induction F using env_ind; rew_env_concat; introv Okt. auto.
   lets(T & [H | H]): (okt_push_inv Okt); subst.
-  apply IHF. lets*: okt_push_sub_inv Okt.
-  apply IHF. lets*: okt_push_typ_inv Okt.
+  apply IHF. lets*: okt_push_X_inv Okt.
+  apply IHF. lets*: okt_push_x_inv Okt.
 Qed.
 
 (** Through type substitution *)
@@ -861,11 +860,11 @@ Lemma okt_subst_tb : forall Z P (E F:env),
 Proof.
  introv O W. induction F using env_ind.
   rewrite map_empty. rewrite concat_empty_r in *.
-   lets*: (okt_push_sub_inv O).
+   lets*: (okt_push_X_inv O).
   rewrite map_push. rewrite concat_assoc in *.
    lets (U&[?|?]): okt_push_inv O; subst.
-     lets*: (okt_push_sub_inv O).
-     lets*: (okt_push_typ_inv O).
+     lets*: (okt_push_X_inv O).
+     lets*: (okt_push_x_inv O).
       applys~ okt_typ; lets*: H.
 Qed.
 
@@ -918,14 +917,14 @@ Proof.
   splits*.
   splits.
    pick_fresh y. specializes H0 y. destructs~ H0.
-    forwards*: okt_push_typ_inv.
+    forwards*: okt_push_x_inv.
    apply_fresh* term_abs as y.
      pick_fresh y. specializes H0 y. destructs~ H0.
-      forwards*: okt_push_typ_inv.
+      forwards*: okt_push_x_inv.
      specializes H0 y. destructs~ H0.
   splits*.
   splits.
-   pick_fresh y. specializes H0 y. destructs~ H0. lets*: (okt_push_sub_inv H0).
+   pick_fresh y. specializes H0 y. destructs~ H0. lets*: (okt_push_X_inv H0).
      apply term_tabs with L. intros. apply* H0.
   splits*. lets(H1 & H2): IHtyping.
    apply* term_tapp. apply* wft_type.
@@ -1030,7 +1029,7 @@ Proof.
   apply* typing_var. rewrite* (@map_subst_tb_id E Z P).
    binds_cases H0; unsimpl_map_bind*. eauto using okt_weaken.
   apply_fresh* typing_abs as y.
-    unsimpl (subst_tb Z P (bind_typ V)).
+    unsimpl (subst_tb Z P (bind_x V)).
     rewrite* subst_te_open_ee_var.
     apply_ih_map_bind* H0.
   apply* typing_app.
