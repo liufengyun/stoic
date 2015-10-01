@@ -299,6 +299,7 @@ Fixpoint subst_te (Z : var) (U : typ) (e : trm) {struct e} : trm :=
   | trm_bvar i    => trm_bvar i
   | trm_fvar x    => trm_fvar x
   | trm_abs V e1  => trm_abs  (subst_tt Z U V)  (subst_te Z U e1)
+  | trm_cap V e1  => trm_cap  (subst_tt Z U V)  (subst_te Z U e1)
   | trm_app e1 e2 => trm_app  (subst_te Z U e1) (subst_te Z U e2)
   | trm_tabs e1   => trm_tabs (subst_te Z U e1)
   | trm_tapp e1 V => trm_tapp (subst_te Z U e1) (subst_tt Z U V)
@@ -311,6 +312,7 @@ Fixpoint subst_ee (z : var) (u : trm) (e : trm) {struct e} : trm :=
   | trm_bvar i    => trm_bvar i
   | trm_fvar x    => If x = z then u else (trm_fvar x)
   | trm_abs V e1  => trm_abs V (subst_ee z u e1)
+  | trm_cap V e1  => trm_cap V (subst_ee z u e1)
   | trm_app e1 e2 => trm_app (subst_ee z u e1) (subst_ee z u e2)
   | trm_tabs e1   => trm_tabs (subst_ee z u e1)
   | trm_tapp e1 V => trm_tapp (subst_ee z u e1) V
@@ -386,6 +388,21 @@ Ltac unsimpl_map_bind :=
 
 Tactic Notation "unsimpl_map_bind" "*" :=
   unsimpl_map_bind; autos*.
+
+(* ********************************************************************** *)
+(** * Properties of Set *)
+
+(* ********************************************************************** *)
+
+Lemma notin_union_inv: forall x E F,
+  x \notin (E \u F) -> x \notin E /\ x \notin F.
+Proof. intros. autos. Qed.
+
+Lemma empty_fv_notin: forall x e,
+  fv_te e \u fv_ee e = \{} -> x \notin fv_te e /\ x \notin fv_ee e.
+Proof. intros. assert (H1: x \notin fv_te e \u fv_ee e) by rewrite* H.
+   split; lets*: notin_union_inv x (fv_te e) (fv_ee e) H1. Qed.
+
 
 (* ********************************************************************** *)
 (** * Properties of Substitutions *)
@@ -484,6 +501,8 @@ Proof.
     f_equal*; try solve [ apply* open_tt_rec_type ].
   unfolds open_ee. pick_fresh x.
    apply* (@open_te_rec_term_core e1 0 (trm_fvar x)).
+  unfolds open_ee. pick_fresh x.
+   apply* (@open_te_rec_term_core e1 0 (trm_fvar x)).
   unfolds open_te. pick_fresh X.
    apply* (@open_te_rec_type_core e1 0 (typ_fvar X)).
 Qed.
@@ -550,6 +569,8 @@ Lemma open_ee_rec_term : forall u e,
   term e -> forall k, e = open_ee_rec k u e.
 Proof.
   induction 1; intros; simpl; f_equal*.
+  unfolds open_ee. pick_fresh x.
+   apply* (@open_ee_rec_term_core e1 0 (trm_fvar x)).
   unfolds open_ee. pick_fresh x.
    apply* (@open_ee_rec_term_core e1 0 (trm_fvar x)).
   unfolds open_te. pick_fresh X.
@@ -633,6 +654,7 @@ Lemma subst_te_term : forall e Z P,
 Proof.
   lets: subst_tt_type. induction 1; intros; simpl; auto.
   apply_fresh* term_abs as x. rewrite* subst_te_open_ee_var.
+  apply_fresh* term_cap as x. rewrite* subst_te_open_ee_var.
   apply_fresh* term_tabs as x. rewrite* subst_te_open_te_var.
 Qed.
 
@@ -642,6 +664,7 @@ Proof.
   induction 1; intros; simpl; auto.
   case_var*.
   apply_fresh* term_abs as y. rewrite* subst_ee_open_ee_var.
+  apply_fresh* term_cap as y. rewrite* subst_ee_open_ee_var.
   apply_fresh* term_tabs as Y. rewrite* subst_ee_open_te_var.
 Qed.
 
@@ -944,6 +967,11 @@ Proof.
      pick_fresh y. specializes H0 y. destructs~ H0.
       forwards*: okt_push_x_inv.
      specializes H0 y. destructs~ H0.
+  splits*. apply_fresh* term_cap as y.
+     pick_fresh y. destructs~ (H2 y).
+     rewrite <- concat_empty_l in H3.
+     forwards*: okt_push_x_inv H3.
+     specializes H2 y. destructs~ H2.
   splits*.
   splits.
    pick_fresh y. specializes H0 y. destructs~ H0. lets*: (okt_push_X_inv H0).
@@ -966,6 +994,7 @@ Lemma red_regular : forall t t',
   red t t' -> term t /\ term t'.
 Proof.
   induction 1; split; autos* value_regular.
+  inversions H. pick_fresh y. rewrite* (@subst_ee_intro y).
   inversions H. pick_fresh y. rewrite* (@subst_ee_intro y).
   inversions H. pick_fresh Y. rewrite* (@subst_te_intro Y).
 Qed.
@@ -1010,11 +1039,38 @@ Proof.
   apply* typing_var. apply* binds_weaken.
   apply_fresh* typing_abs as x. forwards~ K: (H x).
    apply_ih_bind (H0 x); eauto.
+  pick_fresh x. apply* typing_cap; eauto.
   apply* typing_app.
   apply_fresh* typing_tabs as X. forwards~ K: (H X).
    apply_ih_bind (H0 X); eauto.
   apply* typing_tapp.
 Qed.
+
+Lemma typing_wft: forall E e T, typing E e T -> wft E T.
+Proof.
+  intros. induction H. applys~ wft_from_env_has_typ x.
+  apply wft_arrow. pick_fresh x. forwards~: (H x).
+    lets(H2 & _): (typing_regular H1). autos* (wft_from_okt_typ H2).
+    pick_fresh x. forwards~: (H0 x). replace E with (E & empty) by rewrite* concat_empty_r.
+    eapply wft_strengthen. rewrite* concat_empty_r.
+  apply wft_arrow. pick_fresh x. forwards~: (H1 x).
+    lets(H4 & _): (typing_regular H3). rewrite* <- concat_empty_l in H4.
+    lets*: wft_from_okt_typ H4.
+    replace E with (empty & E) by (rewrite* concat_empty_l).
+    apply* wft_weaken_right. rewrite* concat_empty_l.
+
+    pick_fresh x. forwards~: (H2 x).
+    replace E with (empty & E) by (rewrite* concat_empty_l).
+    apply wft_weaken_right.
+    replace (x~:V) with (empty & x~:V & empty) in H3
+      by (rewrite* concat_empty_l; rewrite* concat_empty_r).
+    apply wft_strengthen in H3. rewrite* concat_empty_l in H3.
+    rewrite* concat_empty_l.
+  inverts* IHtyping1.
+  apply* (@wft_all L).
+  apply* wft_open.
+Qed.
+
 
 (************************************************************************ *)
 (** Preservation by Term Substitution (8) *)
@@ -1031,12 +1087,16 @@ Proof.
   apply_fresh* typing_abs as y.
     rewrite* subst_ee_open_ee_var.
     apply_ih_bind* H0. lets*: (typing_regular TypU).
+  apply* typing_cap; eauto.
+    rewrite* subst_ee_fresh. unfolds* fv. lets*: empty_fv_notin H0.
+    rewrite* subst_ee_fresh. unfolds* fv. lets*: empty_fv_notin H0.
   apply* typing_app.
   apply_fresh* typing_tabs as Y.
     rewrite* subst_ee_open_te_var.
     apply_ih_bind* H0.  lets*: (typing_regular TypU).
   apply* typing_tapp.
 Qed.
+
 
 (************************************************************************ *)
 (** Preservation by Type Substitution (11) *)
@@ -1054,6 +1114,17 @@ Proof.
     unsimpl (subst_tb Z P (bind_x V)).
     rewrite* subst_te_open_ee_var.
     apply_ih_map_bind* H0.
+  apply* typing_cap.
+    rewrite* subst_te_fresh. unfolds* fv. lets*: empty_fv_notin H0.
+    rewrite* subst_te_fresh. repeat(rewrite* subst_tt_fresh).
+    pick_fresh y. lets*: H1 y. apply typing_wft in H3.
+    autos* notin_fv_wf.
+
+    pick_fresh y. lets*: H1 y. lets(G1 & _): (typing_regular H3).
+    replace (y~:V) with (empty & y~:V) in G1 by rewrite *concat_empty_l.
+    apply wft_from_okt_typ in G1. autos* notin_fv_wf.
+
+    unfolds* fv. lets*: empty_fv_notin H0.
   apply* typing_app.
   apply_fresh* typing_tabs as Y.
     unsimpl (subst_tb Z P bind_X).
