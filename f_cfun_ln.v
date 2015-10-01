@@ -1145,10 +1145,20 @@ Proof.
    try solve [ inversion Red ].
   (* case: app *)
   inversions Red; try solve [ apply* typing_app ].
-  inversions Typ1. pick_fresh X. forwards~ K: (H2 X).
-  rewrite* (@subst_ee_intro X).
+  inversions Typ1. pick_fresh x. forwards~ K: (H2 x).
+  rewrite* (@subst_ee_intro x).
   apply_empty typing_through_subst_ee; substs*.
        lets*: typing_regular Typ2.
+
+  inversions Typ1. pick_fresh x. forwards~ K: (H8 x).
+  rewrite* (@subst_ee_intro x).
+    apply_empty typing_through_subst_ee; substs*.
+    rewrite <- (@concat_empty_l bind _).
+    rewrite concat_assoc.
+    apply* typing_weakening. rewrite* concat_empty_l.
+    apply* okt_typ. rewrite* concat_empty_l.
+    rewrite* concat_empty_l. autos* typing_wft.
+    lets*: typing_regular Typ2.
   (* case: tapp *)
   inversions Red; try solve [ apply* typing_tapp ].
   inversions Typ. pick_fresh X. forwards~ K: (H5 X).
