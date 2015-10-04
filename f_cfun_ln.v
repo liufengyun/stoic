@@ -398,11 +398,12 @@ Lemma notin_union_inv: forall x E F,
   x \notin (E \u F) -> x \notin E /\ x \notin F.
 Proof. intros. autos. Qed.
 
-Lemma empty_fv_notin: forall x e,
-  fv_te e \u fv_ee e = \{} -> x \notin fv_te e /\ x \notin fv_ee e.
-Proof. intros. assert (H1: x \notin fv_te e \u fv_ee e) by rewrite* H.
-   split; lets*: notin_union_inv x (fv_te e) (fv_ee e) H1. Qed.
-
+Lemma union_empty_inv: forall (A:Type) (a b: fset A),
+   a \u b = \{} -> a = \{} /\ b = \{}.
+Proof. intros. split.
+  apply fset_extens. rewrite <- H. apply subset_union_weak_l. apply subset_empty_l.
+  apply fset_extens. rewrite <- H. apply subset_union_weak_r. apply subset_empty_l.
+Qed.
 
 (* ********************************************************************** *)
 (** * Properties of Substitutions *)
@@ -956,10 +957,10 @@ Proof.
       forwards*: okt_push_x_inv.
      specializes H0 y. destructs~ H0.
   splits*. apply_fresh* term_cap as y.
-     pick_fresh y. destructs~ (H2 y).
-     rewrite <- concat_empty_l in H3.
-     forwards*: okt_push_x_inv H3.
-     specializes H2 y. destructs~ H2.
+     pick_fresh y. specializes H1 y. destructs~ H1.
+     rewrite <- concat_empty_l in H1.
+     lets*: okt_push_x_type H1.
+     specializes H1 y. destructs~ H1.
   splits*.
   splits.
    pick_fresh y. specializes H0 y. destructs~ H0. lets*: (okt_push_X_inv H0).
@@ -1041,18 +1042,18 @@ Proof.
     lets(H2 & _): (typing_regular H1). autos* (wft_from_okt_typ H2).
     pick_fresh x. forwards~: (H0 x). replace E with (E & empty) by rewrite* concat_empty_r.
     eapply wft_strengthen. rewrite* concat_empty_r.
-  apply wft_arrow. pick_fresh x. forwards~: (H1 x).
-    lets(H4 & _): (typing_regular H3). rewrite* <- concat_empty_l in H4.
-    lets*: wft_from_okt_typ H4.
+  apply wft_arrow. pick_fresh x. forwards~: (H0 x).
+    lets(H3 & _): (typing_regular H2). rewrite* <- concat_empty_l in H3.
+    lets*: wft_from_okt_typ H3.
     replace E with (empty & E) by (rewrite* concat_empty_l).
     apply* wft_weaken_right. rewrite* concat_empty_l.
 
-    pick_fresh x. forwards~: (H2 x).
+    pick_fresh x. forwards~: (H1 x).
     replace E with (empty & E) by (rewrite* concat_empty_l).
     apply wft_weaken_right.
-    replace (x~:V) with (empty & x~:V & empty) in H3
+    replace (x~:V) with (empty & x~:V & empty) in H2
       by (rewrite* concat_empty_l; rewrite* concat_empty_r).
-    apply wft_strengthen in H3. rewrite* concat_empty_l in H3.
+    apply wft_strengthen in H2. rewrite* concat_empty_l in H2.
     rewrite* concat_empty_l.
   inverts* IHtyping1.
   apply* (@wft_all L).
@@ -1062,6 +1063,33 @@ Qed.
 
 (************************************************************************ *)
 (** Preservation by Term Substitution (8) *)
+
+Lemma typing_env_fv : forall E e T,
+  typing E e T -> fv e \c dom E /\ fv_tt T \c dom E.
+Proof. admit. Qed.
+
+Lemma typing_term_closed : forall e T,
+  typing empty e T -> fv e = \{} /\ fv_tt T = \{}.
+Proof using.
+  intros. apply typing_env_fv in H.
+  rewrite dom_empty in H. destruct H.
+  split.
+  apply* fset_extens. apply subset_empty_l.
+  apply* fset_extens. apply subset_empty_l.
+Qed.
+
+Lemma typing_cap_closed : forall E V e T,
+  typing E (trm_cap V e) T -> fv e = \{} /\ fv_tt V = \{}.
+Proof.
+  intros. inversions H.
+  assert (HI: typing empty (trm_cap V e)  (typ_arrow V T1)).
+    apply typing_cap with L; autos.
+  assert (HII: fv (trm_cap V e) = \{}).
+    eapply typing_term_closed. exact HI.
+  unfold fv in HII. simpl in HII.
+  apply and_comm. unfold fv. rewrite <- union_assoc in HII.
+  autos* union_empty_inv.
+Qed.
 
 Lemma typing_through_subst_ee : forall U E F x T e u,
   typing (E & x ~: U & F) e T ->
@@ -1075,9 +1103,14 @@ Proof.
   apply_fresh* typing_abs as y.
     rewrite* subst_ee_open_ee_var.
     apply_ih_bind* H0. lets*: (typing_regular TypU).
-  apply* typing_cap; eauto.
-    rewrite* subst_ee_fresh. unfolds* fv. lets*: empty_fv_notin H0.
-    rewrite* subst_ee_fresh. unfolds* fv. lets*: empty_fv_notin H0.
+  (* apply_fresh* typing_cap as y. *)
+  apply typing_cap with L. eauto.
+    rewrite* subst_ee_fresh.
+    pick_fresh y. forwards~ HI: (H0 y).
+    assert (HII: typing empty (trm_cap V e1) (typ_arrow V T1))
+           by apply* typing_cap.
+    apply typing_term_closed in HII. unfold fv in HII. simpl in HII.
+    destruct HII. destruct (union_empty_inv H2). rewrite* H5.
   apply* typing_app.
   apply_fresh* typing_tabs as Y.
     rewrite* subst_ee_open_te_var.
@@ -1102,17 +1135,19 @@ Proof.
     unsimpl (subst_tb Z P (bind_x V)).
     rewrite* subst_te_open_ee_var.
     apply_ih_map_bind* H0.
-  apply* typing_cap.
-    rewrite* subst_te_fresh. unfolds* fv. lets*: empty_fv_notin H0.
-    rewrite* subst_te_fresh. repeat(rewrite* subst_tt_fresh).
-    pick_fresh y. lets*: H1 y. apply typing_wft in H3.
-    autos* notin_fv_wf.
+  apply_fresh* typing_cap as y.
+    assert (HI: typing empty (trm_cap V e1) (typ_arrow V T1))
+           by apply* typing_cap.
+    apply typing_term_closed in HI. destruct HI as [HI HII].
+    unfold fv in HI. simpl in HI. apply union_empty_inv in HI. destruct HI.
+    destruct (union_empty_inv H2).
+    simpl in HII. destruct (union_empty_inv HII).
 
-    pick_fresh y. lets*: H1 y. lets(G1 & _): (typing_regular H3).
-    replace (y~:V) with (empty & y~:V) in G1 by rewrite *concat_empty_l.
-    apply wft_from_okt_typ in G1. autos* notin_fv_wf.
-
-    unfolds* fv. lets*: empty_fv_notin H0.
+    rewrite* subst_te_fresh.
+    repeat(rewrite* subst_tt_fresh).
+    rewrite* H7.
+    rewrite* H6.
+    rewrite* H5.
   apply* typing_app.
   apply_fresh* typing_tabs as Y.
     unsimpl (subst_tb Z P bind_X).
@@ -1138,7 +1173,7 @@ Proof.
   apply_empty typing_through_subst_ee; substs*.
        lets*: typing_regular Typ2.
 
-  inversions Typ1. pick_fresh x. forwards~ K: (H8 x).
+  inversions Typ1. pick_fresh x. forwards~ K: (H7 x).
   rewrite* (@subst_ee_intro x).
     apply_empty typing_through_subst_ee; substs*.
     rewrite <- (@concat_empty_l bind _).
