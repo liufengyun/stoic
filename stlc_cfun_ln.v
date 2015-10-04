@@ -305,18 +305,67 @@ Proof.
   induction H; autos*.
 Qed.
 
+Lemma open_fv_subset: forall e x k,
+  fv e \c fv ({k ~> x}e).
+Proof. intros. gen k. induction e; intros; simpl.
+  apply subset_empty_l.
+  apply subset_refl.
+  autos.
+  autos.
+  apply* subset_union_2.
+Qed.
+
+Lemma subset_trans: forall (T: Type) (a b c: fset T),
+  a \c b -> b \c c -> a \c c.
+Proof. admit. Qed.
+
+Lemma subset_strengthen: forall (T: Type) (a b: fset T) (x: T),
+  a \c (b \u \{x}) -> x \notin a -> a \c b.
+Proof. admit. Qed.
+
+Lemma typing_env_fv : forall E e T,
+  typing E e T -> fv e \c dom E.
+Proof. intros. induction* H; subst.
+  (* var *)
+  simpl. forwards~ K:  get_some_inv (binds_get H0).
+  unfolds. intros. rewrite in_singleton in H1. subst*.
+  (* abs *)
+  simpl. pick_fresh x. forwards~ K: (H0 x).
+  rewrite dom_concat in K. rewrite dom_single in K.
+  assert (HI: fv t1 \c dom E \u \{x}).
+    eapply subset_trans with (fv (t1 ^ x)).
+    autos* open_fv_subset. autos.
+  apply subset_strengthen with x; autos.
+  (* cap *)
+  simpl. pick_fresh x. forwards~ K: (H1 x).
+  rewrite dom_single in K.
+  assert (HI: fv t1 \c \{}).
+    apply subset_strengthen with x; autos.
+    rewrite union_empty_l.
+    eapply subset_trans with (fv (t1 ^ x)).
+    autos* open_fv_subset. autos.
+  apply subset_trans with \{}; autos. apply subset_empty_l.
+  (* app *)
+  simpl. replace (dom E) with (dom E \u dom E) by (autos* union_same).
+  apply subset_union_2; autos.
+Qed.
+
+Lemma typing_term_closed : forall e T,
+  typing empty e T -> fv e = \{}.
+Proof using.
+  intros. apply typing_env_fv in H.
+  rewrite dom_empty in H.
+  apply* fset_extens. apply subset_empty_l.
+Qed.
+
 Lemma typing_cap_closed : forall E e T,
   typing E (trm_cap e) T -> fv e = \{}.
-Proof. intros. inversions H.
-(*
-  induction* e; intros.
-  (* var *)
-  pick_fresh x. forwards~ K: (H3 x).
-  inversions K. destruct* (binds_single_inv H4).
-  subst. assert (HF: x \notin \{x}) by autos.
-  autos* (notin_singleton_r HF).
-  (* abs *)
-*) admit.
+Proof.
+  intros. inversions H.
+  assert (HI: empty |= trm_cap e ~: typ_arrow U T0).
+    apply typing_cap with L; autos.
+  replace (fv e) with (fv (trm_cap e)) by autos.
+  eapply typing_term_closed. exact HI.
 Qed.
 
 Lemma value_regular : forall e,
