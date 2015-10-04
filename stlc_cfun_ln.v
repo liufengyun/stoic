@@ -317,11 +317,15 @@ Qed.
 
 Lemma subset_trans: forall (T: Type) (a b c: fset T),
   a \c b -> b \c c -> a \c c.
-Proof. admit. Qed.
+Proof. unfolds subset. autos. Qed.
 
 Lemma subset_strengthen: forall (T: Type) (a b: fset T) (x: T),
   a \c (b \u \{x}) -> x \notin a -> a \c b.
-Proof. admit. Qed.
+Proof. unfolds subset. intros. forwards K: (H x0 H1).
+  rewrite in_union in K. destruct* K.
+  rewrite in_singleton in H2. subst.
+  tryfalse.
+Qed.
 
 Lemma typing_env_fv : forall E e T,
   typing E e T -> fv e \c dom E.
