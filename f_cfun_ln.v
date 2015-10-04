@@ -162,47 +162,6 @@ Inductive okt : env -> Prop :=
   | okt_typ : forall E x T,
       okt E -> wft E T -> x # E -> okt (E & x ~: T).
 
-(* ********************************************************************** *)
-(** * Additional Definitions Used in the Proofs *)
-
-(** Computing free type variables in a type *)
-
-Fixpoint fv_tt (T : typ) {struct T} : vars :=
-  match T with
-  | typ_bvar J      => \{}
-  | typ_fvar X      => \{X}
-  | typ_arrow T1 T2 => (fv_tt T1) \u (fv_tt T2)
-  | typ_all T1      => (fv_tt T1)
-  end.
-
-(** Computing free type variables in a term *)
-
-Fixpoint fv_te (e : trm) {struct e} : vars :=
-  match e with
-  | trm_bvar i    => \{}
-  | trm_fvar x    => \{}
-  | trm_abs V e1  => (fv_tt V) \u (fv_te e1)
-  | trm_cap V e1  => (fv_tt V) \u (fv_te e1)
-  | trm_app e1 e2 => (fv_te e1) \u (fv_te e2)
-  | trm_tabs e1   => (fv_te e1)
-  | trm_tapp e1 V => (fv_tt V) \u (fv_te e1)
-  end.
-
-(** Computing free term variables in a type *)
-
-Fixpoint fv_ee (e : trm) {struct e} : vars :=
-  match e with
-  | trm_bvar i    => \{}
-  | trm_fvar x    => \{x}
-  | trm_abs V e1  => (fv_ee e1)
-  | trm_cap V e1  => (fv_ee e1)
-  | trm_app e1 e2 => (fv_ee e1) \u (fv_ee e2)
-  | trm_tabs e1   => (fv_ee e1)
-  | trm_tapp e1 V => (fv_ee e1)
-  end.
-
-Definition fv (e : trm) := (fv_te e) \u (fv_ee e).
-
 (** Typing relation *)
 
 Inductive typing : env -> trm -> typ -> Prop :=
@@ -214,10 +173,10 @@ Inductive typing : env -> trm -> typ -> Prop :=
       (forall x, x \notin L ->
         typing (E & x ~: V) (e1 open_ee_var x) T1) ->
       typing E (trm_abs V e1) (typ_arrow V T1)
-  | typing_cap: forall E V e1 T1,   (* v1: don't allow capture type variable *)
+  | typing_cap: forall L E V e1 T1,   (* v1: don't allow capture type variable *)
       okt E ->
-      fv e1 = \{} ->
-      (forall x, typing (x ~: V) (e1 open_ee_var x) T1) ->
+      (forall x, x \notin L ->
+        typing (x ~: V) (e1 open_ee_var x) T1) ->
       typing E (trm_cap V e1) (typ_arrow V T1)
   | typing_app : forall T1 E e1 e2 T2,
       typing E e1 (typ_arrow T1 T2) ->
@@ -281,6 +240,47 @@ Definition progress := forall e T,
   typing empty e T ->
      value e
   \/ exists e', red e e'.
+
+(* ********************************************************************** *)
+(** * Additional Definitions Used in the Proofs *)
+
+(** Computing free type variables in a type *)
+
+Fixpoint fv_tt (T : typ) {struct T} : vars :=
+  match T with
+  | typ_bvar J      => \{}
+  | typ_fvar X      => \{X}
+  | typ_arrow T1 T2 => (fv_tt T1) \u (fv_tt T2)
+  | typ_all T1      => (fv_tt T1)
+  end.
+
+(** Computing free type variables in a term *)
+
+Fixpoint fv_te (e : trm) {struct e} : vars :=
+  match e with
+  | trm_bvar i    => \{}
+  | trm_fvar x    => \{}
+  | trm_abs V e1  => (fv_tt V) \u (fv_te e1)
+  | trm_cap V e1  => (fv_tt V) \u (fv_te e1)
+  | trm_app e1 e2 => (fv_te e1) \u (fv_te e2)
+  | trm_tabs e1   => (fv_te e1)
+  | trm_tapp e1 V => (fv_tt V) \u (fv_te e1)
+  end.
+
+(** Computing free term variables in a type *)
+
+Fixpoint fv_ee (e : trm) {struct e} : vars :=
+  match e with
+  | trm_bvar i    => \{}
+  | trm_fvar x    => \{x}
+  | trm_abs V e1  => (fv_ee e1)
+  | trm_cap V e1  => (fv_ee e1)
+  | trm_app e1 e2 => (fv_ee e1) \u (fv_ee e2)
+  | trm_tabs e1   => (fv_ee e1)
+  | trm_tapp e1 V => (fv_ee e1)
+  end.
+
+Definition fv (e : trm) := (fv_te e) \u (fv_ee e).
 
 (** Substitution for free type variables in types. *)
 
