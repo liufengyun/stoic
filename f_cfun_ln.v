@@ -698,18 +698,6 @@ Proof.
   apply_fresh* wft_all as Y. apply_ih_bind* H0.
 Qed.
 
-
-(** Through narrowing *)
-
-Lemma wft_narrow : forall F T E X,
-  wft (E & [: X :] & F) T ->
-  ok (E & [: X :] & F) ->
-  wft (E & [: X :] & F) T.
-Proof.
-  intros. gen_eq K: (E & [: X :] & F). gen E F.
-  induction H; intros; subst; eauto.
-Qed.
-
 (** Through strengthening *)
 
 Lemma wft_strengthen : forall E F x U T,
