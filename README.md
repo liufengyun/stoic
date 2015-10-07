@@ -44,11 +44,13 @@ def foo(xs: List[Int])(implicit c: IO) = {
 
 ## Steps
 
-| Milestones                   |          Description             |         status      |
-| ---------------------------- | -------------------------------- | --------------------|
-|  Milestone 1                 |    STLC + closed functions       |      Finished       |
-|  Milestone 2                 |    System F + closed functions   |                     |
-|  ...                         |                                  |                     |
+| Milestones                   |          Description                                   |         status      |
+| ---------------------------- | ------------------------------------------------------ | --------------------|
+|  Milestone 1                 |    STLC + closed functions                             |      Finished       |
+|  Milestone 2                 |    F + closed functions                                |      Finished       |
+|  Milestone 3                 |    F + closed functions + type variable capture        |      working        |
+|  Milestone 4                 |    F<: + closed functions                              |                     |
+|  ...                         |                                                        |                     |
 
 ## Development
 
@@ -82,17 +84,17 @@ The locally-nameless project under `lib/ln/ln` is not compiled by default,
 as it's not required for compiling current project. Follow the steps below
 to compile the project if needed:
 
-1. put a `settings.sh` file under `lib/ln/ln`:
+First, put a `settings.sh` file under `lib/ln/ln`:
 
 ``` shell
 TLC=../../tlc/src/
 COQBIN=/path/to/coq/bin/
 ```
 
-2. run `make`.
+Then, run `make`.
 
-If you want to play with `locally-nameless` in emacs, put a `.dir-locals.el`
-file under `lib/ln/ln`:
+If you want to play with `locally-nameless` interactively in emacs,
+put a `.dir-locals.el` file under `lib/ln/ln`:
 
     ((coq-mode . ((coq-prog-args . ("-emacs-U" "-R" "../tlc/src" "TLC")))))
 
