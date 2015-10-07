@@ -975,7 +975,6 @@ Proof.
      specializes H0 y. destructs~ H0.
   splits*. apply_fresh* term_cap as y.
      pick_fresh y. specializes H1 y. destructs~ H1.
-     rewrite <- concat_empty_l in H1.
      lets*: okt_push_x_type H1.
      specializes H1 y. destructs~ H1.
   splits*.
@@ -1029,6 +1028,35 @@ Hint Extern 1 (term ?e) =>
   | H: red ?e _ |- _ => apply (proj1 (red_regular H))
   | H: red _ ?e |- _ => apply (proj2 (red_regular H))
   end.
+
+(* ********************************************************************** *)
+(** * Properties of environment *)
+Lemma typ_env_dist: forall E F, typ_env (E & F) = typ_env E & typ_env F.
+Proof. rewrite concat_def. intros. gen E. induction F; intros E; autos.
+  rewrite LibList.app_cons. destruct a. destruct* b.
+  simpl. rewrite LibList.app_cons. rewrite* <- IHF.
+Qed.
+
+Lemma typ_env_dom_subset : forall E, dom (typ_env E) \c dom E.
+Proof. intros. induction E.
+  simpl. apply subset_refl.
+  destruct a. destruct b.
+  simpl. repeat(rewrite cons_to_push). repeat(rewrite dom_push).
+    eapply subset_trans. eapply subset_union_2.
+    eapply subset_refl. exact IHE. apply subset_refl.
+  simpl. rewrite cons_to_push. rewrite dom_push.
+    eapply subset_trans. exact IHE. apply subset_union_weak_r.
+Qed.
+
+Lemma typ_env_okt : forall E,
+  okt E -> okt (typ_env E).
+Proof. intros. induction* E.
+  destruct a. destruct b; simpl; rewrite cons_to_push in *.
+  apply okt_X. apply IHE. lets*: okt_push_X_inv H.
+  unfolds. lets(_ & HI): okt_push_X_inv H. autos* (typ_env_dom_subset E).
+  apply IHE. lets*: okt_push_x_inv H.
+Qed.
+
 
 (* ********************************************************************** *)
 (** * Properties of Typing *)
