@@ -27,7 +27,8 @@ COQDOC=$(COQBIN)coqdoc --quiet --utf8 --html
 FILES=\
 	stlc_cfun \
 	stlc_cfun_ln \
-	f_cfun
+	f_cfun_ln
+	f_cfun_ln_v2
 
 ALL=$(FILES)
 
