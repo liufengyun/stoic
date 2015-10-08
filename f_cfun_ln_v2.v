@@ -1073,7 +1073,20 @@ Proof.
   apply* typing_var. apply* binds_weaken.
   apply_fresh* typing_abs as x. forwards~ K: (H x).
    apply_ih_bind (H0 x); eauto.
-  pick_fresh x. apply* typing_cap; eauto.
+  apply_fresh* typing_cap as x. forwards~ K: (H0 x).
+   assert (HI: okt(typ_env E & typ_env F & typ_env G)).
+     apply typ_env_okt in Ok. repeat(rewrite typ_env_dist in Ok). autos.
+   repeat(rewrite typ_env_dist in *).
+   rewrite <- concat_assoc.
+   apply* H1. rewrite* concat_assoc.
+   rewrite concat_assoc. apply* okt_typ.
+     unfolds. intros HII. repeat(rewrite dom_concat in HII).
+     assert (Ha: x \notin dom E \u dom F \u dom G) by autos.
+     apply Ha. repeat(rewrite in_union in *).
+     rewrite or_assoc in HII. branches HII.
+     branch 1. lets*: typ_env_dom_subset E.
+     branch 2. lets*: typ_env_dom_subset F.
+     branch 3. lets*: typ_env_dom_subset G.
   apply* typing_app.
   apply_fresh* typing_tabs as X. forwards~ K: (H X).
    apply_ih_bind (H0 X); eauto.
