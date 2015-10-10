@@ -1143,6 +1143,13 @@ Proof.
   apply* typing_tapp.
 Qed.
 
+Lemma typing_weakening_env : forall E F G e T,
+  typing (E & (typ_env F) & G) e T ->
+  okt (E & F & G) ->
+  typing (E & F & G) e T.
+Proof. admit. Qed.
+
+
 Lemma typing_wft: forall E e T, typing E e T -> wft E T.
 Proof.
   intros. induction H. applys~ wft_from_env_has_typ x.
@@ -1526,6 +1533,7 @@ Proof.
    try solve [ inversion Red ].
   (* case: app *)
   inversions Red; try solve [ apply* typing_app ].
+
   inversions Typ1. pick_fresh x. forwards~ K: (H2 x).
   rewrite* (@subst_ee_intro x).
   apply_empty typing_through_subst_ee; substs*.
@@ -1534,11 +1542,9 @@ Proof.
   inversions Typ1. pick_fresh x. forwards~ K: (H7 x).
   rewrite* (@subst_ee_intro x).
     apply_empty typing_through_subst_ee; substs*.
-    rewrite <- (@concat_empty_l bind _).
-    rewrite concat_assoc.
-    apply* typing_weakening. rewrite* concat_empty_l.
-    apply* okt_typ. rewrite* concat_empty_l.
-    rewrite* concat_empty_l. autos* typing_wft.
+    replace E with (empty & E) by rewrite* concat_empty_l.
+    apply typing_weakening_env. rewrite* concat_empty_l.
+    rewrite concat_empty_l. apply* okt_typ. lets*: typing_wft Typ2.
     lets*: typing_regular Typ2.
   (* case: tapp *)
   inversions Red; try solve [ apply* typing_tapp ].
