@@ -1098,6 +1098,16 @@ Proof. intros. induction H.
     rewrite typ_env_dist in HI. rewrite single_def in *. autos.
 Qed.
 
+Lemma typ_env_map : forall E Z P, typ_env (map (subst_tb Z P) E) = map (subst_tb Z P) (typ_env E).
+Proof. intros. induction E.
+  simpl. rewrite <- empty_def. rewrite map_empty. rewrite empty_def. reflexivity.
+  destruct a. destruct b; simpl.
+    repeat(rewrite cons_to_push). repeat(rewrite map_push). simpl.
+      rewrite <- cons_to_push. simpl. rewrite cons_to_push. rewrite* IHE.
+    repeat(rewrite cons_to_push). repeat(rewrite map_push). simpl.
+      rewrite <- cons_to_push. simpl. rewrite* IHE.
+Qed.
+
 (* ********************************************************************** *)
 (** * Properties of Typing *)
 
@@ -1424,6 +1434,23 @@ Proof using.
   apply* fset_extens. apply subset_empty_l.
 Qed.
 
+Lemma typing_cap_closed : forall e T E F x U V,
+  typing (E & x ~: U & F) (trm_cap V e) T -> x \notin fv_ee e.
+Proof. intros. inversion H. subst.
+  repeat(rewrite typ_env_dist in H5).
+  replace (typ_env (x ~: U)) with (@empty bind) in H5
+    by (rewrite single_def; simpl; rewrite* empty_def).
+  rewrite concat_empty_r in H5. rewrite <- typ_env_dist in H5.
+  assert (HI: typing (E & F) (trm_cap V e) (typ_arrow V T1)).
+    apply* typing_cap.
+  destruct (typing_env_fv HI).
+  unfold fv in H0. simpl in H0.
+  lets: ok_middle_inv (ok_from_okt H3).
+  rewrite <- notin_union in H2. rewrite <- dom_concat in H2.
+  unfolds subset. intros Hc. apply H2. apply H0.
+  rewrite in_union. right. autos.
+Qed.
+
 Lemma typing_through_subst_ee : forall U E F x T e u,
   typing (E & x ~: U & F) e T ->
   typing E u U ->
@@ -1436,14 +1463,16 @@ Proof.
   apply_fresh* typing_abs as y.
     rewrite* subst_ee_open_ee_var.
     apply_ih_bind* H0. lets*: (typing_regular TypU).
-  (* apply_fresh* typing_cap as y. *)
-  apply typing_cap with L. eauto.
+  apply_fresh* typing_cap as y.
     rewrite* subst_ee_fresh.
-    pick_fresh y. forwards~ HI: (H0 y).
-    assert (HII: typing empty (trm_cap V e1) (typ_arrow V T1))
-           by apply* typing_cap.
-    apply typing_term_closed in HII. unfold fv in HII. simpl in HII.
-    destruct HII. destruct (union_empty_inv H2). rewrite* H5.
+    repeat(rewrite typ_env_dist in H0).
+    replace (typ_env (x ~: U)) with (@empty bind) in H0
+      by (rewrite single_def; simpl; rewrite* empty_def).
+    rewrite concat_empty_r in *.
+    rewrite* typ_env_dist.
+    assert (HI: typing (E & x ~: U & F) (trm_cap V e1) (typ_arrow V T1)).
+      apply* typing_cap.
+    lets*: typing_cap_closed HI.
   apply* typing_app.
   apply_fresh* typing_tabs as Y.
     rewrite* subst_ee_open_te_var.
@@ -1469,18 +1498,14 @@ Proof.
     rewrite* subst_te_open_ee_var.
     apply_ih_map_bind* H0.
   apply_fresh* typing_cap as y.
-    assert (HI: typing empty (trm_cap V e1) (typ_arrow V T1))
-           by apply* typing_cap.
-    apply typing_term_closed in HI. destruct HI as [HI HII].
-    unfold fv in HI. simpl in HI. apply union_empty_inv in HI. destruct HI.
-    destruct (union_empty_inv H2).
-    simpl in HII. destruct (union_empty_inv HII).
-
-    rewrite* subst_te_fresh.
-    repeat(rewrite* subst_tt_fresh).
-    rewrite* H7.
-    rewrite* H6.
-    rewrite* H5.
+    unsimpl (subst_tb Z P (bind_x V)).
+    rewrite* subst_te_open_ee_var. rewrite typ_env_dist.
+    rewrite typ_env_map. apply_ih_map_bind* H1.
+    repeat(rewrite typ_env_dist).
+    replace (typ_env ([:Z:])) with ([:Z:])
+      by (rewrite single_def; simpl; autos).
+    rewrite concat_assoc. reflexivity.
+    apply* typ_env_wft_reverse.
   apply* typing_app.
   apply_fresh* typing_tabs as Y.
     unsimpl (subst_tb Z P bind_X).
