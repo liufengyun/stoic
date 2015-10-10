@@ -1057,6 +1057,46 @@ Proof. intros. induction* E.
   apply IHE. lets*: okt_push_x_inv H.
 Qed.
 
+Lemma typ_env_binds: forall E x, ok E -> binds x bind_X (typ_env E) -> binds x bind_X E.
+Proof. intros. induction E.
+  simpl in *. autos.
+  destruct a. destruct b.
+    simpl in *. rewrite cons_to_push in *. destruct (binds_push_inv H0).
+      destruct H1. subst. apply binds_push_eq.
+      destruct H1. apply* binds_push_neq.
+    simpl in *.  rewrite cons_to_push in *. apply binds_push_neq.
+      autos* ok_concat_inv_l.
+      intros Ha. subst. lets: IHE (ok_concat_inv_l H) H0.
+      rewrite <- concat_empty_r in H. lets: ok_middle_inv_l H.
+      apply (binds_fresh_inv H1 H2).
+Qed.
+
+Lemma typ_env_binds_reverse: forall E x, binds x bind_X E -> binds x bind_X (typ_env E).
+Proof. intros. induction E.
+  simpl in *. autos.
+  destruct a. destruct b.
+    simpl in *. rewrite cons_to_push in *. destruct (binds_push_inv H).
+      destruct H0. subst. apply binds_push_eq.
+      destruct H0. apply* binds_push_neq.
+    simpl in *. rewrite cons_to_push in *. apply IHE.
+      eapply binds_push_neq_inv. exact H.
+      intros HI. subst. lets: binds_push_eq_inv H. inversion H0.
+Qed.
+
+Lemma typ_env_wft: forall E V, ok E -> wft (typ_env E) V -> wft E V.
+Proof. intros. remember (typ_env E) as G. gen E. induction H0; intros; subst.
+  apply wft_var. apply* typ_env_binds.
+  apply* wft_arrow.
+  apply_fresh* wft_all as Y. apply* H0. repeat(rewrite <- cons_to_push). autos.
+Qed.
+
+Lemma typ_env_wft_reverse: forall E V, wft E V -> wft (typ_env E) V.
+Proof. intros. induction H.
+  apply wft_var. apply* typ_env_binds_reverse.
+  apply* wft_arrow.
+  apply_fresh* wft_all as Y. forwards~ HI: (H0 Y).
+    rewrite typ_env_dist in HI. rewrite single_def in *. autos.
+Qed.
 
 (* ********************************************************************** *)
 (** * Properties of Typing *)
@@ -1101,18 +1141,13 @@ Proof.
     pick_fresh x. forwards~: (H0 x). replace E with (E & empty) by rewrite* concat_empty_r.
     eapply wft_strengthen. rewrite* concat_empty_r.
   apply wft_arrow. pick_fresh x. forwards~: (H0 x).
-    lets(H3 & _): (typing_regular H2). rewrite* <- concat_empty_l in H3.
-    lets*: wft_from_okt_typ H3.
-    replace E with (empty & E) by (rewrite* concat_empty_l).
-    apply* wft_weaken_right. rewrite* concat_empty_l.
+    lets(H3 & _): (typing_regular H2). lets*: wft_from_okt_typ H3.
+    apply* typ_env_wft.
 
     pick_fresh x. forwards~: (H1 x).
-    replace E with (empty & E) by (rewrite* concat_empty_l).
-    apply wft_weaken_right.
-    replace (x~:V) with (empty & x~:V & empty) in H2
-      by (rewrite* concat_empty_l; rewrite* concat_empty_r).
-    apply wft_strengthen in H2. rewrite* concat_empty_l in H2.
-    rewrite* concat_empty_l.
+    replace (typ_env E & x~:V) with (typ_env E & x~:V & empty) in H2
+      by (rewrite* concat_empty_r).
+    apply wft_strengthen in H2. rewrite* concat_empty_r in H2. apply* typ_env_wft.
   inverts* IHtyping1.
   apply* (@wft_all L).
   apply* wft_open.
@@ -1251,61 +1286,45 @@ Proof.  intros. induction* H; subst.
 
   split.
 
-  replace (dom E) with (dom E \u dom E) by (autos* union_same).
-  apply* subset_union_2.
-  replace (dom E) with (dom E \u dom E) by (autos* union_same).
-  apply* subset_union_2.
+  rewrite <- union_same. apply* subset_union_2.
+  rewrite <- union_same. apply* subset_union_2.
+  rewrite <- union_same. apply* subset_union_2.
 
-  replace (dom E) with (dom E \u dom E) by (autos* union_same).
-  apply* subset_union_2.
   (* cap *)
   unfold fv. simpl. pick_fresh x. forwards~ (HI & HII) : (H1 x).
-  unfold fv in HI. rewrite dom_single in HI.
-  unfold open_ee in HI. rewrite dom_single in HII.
-  assert (Ha: fv_te e1 \c \{}).
+  unfold fv in HI. rewrite dom_concat in HI.
+  unfold open_ee in HI. rewrite dom_concat in HII.
+  rewrite dom_single in *.
+  assert (Ha: fv_te e1 \c dom (typ_env E)).
     apply subset_strengthen with x; autos.
-    rewrite union_empty_l.
     eapply subset_trans.
     eapply open_te_ee_fv_subset.
     eapply subset_trans.
     eapply subset_union_weak_l. exact HI.
-  assert (Hb: fv_ee e1 \c \{}).
+  assert (Hb: fv_ee e1 \c dom (typ_env E)).
     apply subset_strengthen with x; autos.
-    rewrite union_empty_l.
     apply subset_trans with (fv_ee (open_ee_rec 0 (trm_fvar x) e1)).
     apply open_ee_fv_subset.
     eapply subset_trans.
     eapply subset_union_weak_r. exact HI.
-  assert (Hc: fv_tt T1 \c \{}).
+  assert (Hc: fv_tt T1 \c dom (typ_env E)).
     apply subset_strengthen with x; autos.
-    rewrite* union_empty_l.
-  assert (Hd: fv_tt V \c \{}).
+  assert (Hd: fv_tt V \c dom (typ_env E)).
     forwards~ Htemp: (H0 x).
     destruct (typing_regular Htemp) as [He _].
-    apply subset_strengthen with x; autos.
-    rewrite union_empty_l.
-    rewrite <- dom_single with (v:= bind_x V).
-    apply* wft_fv_tt. rewrite <- (concat_empty_l _).
-    rewrite <- (concat_empty_l _) in He.
-    apply wft_weaken_right; autos.
-    lets*: wft_from_okt_typ He.
+    apply* wft_fv_tt.
 
   split.
 
-  replace (dom E) with (dom E \u dom E) by (autos* union_same).
-  apply* subset_union_2.
-  replace (dom E) with (dom E \u dom E) by (autos* union_same).
-  apply* subset_union_2.
+  apply subset_trans with (dom (typ_env E)).
+  rewrite <- union_same. apply* subset_union_2.
+  rewrite <- union_same. apply* subset_union_2.
+  apply typ_env_dom_subset.
 
-  autos* subset_trans subset_empty_l.
-  autos* subset_trans subset_empty_l.
-  autos* subset_trans subset_empty_l.
 
-  replace (dom E) with (dom E \u dom E) by (autos* union_same).
-  apply* subset_union_2.
-
-  autos* subset_trans subset_empty_l.
-  autos* subset_trans subset_empty_l.
+  apply subset_trans with (dom (typ_env E)).
+  rewrite <- union_same. apply* subset_union_2.
+  apply typ_env_dom_subset.
 
   (* app *)
   destruct IHtyping1. destruct IHtyping2. unfolds fv.
