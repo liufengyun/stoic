@@ -1052,6 +1052,24 @@ Proof.
     apply* wft_arrow.
       forwards*: okt_push_typ_inv.
       apply_empty* wft_strengthen.
+  splits*.
+   apply_fresh* term_cap as y.
+     pick_fresh y. specializes H1 y. destructs~ H1.
+      rewrite <- concat_empty_l in H1.
+      forwards*: (okt_push_typ_inv H1).
+     specializes H1 y. destructs~ H1.
+   pick_fresh y. specializes H1 y. destructs~ H1.
+    assert (Ha: wft empty V).
+      rewrite <- concat_empty_l in H1.
+      lets*(_ & HI & _): (okt_push_typ_inv H1).
+    apply* wft_arrow.
+      rewrite <- (@concat_empty_l bind E).
+      apply* wft_weaken_right. rewrite* concat_empty_l.
+      rewrite <- (@concat_empty_l bind E).
+      rewrite <- (@concat_empty_r bind (empty & E)).
+      apply wft_weaken.
+      eapply wft_strengthen. rewrite concat_empty_l. rewrite* concat_empty_r.
+      rewrite concat_empty_l. rewrite* concat_empty_r.
   splits*. destructs IHtyping1. inversion* H3.
   splits.
    pick_fresh y. specializes H0 y. destructs~ H0.
@@ -1085,6 +1103,7 @@ Lemma red_regular : forall t t',
   red t t' -> term t /\ term t'.
 Proof.
   induction 1; split; autos* value_regular.
+  inversions H. pick_fresh y. rewrite* (@subst_ee_intro y).
   inversions H. pick_fresh y. rewrite* (@subst_ee_intro y).
   inversions H. pick_fresh Y. rewrite* (@subst_te_intro Y).
 Qed.
@@ -1269,6 +1288,7 @@ Proof.
   apply* typing_var. apply* binds_weaken.
   apply_fresh* typing_abs as x. forwards~ K: (H x).
    apply_ih_bind (H0 x); eauto.
+  apply_fresh* typing_cap as x.
   apply* typing_app.
   apply_fresh* typing_tabs as X. forwards~ K: (H X).
    apply_ih_bind (H0 X); eauto.
@@ -1303,6 +1323,7 @@ Proof.
   inductions Typ; introv EQ; subst; simpl.
   binds_cases H0; apply* typing_var.
   apply_fresh* typing_abs as y. apply_ih_bind* H0.
+  apply_fresh* typing_cap as y.
   apply* typing_app.
   apply_fresh* typing_tabs as Y. apply_ih_bind* H0.
   apply* typing_tapp. apply* (@sub_narrowing Q).
@@ -1311,6 +1332,15 @@ Qed.
 
 (************************************************************************ *)
 (** Preservation by Term Substitution (8) *)
+
+Lemma typing_cap_closed_trm : forall e T E F x U V,
+  typing (E & x ~: U & F) (trm_cap V e) T -> x \notin fv_ee e.
+Proof. admit. Qed.
+
+Lemma typing_cap_closed_typ : forall e T E F X U V,
+  typing (E & X ~<: U & F) (trm_cap V e) (typ_arrow V T) ->
+  X \notin fv_te e /\ X \notin fv_tt V /\ X \notin fv_tt T.
+Proof. admit. Qed.
 
 Lemma typing_through_subst_ee : forall U E F x T e u,
   typing (E & x ~: U & F) e T ->
@@ -1324,6 +1354,9 @@ Proof.
   apply_fresh* typing_abs as y.
     rewrite* subst_ee_open_ee_var.
     apply_ih_bind* H0.
+  apply typing_cap with L; eauto.
+    rewrite* subst_ee_fresh.
+    eapply typing_cap_closed_trm. eapply typing_cap; eauto.
   apply* typing_app.
   apply_fresh* typing_tabs as Y.
     rewrite* subst_ee_open_te_var.
@@ -1348,6 +1381,11 @@ Proof.
     unsimpl (subst_tb Z P (bind_typ V)).
     rewrite* subst_te_open_ee_var.
     apply_ih_map_bind* H0.
+  apply_fresh* typing_cap as y.
+    assert (HI: Z \notin fv_te e1 /\ Z \notin fv_tt V /\ Z \notin fv_tt T1).
+      eapply typing_cap_closed_typ. apply typing_cap with L; eauto.
+    rewrite* subst_te_fresh.
+    repeat(rewrite* subst_tt_fresh).
   apply* typing_app.
   apply_fresh* typing_tabs as Y.
     unsimpl (subst_tb Z P (bind_sub V)).
@@ -1377,6 +1415,23 @@ Proof.
   inversions* Sub. autos* (@sub_transitivity T).
 Qed.
 
+Lemma typing_inv_cap : forall E S1 e1 T,
+  typing E (trm_cap S1 e1) T ->
+  forall U1 U2, sub E T (typ_arrow U1 U2) ->
+     sub E U1 S1
+  /\ exists S2, exists L, forall x, x \notin L ->
+     typing (E & x ~: S1) (e1 open_ee_var x) S2 /\ sub E S2 U2.
+Proof.
+  introv Typ. gen_eq e: (trm_cap S1 e1). gen S1 e1.
+  induction Typ; intros S1 b1 EQ U1 U2 Sub; inversions EQ.
+  inversions* Sub. splits*. exists T1.
+    let L1 := gather_vars in exists L1. split; auto.
+    rewrite <- (@concat_empty_l bind E).
+    apply typing_weakening. rewrite* concat_empty_l.
+    rewrite concat_empty_l. apply* okt_typ.
+  autos* (@sub_transitivity T).
+Qed.
+
 Lemma typing_inv_tabs : forall E S1 e1 T,
   typing E (trm_tabs S1 e1) T ->
   forall U1 U2, sub E T (typ_all U1 U2) ->
@@ -1403,6 +1458,7 @@ Proof.
    try solve [ inversion Red ].
   (* case: app *)
   inversions Red; try solve [ apply* typing_app ].
+
   destruct~ (typing_inv_abs Typ1 (U1:=T1) (U2:=T2)) as [P1 [S2 [L P2]]].
     apply* sub_reflexivity.
     pick_fresh X. forwards~ K: (P2 X). destruct K.
@@ -1410,6 +1466,15 @@ Proof.
      apply_empty (@typing_through_subst_ee V).
        apply* (@typing_sub S2). apply_empty* sub_weakening.
        autos*.
+
+  destruct~ (typing_inv_cap Typ1 (U1:=T1) (U2:=T2)) as [P1 [S2 [L P2]]].
+    apply* sub_reflexivity.
+    pick_fresh X. forwards~ K: (P2 X). destruct K.
+     rewrite* (@subst_ee_intro X).
+     apply_empty (@typing_through_subst_ee V).
+       apply* (@typing_sub S2). apply_empty* sub_weakening.
+       autos*.
+
   (* case: tapp *)
   inversions Red; try solve [ apply* typing_tapp ].
   destruct~ (typing_inv_tabs Typ (U1:=T1) (U2:=T2)) as [P1 [S2 [L P2]]].
