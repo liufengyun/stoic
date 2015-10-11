@@ -26,6 +26,7 @@ Inductive trm : Set :=
   | trm_bvar : nat -> trm
   | trm_fvar : var -> trm
   | trm_abs  : typ -> trm -> trm
+  | trm_cap  : typ -> trm -> trm           (* capsule lambda - closed *)
   | trm_app  : trm -> trm -> trm
   | trm_tabs : typ -> trm -> trm
   | trm_tapp : trm -> typ -> trm.
@@ -50,6 +51,7 @@ Fixpoint open_te_rec (K : nat) (U : typ) (e : trm) {struct e} : trm :=
   | trm_bvar i    => trm_bvar i
   | trm_fvar x    => trm_fvar x
   | trm_abs V e1  => trm_abs  (open_tt_rec K U V)  (open_te_rec K U e1)
+  | trm_cap V e1  => trm_cap  (open_tt_rec K U V)  (open_te_rec K U e1)
   | trm_app e1 e2 => trm_app  (open_te_rec K U e1) (open_te_rec K U e2)
   | trm_tabs V e1 => trm_tabs (open_tt_rec K U V)  (open_te_rec (S K) U e1)
   | trm_tapp e1 V => trm_tapp (open_te_rec K U e1) (open_tt_rec K U V)
@@ -64,6 +66,7 @@ Fixpoint open_ee_rec (k : nat) (f : trm) (e : trm) {struct e} : trm :=
   | trm_bvar i    => If k = i then f else (trm_bvar i)
   | trm_fvar x    => trm_fvar x
   | trm_abs V e1  => trm_abs V (open_ee_rec (S k) f e1)
+  | trm_cap V e1  => trm_cap V (open_ee_rec (S k) f e1)
   | trm_app e1 e2 => trm_app (open_ee_rec k f e1) (open_ee_rec k f e2)
   | trm_tabs V e1 => trm_tabs V (open_ee_rec k f e1)
   | trm_tapp e1 V => trm_tapp (open_ee_rec k f e1) V
@@ -102,6 +105,10 @@ Inductive term : trm -> Prop :=
       type V ->
       (forall x, x \notin L -> term (e1 open_ee_var x)) ->
       term (trm_abs V e1)
+  | term_cap : forall L V e1,
+      type V ->
+      (forall x, x \notin L -> term (e1 open_ee_var x)) ->
+      term (trm_cap V e1)
   | term_app : forall e1 e2,
       term e1 ->
       term e2 ->
@@ -201,6 +208,11 @@ Inductive typing : env -> trm -> typ -> Prop :=
       (forall x, x \notin L ->
         typing (E & x ~: V) (e1 open_ee_var x) T1) ->
       typing E (trm_abs V e1) (typ_arrow V T1)
+  | typing_cap: forall L E V e1 T1,   (* v1: don't allow capture type variable *)
+      okt E ->
+      (forall x, x \notin L ->
+        typing (x ~: V) (e1 open_ee_var x) T1) ->
+      typing E (trm_cap V e1) (typ_arrow V T1)
   | typing_app : forall T1 E e1 e2 T2,
       typing E e1 (typ_arrow T1 T2) ->
       typing E e2 T1 ->
@@ -223,6 +235,8 @@ Inductive typing : env -> trm -> typ -> Prop :=
 Inductive value : trm -> Prop :=
   | value_abs  : forall V e1, term (trm_abs V e1) ->
                  value (trm_abs V e1)
+  | value_cap  : forall V e1, term (trm_cap V e1) ->
+                 value (trm_cap V e1)
   | value_tabs : forall V e1, term (trm_tabs V e1) ->
                  value (trm_tabs V e1).
 
@@ -245,6 +259,10 @@ Inductive red : trm -> trm -> Prop :=
       term (trm_abs V e1) ->
       value v2 ->
       red (trm_app (trm_abs V e1) v2) (open_ee e1 v2)
+  | red_cap : forall V e1 v2,
+      term (trm_cap V e1) ->
+      value v2 ->
+      red (trm_app (trm_cap V e1) v2) (open_ee e1 v2)
   | red_tabs : forall V1 e1 V2,
       term (trm_tabs V1 e1) ->
       type V2 ->
