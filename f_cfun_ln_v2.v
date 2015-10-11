@@ -1083,11 +1083,36 @@ Proof. intros. induction E.
       intros HI. subst. lets: binds_push_eq_inv H. inversion H0.
 Qed.
 
+Lemma typ_env_no_var : forall x T E, ~binds x (bind_x T) (typ_env E).
+Proof. intros. intros H. induction E.
+  simpl in H. rewrite <- empty_def in H. destruct (binds_empty_inv H).
+  destruct a. destruct b; autos.
+    simpl in H. apply IHE. rewrite cons_to_push in H. destruct (binds_push_inv H).
+      destruct H0. subst. inversion H1.
+      destruct* H0.
+Qed.
+
 Lemma typ_env_wft: forall E V, ok E -> wft (typ_env E) V -> wft E V.
 Proof. intros. remember (typ_env E) as G. gen E. induction H0; intros; subst.
   apply wft_var. apply* typ_env_binds.
   apply* wft_arrow.
   apply_fresh* wft_all as Y. apply* H0. repeat(rewrite <- cons_to_push). autos.
+Qed.
+
+Lemma typ_env_wft_weaken: forall E F G V,
+  ok (E & F & G) -> wft (E & (typ_env F) & G) V -> wft (E & F & G) V.
+Proof. intros. inductions H0; intros; subst.
+  apply wft_var. binds_cases H0.
+    apply binds_concat_left; autos. apply* binds_concat_left_ok.
+    apply binds_concat_left; autos. apply* binds_concat_right. apply* typ_env_binds.
+      lets*: ok_concat_inv_r (ok_concat_inv_l H).
+    apply binds_concat_right. auto.
+  apply* wft_arrow.
+  apply_fresh* wft_all as Y.
+    assert (HI: ok (E & F & (G & [: Y :]))).
+      rewrite concat_assoc. apply* ok_push.
+    forwards~ HII: (H0 Y). apply HI.  rewrite* concat_assoc.
+    rewrite* <- concat_assoc.
 Qed.
 
 Lemma typ_env_wft_reverse: forall E V, wft E V -> wft (typ_env E) V.
@@ -1106,6 +1131,12 @@ Proof. intros. induction E.
       rewrite <- cons_to_push. simpl. rewrite cons_to_push. rewrite* IHE.
     repeat(rewrite cons_to_push). repeat(rewrite map_push). simpl.
       rewrite <- cons_to_push. simpl. rewrite* IHE.
+Qed.
+
+Lemma typ_env_eq : forall E, typ_env (typ_env E) = typ_env E.
+Proof. intros. induction E; autos.
+  destruct a. destruct b; autos.
+  simpl. rewrite* IHE.
 Qed.
 
 (* ********************************************************************** *)
@@ -1143,13 +1174,6 @@ Proof.
   apply* typing_tapp.
 Qed.
 
-Lemma typing_weakening_env : forall E F G e T,
-  typing (E & (typ_env F) & G) e T ->
-  okt (E & F & G) ->
-  typing (E & F & G) e T.
-Proof. admit. Qed.
-
-
 Lemma typing_wft: forall E e T, typing E e T -> wft E T.
 Proof.
   intros. induction H. applys~ wft_from_env_has_typ x.
@@ -1170,6 +1194,28 @@ Proof.
   apply* wft_open.
 Qed.
 
+Lemma typing_weakening_env : forall E F G e T,
+  typing (E & (typ_env F) & G) e T ->
+  okt (E & F & G) ->
+  typing (E & F & G) e T.
+Proof. intros. inductions H.
+  apply* typing_var. destruct (binds_concat_inv H0).
+    apply* binds_concat_right.
+    destruct H2. apply* binds_concat_left. destruct (binds_concat_inv H3).
+      destruct (typ_env_no_var _ H4). destruct H4.
+      apply* binds_concat_left_ok. lets*: ok_concat_inv_l (ok_from_okt H1).
+  apply_fresh* typing_abs as x. forwards~ K: (H x).
+    apply_ih_bind (H0 x); eauto.
+    destruct (typing_regular K). apply okt_typ; autos.
+    lets(_ & HI & _): okt_push_x_inv H2.
+    apply* typ_env_wft_weaken.
+  apply_fresh* typing_cap as x. repeat(rewrite typ_env_dist in *).
+    rewrite typ_env_eq in H0. apply* H0.
+  apply* typing_app.
+  apply_fresh* typing_tabs as X. forwards~ K: (H X).
+   apply_ih_bind (H0 X); eauto.
+  apply* typing_tapp. apply* typ_env_wft_weaken.
+Qed.
 
 (************************************************************************ *)
 (** Preservation by Term Substitution (8) *)
