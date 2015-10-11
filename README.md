@@ -48,8 +48,8 @@ def foo(xs: List[Int])(implicit c: IO) = {
 | ---------------------------- | ------------------------------------------------------ | --------------------|
 |  Milestone 1                 |    STLC + closed functions                             |      Finished       |
 |  Milestone 2                 |    F + closed functions                                |      Finished       |
-|  Milestone 3                 |    F + closed functions + type variable capture        |      working        |
-|  Milestone 4                 |    F<: + closed functions                              |                     |
+|  Milestone 3                 |    F + closed functions + type variable capture        |      Finished       |
+|  Milestone 4                 |    F<: + closed functions                              |      Working        |
 |  ...                         |                                                        |                     |
 
 ## Development
