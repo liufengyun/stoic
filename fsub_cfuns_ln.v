@@ -301,6 +301,7 @@ Fixpoint fv_te (e : trm) {struct e} : vars :=
   | trm_bvar i    => \{}
   | trm_fvar x    => \{}
   | trm_abs V e1  => (fv_tt V) \u (fv_te e1)
+  | trm_cap V e1  => (fv_tt V) \u (fv_te e1)
   | trm_app e1 e2 => (fv_te e1) \u (fv_te e2)
   | trm_tabs V e1 => (fv_tt V) \u (fv_te e1)
   | trm_tapp e1 V => (fv_tt V) \u (fv_te e1)
@@ -313,6 +314,7 @@ Fixpoint fv_ee (e : trm) {struct e} : vars :=
   | trm_bvar i    => \{}
   | trm_fvar x    => \{x}
   | trm_abs V e1  => (fv_ee e1)
+  | trm_cap V e1  => (fv_ee e1)
   | trm_app e1 e2 => (fv_ee e1) \u (fv_ee e2)
   | trm_tabs V e1 => (fv_ee e1)
   | trm_tapp e1 V => (fv_ee e1)
@@ -336,6 +338,7 @@ Fixpoint subst_te (Z : var) (U : typ) (e : trm) {struct e} : trm :=
   | trm_bvar i    => trm_bvar i
   | trm_fvar x    => trm_fvar x
   | trm_abs V e1  => trm_abs  (subst_tt Z U V)  (subst_te Z U e1)
+  | trm_cap V e1  => trm_cap  (subst_tt Z U V)  (subst_te Z U e1)
   | trm_app e1 e2 => trm_app  (subst_te Z U e1) (subst_te Z U e2)
   | trm_tabs V e1 => trm_tabs (subst_tt Z U V)  (subst_te Z U e1)
   | trm_tapp e1 V => trm_tapp (subst_te Z U e1) (subst_tt Z U V)
@@ -348,6 +351,7 @@ Fixpoint subst_ee (z : var) (u : trm) (e : trm) {struct e} : trm :=
   | trm_bvar i    => trm_bvar i
   | trm_fvar x    => If x = z then u else (trm_fvar x)
   | trm_abs V e1  => trm_abs V (subst_ee z u e1)
+  | trm_cap V e1  => trm_cap V (subst_ee z u e1)
   | trm_app e1 e2 => trm_app (subst_ee z u e1) (subst_ee z u e2)
   | trm_tabs V e1 => trm_tabs V (subst_ee z u e1)
   | trm_tapp e1 V => trm_tapp (subst_ee z u e1) V
@@ -525,6 +529,8 @@ Proof.
     f_equal*; try solve [ apply* open_tt_rec_type ].
   unfolds open_ee. pick_fresh x.
    apply* (@open_te_rec_term_core e1 0 (trm_fvar x)).
+  unfolds open_ee. pick_fresh x.
+   apply* (@open_te_rec_term_core e1 0 (trm_fvar x)).
   unfolds open_te. pick_fresh X.
    apply* (@open_te_rec_type_core e1 0 (typ_fvar X)).
 Qed.
@@ -591,6 +597,8 @@ Lemma open_ee_rec_term : forall u e,
   term e -> forall k, e = open_ee_rec k u e.
 Proof.
   induction 1; intros; simpl; f_equal*.
+  unfolds open_ee. pick_fresh x.
+   apply* (@open_ee_rec_term_core e1 0 (trm_fvar x)).
   unfolds open_ee. pick_fresh x.
    apply* (@open_ee_rec_term_core e1 0 (trm_fvar x)).
   unfolds open_te. pick_fresh X.
@@ -674,6 +682,7 @@ Lemma subst_te_term : forall e Z P,
 Proof.
   lets: subst_tt_type. induction 1; intros; simpl; auto.
   apply_fresh* term_abs as x. rewrite* subst_te_open_ee_var.
+  apply_fresh* term_cap as x. rewrite* subst_te_open_ee_var.
   apply_fresh* term_tabs as x. rewrite* subst_te_open_te_var.
 Qed.
 
@@ -683,6 +692,7 @@ Proof.
   induction 1; intros; simpl; auto.
   case_var*.
   apply_fresh* term_abs as y. rewrite* subst_ee_open_ee_var.
+  apply_fresh* term_cap as y. rewrite* subst_ee_open_ee_var.
   apply_fresh* term_tabs as Y. rewrite* subst_ee_open_te_var.
 Qed.
 
