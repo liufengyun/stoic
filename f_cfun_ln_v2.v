@@ -1477,16 +1477,6 @@ Proof.  intros. induction* H; subst.
   apply* subset_union_2.
 Qed.
 
-Lemma typing_term_closed : forall e T,
-  typing empty e T -> fv e = \{} /\ fv_tt T = \{}.
-Proof using.
-  intros. apply typing_env_fv in H.
-  rewrite dom_empty in H. destruct H.
-  split.
-  apply* fset_extens. apply subset_empty_l.
-  apply* fset_extens. apply subset_empty_l.
-Qed.
-
 Lemma typing_cap_closed : forall e T E F x U V,
   typing (E & x ~: U & F) (trm_cap V e) T -> x \notin fv_ee e.
 Proof. intros. inversion H. subst.
