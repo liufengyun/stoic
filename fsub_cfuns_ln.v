@@ -1499,7 +1499,7 @@ Qed.
 
 Lemma canonical_form_abs : forall t U1 U2,
   value t -> typing empty t (typ_arrow U1 U2) ->
-  exists V, exists e1, t = trm_abs V e1.
+  exists V, exists e1, t = trm_abs V e1 \/ t = trm_cap V e1.
 Proof.
   introv Val Typ. gen_eq E: (@empty bind).
   gen_eq T: (typ_arrow U1 U2). gen U1 U2.
@@ -1534,11 +1534,13 @@ Proof.
   false* binds_empty_inv.
   (* case: abs *)
   left*.
+  (* case: cap *)
+  left*.
   (* case: app *)
   right. destruct* IHTyp1 as [Val1 | [e1' Rede1']].
     destruct* IHTyp2 as [Val2 | [e2' Rede2']].
       destruct (canonical_form_abs Val1 Typ1) as [S [e3 EQ]].
-        subst. exists* (open_ee e3 e2).
+        destruct EQ; subst; exists* (open_ee e3 e2).
   (* case: tabs *)
   left*.
   (* case: tapp *)
