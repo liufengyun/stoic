@@ -1333,9 +1333,217 @@ Qed.
 (************************************************************************ *)
 (** Preservation by Term Substitution (8) *)
 
+Lemma wft_fv_tt: forall E T,
+  wft E T -> fv_tt T \c dom E.
+Proof. admit. Qed.
+
+Lemma subset_trans: forall (T: Type) (a b c: fset T),
+  a \c b -> b \c c -> a \c c.
+Proof. unfolds subset. autos. Qed.
+
+Lemma subset_strengthen: forall (T: Type) (a b: fset T) (x: T),
+  a \c (b \u \{x}) -> x \notin a -> a \c b.
+Proof. unfolds subset. intros. forwards K: (H x0 H1).
+  rewrite in_union in K. destruct* K.
+  rewrite in_singleton in H2. subst.
+  tryfalse.
+Qed.
+
+Lemma open_tt_fv_subset: forall k U T,
+  fv_tt T \c fv_tt (open_tt_rec k U T).
+Proof. intros. gen k. induction T; intros; simpls.
+  apply subset_empty_l.
+  apply subset_empty_l.
+  apply subset_refl.
+  apply* subset_union_2.
+  apply* subset_union_2.
+Qed.
+
+Lemma open_te_fv_subset: forall k U e,
+  fv_te e \c fv_te (open_te_rec k U e).
+Proof. intros. gen k. induction e; intros; simpls.
+  apply subset_empty_l.
+  apply subset_empty_l.
+  apply* subset_union_2. apply open_tt_fv_subset.
+  apply* subset_union_2. apply open_tt_fv_subset.
+  apply* subset_union_2.
+  autos.
+  apply* subset_union_2. apply open_tt_fv_subset.
+  apply* subset_union_2. apply open_tt_fv_subset.
+Qed.
+
+Lemma open_ee_fv_subset: forall k u e,
+  fv_ee e \c fv_ee (open_ee_rec k u e).
+Proof. intros. gen k. induction e; intros; simpls.
+  apply subset_empty_l.
+  apply subset_refl.
+  autos.
+  autos.
+  apply* subset_union_2.
+  autos.
+  autos.
+Qed.
+
+Lemma open_ee_te_fv_eq: forall k U e,
+  fv_ee e = fv_ee (open_te_rec k U e).
+Proof. intros. gen k. induction e; intros; simpls; autos.
+  rewrites (IHe1 k).
+  rewrites (IHe2 k).
+  reflexivity.
+Qed.
+
+Lemma open_te_ee_fv_subset: forall k u e,
+  fv_te e \c fv_te (open_ee_rec k u e).
+Proof. intros. gen k. induction e; intros; simpls; autos.
+  apply subset_empty_l.
+  apply subset_empty_l.
+  apply* subset_union_2. apply subset_refl.
+  apply* subset_union_2. apply subset_refl.
+  apply* subset_union_2.
+  apply* subset_union_2. apply subset_refl.
+  apply* subset_union_2. apply subset_refl.
+Qed.
+
+Lemma open_tt_tt_fv_subset: forall k T1 T2,
+  fv_tt (open_tt_rec k T1 T2) \c fv_tt T1 \u fv_tt T2.
+Proof. intros. gen k. induction T2; intros; simpls; autos.
+  apply subset_empty_l.
+  destruct (prop_degeneracy (k = n)).
+    (* k = n*)
+    apply is_True_inv in H. rewrite* If_l. apply subset_union_weak_l.
+    (* k != n*)
+    apply is_False_inv in H. rewrite* If_r. simpl. apply subset_empty_l.
+
+  apply subset_union_weak_r.
+
+  lets*: (subset_union_2 (IHT2_1 k) (IHT2_2 k)).
+  rewrite union_assoc in H.
+  rewrite union_comm in H.
+  replace ((fv_tt T1 \u fv_tt T2_1) \u fv_tt T1) with (fv_tt T1 \u fv_tt T2_1) in H.
+  rewrite union_assoc. rewrite union_comm. autos.
+
+  rewrite union_comm. rewrite <- union_assoc.
+  rewrite union_same. reflexivity.
+
+  lets*: (subset_union_2 (IHT2_1 k) (IHT2_2 (S k))).
+  rewrite union_assoc in H.
+  rewrite union_comm in H.
+  replace ((fv_tt T1 \u fv_tt T2_1) \u fv_tt T1) with (fv_tt T1 \u fv_tt T2_1) in H.
+  rewrite union_assoc. rewrite union_comm. autos.
+
+  rewrite union_comm. rewrite <- union_assoc.
+  rewrite union_same. reflexivity.
+Qed.
+
+Lemma subtyping_env_fv : forall E S T, sub E S T ->
+  fv_tt S \c dom E /\ fv_tt T \c dom E.
+Proof. admit. Qed.
+
 Lemma typing_env_fv : forall E e T, typing E e T ->
   fv_ee e \c dom E /\ fv_te e \c dom E /\ fv_tt T \c dom E.
-Proof. admit. Qed.
+Proof. intros. inductions H; substs.
+  (* var *)
+  forwards~ HI:  get_some_inv (binds_get H0).
+  simpls. splits.
+  unfolds subset. intros. rewrite in_singleton in *. subst*.
+  apply subset_empty_l.
+  apply* wft_fv_tt.
+
+  (* abs *)
+  pick_fresh x. forwards~ (HI & HII & HIII): H0 x. simpls.
+  rewrite dom_concat in *. rewrite dom_single in *.
+  unfolds open_ee. unfolds open_te.
+
+  assert (Ha: fv_tt V \c dom E).
+    forwards~ Htyp: (H x).
+    destruct (typing_regular Htyp) as [He _].
+    apply subset_strengthen with x; autos.
+    rewrite <- dom_single with (v:= bind_typ V). rewrite <- dom_concat.
+    apply* wft_fv_tt; autos.
+
+  splits.
+
+  apply* subset_strengthen. eapply subset_trans. apply open_ee_fv_subset. exact HI.
+
+  rewrite <- union_same. apply* subset_union_2. apply* subset_strengthen.
+  eapply subset_trans. apply open_te_ee_fv_subset. exact HII.
+
+  rewrite <- union_same. apply* subset_union_2. apply* subset_strengthen.
+
+  (* cap *)
+  pick_fresh x. forwards~ (HI & HII & HIII): H1 x. simpls.
+  rewrite dom_single in *. unfolds open_ee. unfolds open_te.
+
+  assert (Ha: fv_tt V \c \{}).
+    forwards~ Htemp: (H0 x).
+    destruct (typing_regular Htemp) as [He _].
+    apply subset_strengthen with x; autos.
+    rewrite union_empty_l.
+    rewrite <- dom_single with (v:= bind_typ V).
+    apply* wft_fv_tt. rewrite <- (concat_empty_l _).
+    rewrite <- (concat_empty_l _) in He.
+    apply wft_weaken_right; autos.
+    lets*: wft_from_okt_typ He.
+
+  splits.
+
+  apply* subset_strengthen. eapply subset_trans. apply open_ee_fv_subset.
+  eapply subset_trans. exact HI. apply subset_union_weak_r.
+
+
+  rewrite <- union_same. apply* subset_union_2.
+  eapply subset_trans. exact Ha. apply subset_empty_l.
+  apply* subset_strengthen. eapply subset_trans. apply open_te_ee_fv_subset.
+    eapply subset_trans. exact HII. apply subset_union_weak_r.
+
+  rewrite <- union_same. apply* subset_union_2.
+    eapply subset_trans. apply Ha. apply subset_empty_l.
+    apply* subset_strengthen. eapply subset_trans. apply HIII. apply subset_union_weak_r.
+
+  (* app *)
+  forwards(Ma & Mb & Mc): IHtyping1. forwards(Na & Nb & Nc): IHtyping2.
+  simpls. splits.
+
+  rewrite <- union_same. apply* subset_union_2.
+  rewrite <- union_same. apply* subset_union_2.
+  eapply subset_trans. apply subset_union_weak_r. exact Mc.
+
+  (* tabs *)
+  simpls. pick_fresh X. forwards~ (HI & HII & HIII) : (H0 X).
+  rewrite dom_concat in *. rewrite dom_single in *.
+  unfolds open_ee. unfolds open_te. unfolds open_tt.
+  rewrite <- open_ee_te_fv_eq in HI.
+
+  assert (Ha: fv_tt V \c dom E).
+    forwards~ Htyp: (H X).
+    destruct (typing_regular Htyp) as [He _].
+    apply subset_strengthen with X; autos.
+    rewrite <- dom_single with (v:= bind_sub V). rewrite <- dom_concat.
+    apply* wft_fv_tt; autos.
+
+  splits.
+
+  eapply subset_strengthen. exact HI. autos.
+  rewrite <- union_same. apply* subset_union_2. apply subset_strengthen with X; autos.
+    eapply subset_trans. apply open_te_fv_subset. exact HII.
+  rewrite <- union_same. apply* subset_union_2. apply subset_strengthen with X; autos.
+    eapply subset_trans. apply open_tt_fv_subset. exact HIII.
+
+  (* tapp *)
+  lets(HI & HII & HIII): IHtyping. simpls.
+
+  assert (Ha: fv_tt T \c dom E) by (lets*: subtyping_env_fv H0).
+
+  splits; autos.
+
+  rewrite <- union_same. apply* subset_union_2.
+  eapply subset_trans. eapply open_tt_tt_fv_subset.
+    rewrite <- union_same. apply* subset_union_2.
+    eapply subset_trans. apply subset_union_weak_r. apply HIII.
+
+  (* sub *)
+  destructs IHtyping. splits; autos. lets*: subtyping_env_fv H0.
+Qed.
 
 Lemma typing_cap_closed_trm : forall e T E F x U V,
   typing (E & x ~: U & F) (trm_cap V e) T -> x \notin fv_ee e.
