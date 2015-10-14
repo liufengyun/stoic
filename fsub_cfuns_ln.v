@@ -1447,7 +1447,21 @@ Qed.
 
 Lemma subtyping_env_fv : forall E S T, sub E S T ->
   fv_tt S \c dom E /\ fv_tt T \c dom E.
-Proof. admit. Qed.
+Proof. intros. inductions H; simpls.
+  splits. apply* wft_fv_tt. apply subset_empty_l.
+  lets*: wft_fv_tt H0.
+  destructs IHsub. splits*. lets: get_some_inv (binds_get H).
+    unfolds. intros. rewrite in_singleton in H4. subst*.
+  destructs IHsub1. destructs IHsub2.
+    splits; rewrite <- union_same; apply* subset_union_2.
+  destruct IHsub. pick_fresh X. forwards~ HI: H1 X.
+    rewrite dom_concat in HI. rewrite dom_single in HI. destruct HI.
+    splits.
+    rewrite <- union_same. apply* subset_union_2. apply subset_strengthen with X; autos.
+      eapply subset_trans. apply open_tt_fv_subset. eauto.
+    rewrite <- union_same. apply* subset_union_2. apply subset_strengthen with X; autos.
+      eapply subset_trans. apply open_tt_fv_subset. eauto.
+Qed.
 
 Lemma typing_env_fv : forall E e T, typing E e T ->
   fv_ee e \c dom E /\ fv_te e \c dom E /\ fv_tt T \c dom E.
