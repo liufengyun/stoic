@@ -1333,9 +1333,18 @@ Qed.
 (************************************************************************ *)
 (** Preservation by Term Substitution (8) *)
 
+Lemma typing_env_fv : forall E e T, typing E e T ->
+  fv_ee e \c dom E /\ fv_te e \c dom E /\ fv_tt T \c dom E.
+Proof. admit. Qed.
+
 Lemma typing_cap_closed_trm : forall e T E F x U V,
   typing (E & x ~: U & F) (trm_cap V e) T -> x \notin fv_ee e.
-Proof. admit. Qed.
+Proof. intros. inductions H;  eauto.
+  cuts_rewrite (fv_ee e = \{}); autos.
+  asserts_rewrite (\{} = (@dom bind empty)); rewrite* dom_empty.
+  forwards~ (HI & _ & _ ): (@typing_env_fv (@empty bind) (trm_cap V e) (typ_arrow V T1)).
+  apply* typing_cap. rewrite* dom_empty in HI. apply* fset_extens. apply subset_empty_l.
+Qed.
 
 Lemma typing_cap_closed_typ : forall e T E F X U V,
   typing (E & X ~<: U & F) (trm_cap V e) (typ_arrow V T) ->
