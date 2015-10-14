@@ -1333,10 +1333,6 @@ Qed.
 (************************************************************************ *)
 (** Preservation by Term Substitution (8) *)
 
-Lemma wft_fv_tt: forall E T,
-  wft E T -> fv_tt T \c dom E.
-Proof. admit. Qed.
-
 Lemma subset_trans: forall (T: Type) (a b c: fset T),
   a \c b -> b \c c -> a \c c.
 Proof. unfolds subset. autos. Qed.
@@ -1433,6 +1429,20 @@ Proof. intros. gen k. induction T2; intros; simpls; autos.
 
   rewrite union_comm. rewrite <- union_assoc.
   rewrite union_same. reflexivity.
+Qed.
+
+Lemma wft_fv_tt: forall E T,
+  wft E T -> fv_tt T \c dom E.
+Proof.
+  intros. inductions H; simpls.
+  apply subset_empty_l.
+  lets: get_some_inv (binds_get H). unfolds subset. intros.
+    rewrite in_singleton in H1. rewrite* H1.
+  rewrite <- union_same. apply* subset_union_2.
+  rewrite <- union_same. apply* subset_union_2.
+    pick_fresh X. forwards~ HI: (H1 X). simpls. rewrite dom_concat in HI.
+    rewrite dom_single in HI. eapply subset_strengthen. eapply subset_trans.
+    apply open_tt_fv_subset. exact HI. autos.
 Qed.
 
 Lemma subtyping_env_fv : forall E S T, sub E S T ->
