@@ -1346,10 +1346,14 @@ Proof. intros. inductions H;  eauto.
   apply* typing_cap. rewrite* dom_empty in HI. apply* fset_extens. apply subset_empty_l.
 Qed.
 
-Lemma typing_cap_closed_typ : forall e T E F X U V,
-  typing (E & X ~<: U & F) (trm_cap V e) (typ_arrow V T) ->
-  X \notin fv_te e /\ X \notin fv_tt V /\ X \notin fv_tt T.
-Proof. admit. Qed.
+Lemma typing_cap_closed_typ : forall e V T,
+  typing empty (trm_cap V e) (typ_arrow V T) ->
+  forall X, X \notin fv_te e /\ X \notin fv_tt V /\ X \notin fv_tt T.
+Proof. intros. lets(_ & HI & HII): typing_env_fv H.
+  simpls. rewrite dom_empty in *. unfolds subset.
+  specialize HI with X. specialize HII with X. rewrite in_union in *.
+  splits; intros Hin; rewrite* <- (@in_empty var X).
+Qed.
 
 Lemma typing_through_subst_ee : forall U E F x T e u,
   typing (E & x ~: U & F) e T ->
@@ -1392,7 +1396,7 @@ Proof.
     apply_ih_map_bind* H0.
   apply_fresh* typing_cap as y.
     assert (HI: Z \notin fv_te e1 /\ Z \notin fv_tt V /\ Z \notin fv_tt T1).
-      eapply typing_cap_closed_typ. apply typing_cap with L; eauto.
+      eapply typing_cap_closed_typ. eapply (@typing_cap L empty); eauto.
     rewrite* subst_te_fresh.
     repeat(rewrite* subst_tt_fresh).
   apply* typing_app.
