@@ -1307,7 +1307,20 @@ Lemma sub_weakening_env : forall E F G S T,
    sub (E & typ_env F & G) S T ->
    okt (E & F & G) ->
    sub (E & F & G) S T.
-Proof. admit. Qed.
+Proof. intros. inductions H; eauto.
+  apply* sub_top. apply* typ_env_wft_weaken.
+  apply* sub_refl_tvar. apply* typ_env_wft_weaken.
+  apply* sub_trans_tvar.  binds_cases H.
+    apply binds_concat_left; autos. apply* binds_concat_left_ok. eapply ok_concat_inv_l.
+      eapply ok_from_okt. eauto.
+    apply binds_concat_left; autos. apply* binds_concat_right. apply* typ_env_binds.
+      lets*: ok_concat_inv_r (ok_concat_inv_l (ok_from_okt H1)).
+    apply binds_concat_right. auto.
+  apply_fresh* sub_all as X. lets: (H1 X).
+    rewrite <- concat_assoc in H3. rewrite <- concat_assoc.
+    apply* H3. rewrite concat_assoc. apply* okt_sub.
+    destructs (sub_regular H). apply* typ_env_wft_weaken.
+Qed.
 
 (* ********************************************************************** *)
 (** Narrowing and transitivity (3) *)
