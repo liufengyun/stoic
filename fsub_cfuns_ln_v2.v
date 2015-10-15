@@ -1487,6 +1487,11 @@ Proof.
   apply_fresh* sub_all as X. apply_ih_bind* H0.
 Qed.
 
+Lemma sub_strengthening_env : forall E S T,
+  sub E S T -> sub (typ_env E) S T.
+Proof. admit. Qed.
+
+
 (************************************************************************ *)
 (** Preservation by Type Narrowing (7) *)
 
@@ -1495,11 +1500,15 @@ Lemma typing_narrowing : forall Q E F X P e T,
   typing (E & X ~<: Q & F) e T ->
   typing (E & X ~<: P & F) e T.
 Proof.
-  introv PsubQ Typ. gen_eq E': (E & X ~<: Q & F). gen F.
-  inductions Typ; introv EQ; subst; simpl.
+  introv PsubQ Typ. gen_eq E': (E & X ~<: Q & F). gen E F.
+  inductions Typ; introv PsubQ EQ; subst; simpl.
   binds_cases H0; apply* typing_var.
   apply_fresh* typing_abs as y. apply_ih_bind* H0.
-  apply_fresh* typing_cap as y.
+  apply_fresh* typing_cap as y. repeat(rewrite typ_env_dist in *).
+    rewrite <- concat_assoc. lets: H1 y. rewrite <- concat_assoc in H2.
+    replace (typ_env (X ~<: P)) with (X ~<: P) by (rewrite* single_def).
+    apply* H2. apply* sub_strengthening_env.
+    replace (typ_env (X ~<: Q)) with (X ~<: Q) by (rewrite* single_def). auto.
   apply* typing_app.
   apply_fresh* typing_tabs as Y. apply_ih_bind* H0.
   apply* typing_tapp. apply* (@sub_narrowing Q).
@@ -1660,33 +1669,29 @@ Proof. intros. inductions H; substs.
 
   (* cap *)
   pick_fresh x. forwards~ (HI & HII & HIII): H1 x. simpls.
-  rewrite dom_single in *. unfolds open_ee. unfolds open_te.
+  rewrite dom_concat in *. rewrite dom_single in *. unfolds open_ee.
 
-  assert (Ha: fv_tt V \c \{}).
+  assert (Ha: fv_tt V \c dom (typ_env E)).
     forwards~ Htemp: (H0 x).
     destruct (typing_regular Htemp) as [He _].
-    apply subset_strengthen with x; autos.
-    rewrite union_empty_l.
-    rewrite <- dom_single with (v:= bind_typ V).
-    apply* wft_fv_tt. rewrite <- (concat_empty_l _).
-    rewrite <- (concat_empty_l _) in He.
-    apply wft_weaken_right; autos.
-    lets*: wft_from_okt_typ He.
+    apply* wft_fv_tt.
 
   splits.
 
   apply* subset_strengthen. eapply subset_trans. apply open_ee_fv_subset.
-  eapply subset_trans. exact HI. apply subset_union_weak_r.
-
+  eapply subset_trans. eauto. apply subset_union_2.
+    apply typ_env_dom_subset. apply subset_refl.
 
   rewrite <- union_same. apply* subset_union_2.
-  eapply subset_trans. exact Ha. apply subset_empty_l.
+  eapply subset_trans. exact Ha. apply typ_env_dom_subset.
   apply* subset_strengthen. eapply subset_trans. apply open_te_ee_fv_subset.
-    eapply subset_trans. exact HII. apply subset_union_weak_r.
+    eapply subset_trans. eauto. apply subset_union_2.
+      apply typ_env_dom_subset. apply subset_refl.
 
   rewrite <- union_same. apply* subset_union_2.
-    eapply subset_trans. apply Ha. apply subset_empty_l.
-    apply* subset_strengthen. eapply subset_trans. apply HIII. apply subset_union_weak_r.
+    eapply subset_trans. eauto. apply typ_env_dom_subset.
+    apply* subset_strengthen. eapply subset_trans. eauto.
+      apply subset_union_2. apply typ_env_dom_subset. apply subset_refl.
 
   (* app *)
   forwards(Ma & Mb & Mc): IHtyping1. forwards(Na & Nb & Nc): IHtyping2.
@@ -1736,10 +1741,14 @@ Qed.
 Lemma typing_cap_closed_trm : forall e T E F x U V,
   typing (E & x ~: U & F) (trm_cap V e) T -> x \notin fv_ee e.
 Proof. intros. inductions H;  eauto.
-  cuts_rewrite (fv_ee e = \{}); autos.
-  asserts_rewrite (\{} = (@dom bind empty)); rewrite* dom_empty.
-  forwards~ (HI & _ & _ ): (@typing_env_fv (@empty bind) (trm_cap V e) (typ_arrow V T1)).
-  apply* typing_cap. rewrite* dom_empty in HI. apply* fset_extens. apply subset_empty_l.
+  repeat(rewrite typ_env_dist in *). lets: (ok_middle_inv (ok_from_okt H)).
+  replace (typ_env (x ~: U)) with (@empty bind) in *
+    by (rewrite single_def; simpl; rewrite* empty_def).
+  rewrite concat_empty_r in *.
+  assert (HI: typing (E & F) (trm_cap V e) (typ_arrow V T1)).
+    apply* typing_cap. rewrite* typ_env_dist.
+  destructs (typing_env_fv HI). simpls. rewrite <- notin_union in H2.
+  unfolds subset. intros Hc. apply H2. rewrite <- dom_concat. autos.
 Qed.
 
 Lemma typing_cap_closed_typ : forall e V T,
@@ -1764,7 +1773,10 @@ Proof.
     rewrite* subst_ee_open_ee_var.
     apply_ih_bind* H0.
   apply typing_cap with L; eauto.
-    rewrite* subst_ee_fresh.
+    rewrite* subst_ee_fresh. repeat(rewrite typ_env_dist in *).
+    replace (typ_env (x ~: U)) with (@empty bind) in *
+      by (rewrite single_def; simpl; rewrite* empty_def).
+    rewrite concat_empty_r in *. autos.
     eapply typing_cap_closed_trm. eapply typing_cap; eauto.
   apply* typing_app.
   apply_fresh* typing_tabs as Y.
@@ -1791,10 +1803,13 @@ Proof.
     rewrite* subst_te_open_ee_var.
     apply_ih_map_bind* H0.
   apply_fresh* typing_cap as y.
-    assert (HI: Z \notin fv_te e1 /\ Z \notin fv_tt V /\ Z \notin fv_tt T1).
-      eapply typing_cap_closed_typ. eapply (@typing_cap L empty); eauto.
-    rewrite* subst_te_fresh.
-    repeat(rewrite* subst_tt_fresh).
+    unsimpl (subst_tb Z P (bind_typ V)).
+    rewrite* subst_te_open_ee_var. rewrite typ_env_dist.
+    rewrite typ_env_map. apply_ih_map_bind* H1.
+    repeat(rewrite typ_env_dist).
+    replace (typ_env (Z ~<: Q)) with (Z ~<:Q) by (rewrite* single_def).
+    rewrite concat_assoc. reflexivity.
+    apply* sub_strengthening_env.
   apply* typing_app.
   apply_fresh* typing_tabs as Y.
     unsimpl (subst_tb Z P (bind_sub V)).
@@ -1836,7 +1851,7 @@ Proof.
   inversions* Sub. splits*. exists T1.
     let L1 := gather_vars in exists L1. split; auto.
     rewrite <- (@concat_empty_l bind E).
-    apply typing_weakening. rewrite* concat_empty_l.
+    apply typing_weakening_env. rewrite* concat_empty_l.
     rewrite concat_empty_l. apply* okt_typ.
   autos* (@sub_transitivity T).
 Qed.
