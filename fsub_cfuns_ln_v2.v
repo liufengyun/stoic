@@ -1489,8 +1489,15 @@ Qed.
 
 Lemma sub_strengthening_env : forall E S T,
   sub E S T -> sub (typ_env E) S T.
-Proof. admit. Qed.
-
+Proof.  intros. inductions H; autos.
+  apply sub_top. apply* typ_env_okt. apply* typ_env_wft_reverse.
+  apply sub_refl_tvar. apply* typ_env_okt. apply* typ_env_wft_reverse.
+  eapply sub_trans_tvar. eapply typ_env_binds_reverse. eauto. auto.
+  apply sub_all with L. auto. intros. forwards~ : H1 X.
+  rewrite typ_env_dist in H3.
+  replace (typ_env (X ~<: T1)) with (X ~<: T1) in H3 by (rewrite* single_def).
+  auto.
+Qed.
 
 (************************************************************************ *)
 (** Preservation by Type Narrowing (7) *)
