@@ -1,0 +1,41 @@
+t :=           x
+               \x:T. t
+               t t
+               \X. t
+               t [T]
+               ref t c
+               !t  c
+               t := t c
+               l                   store location
+
+
+T :=           X                    typevar
+               B                    basic
+               T => T               ordinary function
+               T -> T               pure function
+               Ref T                reference type
+               All X. T             universal
+               C                    capability
+
+S :=          ∅                     store typing
+              S, l:T           
+
+C :=          Alloc  | Read | Write                             capability types
+
+D :=          alloc: Alloc, read: Read, write: Write            default global capabilities
+
+G :=          G, x: T                                           var type binding
+              G, T                                              typevar
+
+typing rules for pure function:
+
+                      G, x:U | S |- t: V
+--------------------------------------------------------------
+                 G | S |- \x:U.t  :   U -> V
+
+typing rules for ordinary function:
+
+                       D, G, x:U | S |- t: V
+--------------------------------------------------------------
+                 D, G | S |- \x:U.t  :   U => V
+
