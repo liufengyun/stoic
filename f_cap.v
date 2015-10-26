@@ -1,5 +1,5 @@
 (***************************************************************************
-* Preservation and Progress for System-F with Closed Functions             *
+* Preservation and Progress for System-F with capabilities                 *
 * (based on the F<: implementation in locally-nameless project)            *
 ***************************************************************************)
 
@@ -16,7 +16,10 @@ Implicit Types X : var.
 Inductive typ : Set :=
   | typ_bvar  : nat -> typ
   | typ_fvar  : var -> typ
+  | typ_base  : typ
+  | typ_eff   : typ
   | typ_arrow : typ -> typ -> typ
+  | typ_pure  : typ -> typ -> typ
   | typ_all   : typ -> typ.
 
 (** Representation of pre-terms *)
@@ -25,7 +28,6 @@ Inductive trm : Set :=
   | trm_bvar : nat -> trm
   | trm_fvar : var -> trm
   | trm_abs  : typ -> trm -> trm
-  | trm_cap  : typ -> trm -> trm           (* capsule lambda - closed *)
   | trm_app  : trm -> trm -> trm
   | trm_tabs : trm -> trm
   | trm_tapp : trm -> typ -> trm.
@@ -36,7 +38,10 @@ Fixpoint open_tt_rec (K : nat) (U : typ) (T : typ) {struct T} : typ :=
   match T with
   | typ_bvar J      => If K = J then U else (typ_bvar J)
   | typ_fvar X      => typ_fvar X
+  | typ_base        => typ_base
+  | typ_eff         => typ_eff
   | typ_arrow T1 T2 => typ_arrow (open_tt_rec K U T1) (open_tt_rec K U T2)
+  | typ_pure T1 T2  => typ_pure (open_tt_rec K U T1) (open_tt_rec K U T2)
   | typ_all T1   => typ_all (open_tt_rec (S K) U T1)
   end.
 
@@ -49,7 +54,6 @@ Fixpoint open_te_rec (K : nat) (U : typ) (e : trm) {struct e} : trm :=
   | trm_bvar i    => trm_bvar i
   | trm_fvar x    => trm_fvar x
   | trm_abs V e1  => trm_abs  (open_tt_rec K U V)  (open_te_rec K U e1)
-  | trm_cap V e1  => trm_cap  (open_tt_rec K U V)  (open_te_rec K U e1)
   | trm_app e1 e2 => trm_app  (open_te_rec K U e1) (open_te_rec K U e2)
   | trm_tabs e1 => trm_tabs (open_te_rec (S K) U e1)
   | trm_tapp e1 V => trm_tapp (open_te_rec K U e1) (open_tt_rec K U V)
@@ -64,7 +68,6 @@ Fixpoint open_ee_rec (k : nat) (f : trm) (e : trm) {struct e} : trm :=
   | trm_bvar i    => If k = i then f else (trm_bvar i)
   | trm_fvar x    => trm_fvar x
   | trm_abs V e1  => trm_abs V (open_ee_rec (S k) f e1)
-  | trm_cap V e1  => trm_cap V (open_ee_rec (S k) f e1)
   | trm_app e1 e2 => trm_app (open_ee_rec k f e1) (open_ee_rec k f e2)
   | trm_tabs e1 => trm_tabs (open_ee_rec k f e1)
   | trm_tapp e1 V => trm_tapp (open_ee_rec k f e1) V
@@ -83,10 +86,16 @@ Notation "t 'open_ee_var' x" := (open_ee t (trm_fvar x)) (at level 67).
 Inductive type : typ -> Prop :=
   | type_var : forall X,
       type (typ_fvar X)
+  | type_base: type typ_base
+  | type_eff: type typ_eff
   | type_arrow : forall T1 T2,
       type T1 ->
       type T2 ->
       type (typ_arrow T1 T2)
+  | type_pure : forall T1 T2,
+      type T1 ->
+      type T2 ->
+      type (typ_pure T1 T2)
   | type_all : forall L T2,
       (forall X, X \notin L -> type (T2 open_tt_var X)) ->
       type (typ_all T2).
@@ -100,10 +109,6 @@ Inductive term : trm -> Prop :=
       type V ->
       (forall x, x \notin L -> term (e1 open_ee_var x)) ->
       term (trm_abs V e1)
-  | term_cap : forall L V e1,
-      type V ->
-      (forall x, x \notin L -> term (e1 open_ee_var x)) ->
-      term (trm_cap V e1)
   | term_app : forall e1 e2,
       term e1 ->
       term e2 ->
@@ -162,6 +167,32 @@ Inductive okt : env -> Prop :=
   | okt_typ : forall E x T,
       okt E -> wft E T -> x # E -> okt (E & x ~: T).
 
+(* pure and copure rules *)
+Inductive pure: env -> typ -> Prop :=
+  | pure_var: forall E X, pure E (typ_fvar X)
+  | pure_base: forall E, pure E typ_base
+  | pure_arrow: forall E S T, copure E S ->
+      pure E T -> pure E (typ_arrow S T)
+  | pure_all:  forall L E T,
+      (forall X, X \notin L ->
+        pure (E & [: X :]) (T open_tt_var X)) ->
+      pure E (typ_all T)
+
+with copure: env -> typ -> Prop :=
+  (* | copure_base: forall E, copure E typ_base *)
+  | copure_eff: forall E, copure E typ_eff
+  | copure_arrow: forall E S T, pure E S ->
+      copure E T -> copure E (typ_arrow S T)
+  | copure_all: forall L E T,
+      (forall X, X \notin L ->
+        copure (E & [: X :]) (T open_tt_var X)) ->
+      copure E (typ_all T).
+
+Inductive env_pure: env -> Prop :=
+  | env_pure_empty: env_pure empty
+  | env_pure_X: forall E X, env_pure E -> env_pure (E & [: X :])
+  | env_pure_x: forall E x T, env_pure E -> pure E T -> env_pure (E & x~: T).
+
 (** Typing relation *)
 
 Inductive typing : env -> trm -> typ -> Prop :=
@@ -173,11 +204,11 @@ Inductive typing : env -> trm -> typ -> Prop :=
       (forall x, x \notin L ->
         typing (E & x ~: V) (e1 open_ee_var x) T1) ->
       typing E (trm_abs V e1) (typ_arrow V T1)
-  | typing_cap: forall L E V e1 T1,   (* v1: don't allow capture type variable *)
-      okt E ->
+  | typing_pure: forall L E V e1 T1,
+      okt E -> env_pure E ->
       (forall x, x \notin L ->
-        typing (x ~: V) (e1 open_ee_var x) T1) ->
-      typing E (trm_cap V e1) (typ_arrow V T1)
+        typing (E & x ~: V) (e1 open_ee_var x) T1) ->
+      typing E (trm_abs V e1) (typ_pure V T1)
   | typing_app : forall T1 E e1 e2 T2,
       typing E e1 (typ_arrow T1 T2) ->
       typing E e2 T1 ->
@@ -196,8 +227,6 @@ Inductive typing : env -> trm -> typ -> Prop :=
 Inductive value : trm -> Prop :=
   | value_abs  : forall V e1, term (trm_abs V e1) ->
                  value (trm_abs V e1)
-  | value_cap  : forall V e1, term (trm_cap V e1) ->
-                 value (trm_cap V e1)
   | value_tabs : forall e1, term (trm_tabs e1) ->
                  value (trm_tabs e1).
 
@@ -220,10 +249,6 @@ Inductive red : trm -> trm -> Prop :=
       term (trm_abs V e1) ->
       value v2 ->
       red (trm_app (trm_abs V e1) v2) (open_ee e1 v2)
-  | red_cap : forall V e1 v2,
-      term (trm_cap V e1) ->
-      value v2 ->
-      red (trm_app (trm_cap V e1) v2) (open_ee e1 v2)
   | red_tabs : forall e1 V,
       term (trm_tabs e1) ->
       type V ->
