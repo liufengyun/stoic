@@ -29,7 +29,9 @@ FILES=\
 	stlc_cfun_ln \
 	f_cfun_ln \
 	f_cfun_ln_v2 \
-	fsub_cfun_ln
+	fsub_cfuns_ln \
+	fsub_cfuns_ln_v2 \
+	f_cap
 
 ALL=$(FILES)
 
