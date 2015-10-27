@@ -167,31 +167,21 @@ Inductive okt : env -> Prop :=
   | okt_typ : forall E x T,
       okt E -> wft E T -> x # E -> okt (E & x ~: T).
 
-(* pure and copure rules *)
-Inductive pure: env -> typ -> Prop :=
-  | pure_var: forall E X, pure E (typ_fvar X)
-  | pure_base: forall E, pure E typ_base
-  | pure_arrow: forall E S T, copure E S ->
-      pure E T -> pure E (typ_arrow S T)
-  | pure_all:  forall L E T,
+(* pure and  rules *)
+Inductive pure: typ -> Prop :=
+  | pure_var: forall X, pure (typ_fvar X)
+  | pure_base: pure typ_base
+  | pure_arrow: forall S T, pure S ->
+      pure T -> pure (typ_arrow S T)
+  | pure_all:  forall L T,
       (forall X, X \notin L ->
-        pure (E & [: X :]) (T open_tt_var X)) ->
-      pure E (typ_all T)
-
-with copure: env -> typ -> Prop :=
-  (* | copure_base: forall E, copure E typ_base *)
-  | copure_eff: forall E, copure E typ_eff
-  | copure_arrow: forall E S T, pure E S ->
-      copure E T -> copure E (typ_arrow S T)
-  | copure_all: forall L E T,
-      (forall X, X \notin L ->
-        copure (E & [: X :]) (T open_tt_var X)) ->
-      copure E (typ_all T).
+        pure (T open_tt_var X)) ->
+      pure (typ_all T).
 
 Inductive env_pure: env -> Prop :=
   | env_pure_empty: env_pure empty
   | env_pure_X: forall E X, env_pure E -> env_pure (E & [: X :])
-  | env_pure_x: forall E x T, env_pure E -> pure E T -> env_pure (E & x~: T).
+  | env_pure_x: forall E x T, env_pure E -> pure T -> env_pure (E & x~: T).
 
 (** Typing relation *)
 
@@ -209,6 +199,8 @@ Inductive typing : env -> trm -> typ -> Prop :=
       (forall x, x \notin L ->
         typing (E & x ~: V) (e1 open_ee_var x) T1) ->
       typing E (trm_abs V e1) (typ_pure V T1)
+  | typing_sub: forall E e S T,
+      typing E e (typ_pure S T) -> typing E e (typ_arrow S T)
   | typing_app : forall T1 E e1 e2 T2,
       typing E e1 (typ_arrow T1 T2) ->
       typing E e2 T1 ->
