@@ -1179,12 +1179,23 @@ Proof.
   introv Typ. gen F. inductions Typ; introv Ok.
   apply* typing_var. apply* binds_weaken.
   apply_fresh* typing_abs as x. forwards~ K: (H x).
-   apply_ih_bind (H0 x); eauto.
-  apply_fresh* typing_pure as x. forwards~ K: (H0 x).
-   apply_ih_bind (H0 x); eauto.
+    apply_ih_bind (H0 x); eauto.
+  apply_fresh* typing_pure as x.
+    repeat(rewrite pure_env_dist in *). rewrite <- concat_assoc.
+    apply* H1. rewrite* concat_assoc. rewrite concat_assoc. repeat(rewrite <- pure_env_dist).
+    apply okt_typ.  apply* pure_env_okt.
+    forwards~ K: (H0 x). lets(Hk & _): typing_regular K. lets: wft_from_okt_typ Hk.
+    apply pure_env_wft_reverse. apply* wft_weaken. apply* pure_env_wft. rewrite* pure_env_dist.
+    assert (Ha: x \notin dom E \u dom F \u dom G) by autos.
+    intros HI. apply Ha. repeat(rewrite pure_env_dist in HI). repeat(rewrite dom_concat in HI).
+      repeat(rewrite in_union in *). rewrite or_assoc in HI.  branches HI.
+     branch 1. lets*: pure_env_dom_subset E.
+     branch 2. lets*: pure_env_dom_subset F.
+     branch 3. lets*: pure_env_dom_subset G.
+  apply* typing_sub.
   apply* typing_app.
   apply_fresh* typing_tabs as X. forwards~ K: (H X).
-   apply_ih_bind (H0 X); eauto.
+    apply_ih_bind (H0 X); eauto.
   apply* typing_tapp.
 Qed.
 
