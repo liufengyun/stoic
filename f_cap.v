@@ -428,6 +428,18 @@ Proof. intros. split.
   apply fset_extens. rewrite <- H. apply subset_union_weak_r. apply subset_empty_l.
 Qed.
 
+Lemma subset_trans: forall (T: Type) (a b c: fset T),
+  a \c b -> b \c c -> a \c c.
+Proof. unfolds subset. autos. Qed.
+
+Lemma subset_strengthen: forall (T: Type) (a b: fset T) (x: T),
+  a \c (b \u \{x}) -> x \notin a -> a \c b.
+Proof. unfolds subset. intros. forwards K: (H x0 H1).
+  rewrite in_union in K. destruct* K.
+  rewrite in_singleton in H2. subst.
+  tryfalse.
+Qed.
+
 (* ********************************************************************** *)
 (** * Properties of Substitutions *)
 
@@ -974,9 +986,7 @@ Proof.
      pick_fresh y. specializes H0 y. destructs~ H0.
       forwards*: okt_push_x_inv.
      specializes H0 y. destructs~ H0.
-  splits.
-   pick_fresh y. specializes H1 y. destructs~ H1.
-    forwards*: okt_push_x_inv.
+  splits*.
    apply_fresh* term_abs as y.
      pick_fresh y. specializes H1 y. destructs~ H1.
       forwards*: okt_push_x_inv.
@@ -1033,6 +1043,128 @@ Hint Extern 1 (term ?e) =>
   | H: red _ ?e |- _ => apply (proj2 (red_regular H))
   end.
 
+
+(* ********************************************************************** *)
+(** * Properties of environment *)
+Lemma pure_env_dist: forall E F, pure_env (E & F) = pure_env E & pure_env F.
+Proof. rewrite concat_def. intros. gen E. induction F; intros E; autos.
+  rewrite LibList.app_cons. destruct a. destruct b.
+  simpl. rewrite LibList.app_cons. rewrite* <- IHF.
+  simpl. destruct* (pure_typ t). rewrite LibList.app_cons. rewrite* <- IHF.
+Qed.
+
+Lemma pure_env_dom_subset : forall E, dom (pure_env E) \c dom E.
+Proof. intros. induction E.
+  simpl. apply subset_refl.
+  destruct a. destruct b.
+  simpl. repeat(rewrite cons_to_push). repeat(rewrite dom_push).
+    eapply subset_trans. eapply subset_union_2.
+    eapply subset_refl. exact IHE. apply subset_refl.
+  simpl. destruct* (pure_typ t).
+    repeat(rewrite cons_to_push; rewrite dom_push).
+      apply* subset_union_2. apply subset_refl.
+    rewrite cons_to_push. rewrite dom_push.
+      eapply subset_trans. exact IHE. apply subset_union_weak_r.
+Qed.
+
+Lemma pure_env_binds: forall E x, ok E -> binds x bind_X (pure_env E) -> binds x bind_X E.
+Proof. intros. induction E.
+  simpl in *. autos.
+  destruct a. destruct b.
+    simpl in *. rewrite cons_to_push in *. destruct (binds_push_inv H0).
+      destruct H1. subst. apply binds_push_eq.
+      destruct H1. apply* binds_push_neq.
+    simpl in *.  rewrite cons_to_push in *. destruct (pure_typ t).
+      destruct (binds_push_inv H0). false H1. destruct H1. apply* binds_push_neq.
+      apply* binds_push_neq. intro Heq. substs. destruct (ok_push_inv H).
+      apply H2. eapply get_some_inv. apply binds_get. eauto.
+Qed.
+
+Lemma pure_env_binds_reverse: forall E x, binds x bind_X E -> binds x bind_X (pure_env E).
+Proof. intros. induction E.
+  simpl in *. autos.
+  destruct a. destruct b.
+    simpl in *. rewrite cons_to_push in *. destruct (binds_push_inv H).
+      destruct H0. subst. apply binds_push_eq.
+      destruct H0. apply* binds_push_neq.
+    simpl in *. rewrite cons_to_push in *. destruct (binds_push_inv H). false H0.
+      destruct H0. destruct* (pure_typ t).
+Qed.
+
+
+Lemma pure_env_wft: forall E V, ok E -> wft (pure_env E) V -> wft E V.
+Proof. intros. remember (pure_env E) as G. gen E. induction H0; intros; subst.
+  apply wft_var. apply* pure_env_binds.
+  apply* wft_arrow.
+  apply_fresh* wft_all as Y. apply* H0. repeat(rewrite <- cons_to_push). autos.
+Qed.
+
+Lemma pure_env_wft_weaken: forall E F G V,
+  ok (E & F & G) -> wft (E & (pure_env F) & G) V -> wft (E & F & G) V.
+Proof. intros. inductions H0; intros; subst.
+  apply wft_var. binds_cases H0.
+    apply binds_concat_left; autos. apply* binds_concat_left_ok.
+    apply binds_concat_left; autos. apply* binds_concat_right. apply* pure_env_binds.
+      lets*: ok_concat_inv_r (ok_concat_inv_l H).
+    apply binds_concat_right. auto.
+  apply* wft_arrow.
+  apply_fresh* wft_all as Y.
+    assert (HI: ok (E & F & (G & [: Y :]))).
+      rewrite concat_assoc. apply* ok_push.
+    forwards~ HII: (H0 Y). apply HI.  rewrite* concat_assoc.
+    rewrite* <- concat_assoc.
+Qed.
+
+Lemma pure_env_wft_reverse: forall E V, wft E V -> wft (pure_env E) V.
+Proof. intros. induction H.
+  apply wft_var. apply* pure_env_binds_reverse.
+  apply* wft_arrow.
+  apply_fresh* wft_all as Y. forwards~ HI: (H0 Y).
+    rewrite pure_env_dist in HI. rewrite single_def in *. autos.
+Qed.
+
+Lemma pure_env_okt : forall E,
+  okt E -> okt (pure_env E).
+Proof. intros. induction* E.
+  destruct a. destruct b; simpl; rewrite cons_to_push in *.
+  apply okt_X. apply IHE. lets*: okt_push_X_inv H.
+  unfolds. lets(_ & HI): okt_push_X_inv H. autos* (pure_env_dom_subset E).
+  destructs (okt_push_x_inv H). destruct* (pure_typ t).
+    apply okt_typ. apply* IHE. apply* pure_env_wft_reverse.
+    lets: pure_env_dom_subset E. unfolds subset.
+    unfolds notin. autos.
+Qed.
+
+Lemma pure_typ_subst : forall Z P T, pure_typ P = true -> pure_typ T = true ->
+  pure_typ (subst_tt Z P T) = true.
+Proof. admit. Qed.
+
+Lemma pure_typ_subst_false : forall Z P T, pure_typ P = true -> pure_typ T = false ->
+  pure_typ (subst_tt Z P T) = false.
+Proof. admit. Qed.
+
+Lemma pure_env_map : forall E Z P, pure_typ P = true ->
+  pure_env (map (subst_tb Z P) E) = map (subst_tb Z P) (pure_env E).
+Proof. intros. induction E.
+  simpl. rewrite <- empty_def. rewrite map_empty. rewrite empty_def. reflexivity.
+  destruct a. destruct b; simpl.
+    repeat(rewrite cons_to_push). repeat(rewrite map_push). simpl.
+      rewrite <- cons_to_push. simpl. rewrite cons_to_push. rewrite* IHE.
+    repeat(rewrite cons_to_push). repeat(rewrite map_push). simpl.
+      rewrite <- cons_to_push. simpl. remember (pure_typ t). destruct b; symmetry in Heqb.
+      lets*: (@pure_typ_subst Z P t H Heqb). rewrite H0. rewrite map_push.
+        rewrite <- cons_to_push. simpl. rewrite* IHE.
+      lets*: (@pure_typ_subst_false Z P t H Heqb). rewrite* H0.
+Qed.
+
+Lemma pure_env_eq : forall E, pure_env (pure_env E) = pure_env E.
+Proof. intros. induction E; autos.
+  destruct a. destruct b; autos.
+  simpls. rewrite* IHE.
+  simpls. remember (pure_typ t). symmetry in Heqb. destruct* b.
+    simpls. rewrite* Heqb. rewrite* IHE.
+Qed.
+
 (* ********************************************************************** *)
 (** * Properties of Typing *)
 
@@ -1048,7 +1180,7 @@ Proof.
   apply* typing_var. apply* binds_weaken.
   apply_fresh* typing_abs as x. forwards~ K: (H x).
    apply_ih_bind (H0 x); eauto.
-  apply_fresh* typing_pure as x. forwards~ K: (H x).
+  apply_fresh* typing_pure as x. forwards~ K: (H0 x).
    apply_ih_bind (H0 x); eauto.
   apply* typing_app.
   apply_fresh* typing_tabs as X. forwards~ K: (H X).
