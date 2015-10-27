@@ -195,7 +195,7 @@ Inductive typing : env -> trm -> typ -> Prop :=
         typing (E & x ~: V) (e1 open_ee_var x) T1) ->
       typing E (trm_abs V e1) (typ_arrow V T1)
   | typing_pure: forall L E V e1 T1,
-      okt E -> env_pure E ->
+      env_pure E ->
       (forall x, x \notin L ->
         typing (E & x ~: V) (e1 open_ee_var x) T1) ->
       typing E (trm_abs V e1) (typ_pure V T1)
