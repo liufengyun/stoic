@@ -172,8 +172,8 @@ Inductive okt : env -> Prop :=
   | okt_typ : forall E x T,
       okt E -> wft E T -> x # E -> okt (E & x ~: T).
 
-(* pure rules *)
-Fixpoint pure_typ(t: typ) := match t with
+(* effer rules *)
+Fixpoint effer_typ(t: typ) := match t with
   | typ_bvar _          => false  (* impossible, ill-formed *)
   | typ_fvar _          => true
   | typ_base            => true
@@ -184,13 +184,13 @@ Fixpoint pure_typ(t: typ) := match t with
   | typ_all_effer T     => true   (* pure type abstraction *)
   end.
 
-Fixpoint pure_env(E: env) := match E with
+Fixpoint effer_env(E: env) := match E with
   | nil => nil
-  | cons (X, bind_X) E' => cons (X, bind_X) (pure_env E')
-  | cons (x, bind_x T) E' => if pure_typ T then
-                               cons (x, bind_x T) (pure_env E')
+  | cons (X, bind_X) E' => cons (X, bind_X) (effer_env E')
+  | cons (x, bind_x T) E' => if effer_typ T then
+                               cons (x, bind_x T) (effer_env E')
                              else
-                               pure_env E'
+                               effer_env E'
     end.
 
 (** Typing relation *)
@@ -207,7 +207,7 @@ Inductive typing : env -> trm -> typ -> Prop :=
   | typing_abs_effer: forall L E V e1 T1,
       okt E ->
       (forall x, x \notin L ->
-        typing ((pure_env E) & x ~: V) (e1 open_ee_var x) T1) ->
+        typing ((effer_env E) & x ~: V) (e1 open_ee_var x) T1) ->
       typing E (trm_abs V e1) (typ_arrow_effer V T1)
   | typing_app : forall T1 E e1 e2 T2,
       typing E e1 (typ_arrow T1 T2) ->
@@ -220,7 +220,7 @@ Inductive typing : env -> trm -> typ -> Prop :=
   | typing_tabs_effer : forall L E e1 T1,
       okt E ->
       (forall X, X \notin L ->
-        typing ((pure_env E) & [: X :]) (e1 open_te_var X) (T1 open_tt_var X)) ->
+        typing ((effer_env E) & [: X :]) (e1 open_te_var X) (T1 open_tt_var X)) ->
       typing E (trm_tabs e1) (typ_all_effer T1)
   | typing_tapp : forall T1 E e1 T,
       wft E T ->
@@ -276,7 +276,7 @@ Definition progress := forall e T,
   \/ exists e', red e e'.
 
 (* effect safety : it's impossible to construct a term of typ_eff in pure environment  *)
-Definition effect_safety := forall E, ~exists e, typing (pure_env E) e typ_eff.
+Definition effect_safety := forall E, ~exists e, typing (effer_env E) e typ_eff.
 
 (* ********************************************************************** *)
 (** * Additional Definitions Used in the Proofs *)
@@ -478,6 +478,7 @@ Lemma open_tt_rec_type : forall T U,
   type T -> forall k, T = open_tt_rec k U T.
 Proof.
   induction 1; intros; simpl; f_equal*. unfolds open_tt.
+  pick_fresh X. apply* (@open_tt_rec_type_core T2 0 (typ_fvar X)).
   pick_fresh X. apply* (@open_tt_rec_type_core T2 0 (typ_fvar X)).
 Qed.
 
@@ -697,6 +698,7 @@ Proof.
   induction 1; intros; simpl; auto.
   case_var*.
   apply_fresh* type_all as X. rewrite* subst_tt_open_tt_var.
+  apply_fresh* type_all_effer as X. rewrite* subst_tt_open_tt_var.
 Qed.
 
 Lemma subst_te_term : forall e Z P,
@@ -967,6 +969,7 @@ Proof.
  specializes IHT1 k. specializes IHT2 k. auto.
  specializes IHT1 k. specializes IHT2 k. auto.
  apply* IHT.
+ apply* IHT.
 Qed.
 
 Lemma notin_fv_wf : forall E X T,
@@ -995,8 +998,7 @@ Qed.
 Lemma typing_regular : forall E e T,
   typing E e T -> okt E /\ term e.
 Proof.
-  induction 1.
-  splits*.
+  induction 1; auto.
   splits.
    pick_fresh y. specializes H0 y. destructs~ H0.
     forwards*: okt_push_x_inv.
@@ -1009,11 +1011,13 @@ Proof.
      pick_fresh y. specializes H1 y. destructs~ H1.
       forwards*: okt_push_x_inv.
      specializes H1 y. destructs~ H1.
-  auto.
   splits*.
   splits.
    pick_fresh y. specializes H0 y. destructs~ H0. lets*: (okt_push_X_inv H0).
      apply term_tabs with L. intros. apply* H0.
+  splits.
+   pick_fresh y. specializes H1 y. destructs~ H1.
+     apply term_tabs with L. intros. apply* H1.
   splits*. lets(H1 & H2): IHtyping.
    apply* term_tapp. apply* wft_type.
 Qed.
