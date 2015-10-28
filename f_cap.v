@@ -19,9 +19,9 @@ Inductive typ       : Set   :=
   | typ_base        : typ
   | typ_eff         : typ
   | typ_arrow       : typ -> typ -> typ
-  | typ_arrow_effer : typ -> typ -> typ       (* effect closed term abstraction *)
+  | typ_arrow_clos  : typ -> typ -> typ       (* effect closed term abstraction *)
   | typ_all         : typ -> typ
-  | typ_all_effer   : typ -> typ.             (* effect closed type abstraction *)
+  | typ_all_clos    : typ -> typ.             (* effect closed type abstraction *)
 
 (** Representation of pre-terms *)
 
@@ -42,9 +42,9 @@ Fixpoint open_tt_rec (K : nat) (U : typ) (T : typ) {struct T} : typ :=
   | typ_base              => typ_base
   | typ_eff               => typ_eff
   | typ_arrow T1 T2       => typ_arrow (open_tt_rec K U T1) (open_tt_rec K U T2)
-  | typ_arrow_effer T1 T2  => typ_arrow_effer (open_tt_rec K U T1) (open_tt_rec K U T2)
+  | typ_arrow_clos T1 T2  => typ_arrow_clos (open_tt_rec K U T1) (open_tt_rec K U T2)
   | typ_all T1            => typ_all (open_tt_rec (S K) U T1)
-  | typ_all_effer T1       => typ_all_effer (open_tt_rec (S K) U T1)
+  | typ_all_clos T1       => typ_all_clos (open_tt_rec (S K) U T1)
   end.
 
 Definition open_tt T U := open_tt_rec 0 U T.
@@ -94,16 +94,16 @@ Inductive type : typ -> Prop :=
       type T1 ->
       type T2 ->
       type (typ_arrow T1 T2)
-  | type_arrow_effer : forall T1 T2,
+  | type_arrow_clos : forall T1 T2,
       type T1 ->
       type T2 ->
-      type (typ_arrow_effer T1 T2)
+      type (typ_arrow_clos T1 T2)
   | type_all : forall L T2,
       (forall X, X \notin L -> type (T2 open_tt_var X)) ->
       type (typ_all T2)
-  | type_all_effer : forall L T2,
+  | type_all_clos : forall L T2,
       (forall X, X \notin L -> type (T2 open_tt_var X)) ->
-      type (typ_all_effer T2).
+      type (typ_all_clos T2).
 
 (** Terms as locally closed pre-terms *)
 
@@ -155,18 +155,18 @@ Inductive wft : env -> typ -> Prop :=
       wft E T1 ->
       wft E T2 ->
       wft E (typ_arrow T1 T2)
-  | wft_arrow_effer : forall E T1 T2,
+  | wft_arrow_clos : forall E T1 T2,
       wft E T1 ->
       wft E T2 ->
-      wft E (typ_arrow_effer T1 T2)
+      wft E (typ_arrow_clos T1 T2)
   | wft_all : forall L E T,
       (forall X, X \notin L ->
         wft (E & [: X :]) (T open_tt_var X)) ->
       wft E (typ_all T)
-  | wft_all_effer : forall L E T,
+  | wft_all_clos : forall L E T,
       (forall X, X \notin L ->
         wft (E & [: X :]) (T open_tt_var X)) ->
-      wft E (typ_all_effer T).
+      wft E (typ_all_clos T).
 
 (** A environment E is well-formed if it contains no duplicate bindings
   and if each type in it is well-formed with respect to the environment
@@ -180,25 +180,25 @@ Inductive okt : env -> Prop :=
   | okt_typ : forall E x T,
       okt E -> wft E T -> x # E -> okt (E & x ~: T).
 
-(* effer rules *)
-Fixpoint effer_typ(t: typ) := match t with
+(* clos rules *)
+Fixpoint clos_typ(t: typ) := match t with
   | typ_bvar _          => false  (* impossible, ill-formed *)
   | typ_fvar _          => true
   | typ_base            => true
   | typ_eff             => false
   | typ_arrow U V       => false
-  | typ_arrow_effer U V => true   (* pure lambda abstraction *)
+  | typ_arrow_clos U V => true   (* pure lambda abstraction *)
   | typ_all T           => false
-  | typ_all_effer T     => true   (* pure type abstraction *)
+  | typ_all_clos T     => true   (* pure type abstraction *)
   end.
 
-Fixpoint effer_env(E: env) := match E with
+Fixpoint clos_env(E: env) := match E with
   | nil => nil
-  | cons (X, bind_X) E' => cons (X, bind_X) (effer_env E')
-  | cons (x, bind_x T) E' => if effer_typ T then
-                               cons (x, bind_x T) (effer_env E')
+  | cons (X, bind_X) E' => cons (X, bind_X) (clos_env E')
+  | cons (x, bind_x T) E' => if clos_typ T then
+                               cons (x, bind_x T) (clos_env E')
                              else
-                               effer_env E'
+                               clos_env E'
     end.
 
 (** Typing relation *)
@@ -212,11 +212,11 @@ Inductive typing : env -> trm -> typ -> Prop :=
       (forall x, x \notin L ->
         typing (E & x ~: V) (e1 open_ee_var x) T1) ->
       typing E (trm_abs V e1) (typ_arrow V T1)
-  | typing_abs_effer: forall L E V e1 T1,
+  | typing_abs_clos: forall L E V e1 T1,
       okt E ->
       (forall x, x \notin L ->
-        typing ((effer_env E) & x ~: V) (e1 open_ee_var x) T1) ->
-      typing E (trm_abs V e1) (typ_arrow_effer V T1)
+        typing ((clos_env E) & x ~: V) (e1 open_ee_var x) T1) ->
+      typing E (trm_abs V e1) (typ_arrow_clos V T1)
   | typing_app : forall T1 E e1 e2 T2,
       typing E e1 (typ_arrow T1 T2) ->
       typing E e2 T1 ->
@@ -225,19 +225,19 @@ Inductive typing : env -> trm -> typ -> Prop :=
       (forall X, X \notin L ->
         typing (E & [: X :]) (e1 open_te_var X) (T1 open_tt_var X)) ->
       typing E (trm_tabs e1) (typ_all T1)
-  | typing_tabs_effer : forall L E e1 T1,
+  | typing_tabs_clos : forall L E e1 T1,
       okt E ->
       (forall X, X \notin L ->
-        typing ((effer_env E) & [: X :]) (e1 open_te_var X) (T1 open_tt_var X)) ->
-      typing E (trm_tabs e1) (typ_all_effer T1)
+        typing ((clos_env E) & [: X :]) (e1 open_te_var X) (T1 open_tt_var X)) ->
+      typing E (trm_tabs e1) (typ_all_clos T1)
   | typing_tapp : forall T1 E e1 T,
       wft E T ->
       typing E e1 (typ_all T1) ->
       typing E (trm_tapp e1 T) (open_tt T1 T)
   | typing_sub_abs: forall E e S T,
-      typing E e (typ_arrow_effer S T) -> typing E e (typ_arrow S T)
+      typing E e (typ_arrow_clos S T) -> typing E e (typ_arrow S T)
   | typing_sub_tabs: forall E e T,
-      typing E e (typ_all_effer T) -> typing E e (typ_all T).
+      typing E e (typ_all_clos T) -> typing E e (typ_all T).
 
 (** Values *)
 
@@ -284,7 +284,7 @@ Definition progress := forall e T,
   \/ exists e', red e e'.
 
 (* effect safety : it's impossible to construct a term of typ_eff in pure environment  *)
-Definition effect_safety := forall E, ~exists e, typing (effer_env E) e typ_eff.
+Definition effect_safety := forall E, ~exists e, typing (clos_env E) e typ_eff.
 
 (* ********************************************************************** *)
 (** * Additional Definitions Used in the Proofs *)
@@ -298,9 +298,9 @@ Fixpoint fv_tt (T : typ) {struct T} : vars :=
   | typ_eff               => \{}
   | typ_fvar X            => \{X}
   | typ_arrow T1 T2       => (fv_tt T1) \u (fv_tt T2)
-  | typ_arrow_effer T1 T2 => (fv_tt T1) \u (fv_tt T2)
+  | typ_arrow_clos T1 T2 => (fv_tt T1) \u (fv_tt T2)
   | typ_all T1            => (fv_tt T1)
-  | typ_all_effer T1      => (fv_tt T1)
+  | typ_all_clos T1      => (fv_tt T1)
   end.
 
 (** Computing free type variables in a term *)
@@ -336,9 +336,9 @@ Fixpoint subst_tt (Z : var) (U : typ) (T : typ) {struct T} : typ :=
   | typ_eff               => typ_eff
   | typ_fvar X            => If X = Z then U else (typ_fvar X)
   | typ_arrow T1 T2       => typ_arrow (subst_tt Z U T1) (subst_tt Z U T2)
-  | typ_arrow_effer T1 T2 => typ_arrow_effer (subst_tt Z U T1) (subst_tt Z U T2)
+  | typ_arrow_clos T1 T2 => typ_arrow_clos (subst_tt Z U T1) (subst_tt Z U T2)
   | typ_all T             => typ_all (subst_tt Z U T)
-  | typ_all_effer T        => typ_all_effer (subst_tt Z U T)
+  | typ_all_clos T        => typ_all_clos (subst_tt Z U T)
   end.
 
 (** Substitution for free type variables in terms. *)
@@ -704,7 +704,7 @@ Proof.
   induction 1; intros; simpl; auto.
   case_var*.
   apply_fresh* type_all as X. rewrite* subst_tt_open_tt_var.
-  apply_fresh* type_all_effer as X. rewrite* subst_tt_open_tt_var.
+  apply_fresh* type_all_clos as X. rewrite* subst_tt_open_tt_var.
 Qed.
 
 Lemma subst_te_term : forall e Z P,
@@ -752,7 +752,7 @@ Proof.
   (* case arrow *)
   (* case: all *)
   apply_fresh* wft_all as Y. apply_ih_bind* H0.
-  apply_fresh* wft_all_effer as Y. apply_ih_bind* H0.
+  apply_fresh* wft_all_clos as Y. apply_ih_bind* H0.
 Qed.
 
 (** Through strengthening *)
@@ -770,7 +770,7 @@ Proof.
       apply~ binds_concat_left.
   (* todo: binds_cases tactic *)
   apply_fresh* wft_all as Y. apply_ih_bind* H0.
-  apply_fresh* wft_all_effer as Y. apply_ih_bind* H0.
+  apply_fresh* wft_all_clos as Y. apply_ih_bind* H0.
 Qed.
 
 (** Through type substitution *)
@@ -797,7 +797,7 @@ Proof.
    lets: wft_type.
    rewrite* subst_tt_open_tt_var.
    apply_ih_map_bind* H0.
-  apply_fresh* wft_all_effer as Y.
+  apply_fresh* wft_all_clos as Y.
    unsimpl ((subst_tb Z P) bind_X).
    lets: wft_type.
    rewrite* subst_tt_open_tt_var.
@@ -1082,41 +1082,41 @@ Hint Extern 1 (term ?e) =>
 
 (* ********************************************************************** *)
 (** * Properties of environment *)
-Lemma effer_env_dist: forall E F, effer_env (E & F) = effer_env E & effer_env F.
+Lemma clos_env_dist: forall E F, clos_env (E & F) = clos_env E & clos_env F.
 Proof. rewrite concat_def. intros. gen E. induction F; intros E; autos.
   rewrite LibList.app_cons. destruct a. destruct b.
   simpl. rewrite LibList.app_cons. rewrite* <- IHF.
-  simpl. destruct* (effer_typ t). rewrite LibList.app_cons. rewrite* <- IHF.
+  simpl. destruct* (clos_typ t). rewrite LibList.app_cons. rewrite* <- IHF.
 Qed.
 
-Lemma effer_env_dom_subset : forall E, dom (effer_env E) \c dom E.
+Lemma clos_env_dom_subset : forall E, dom (clos_env E) \c dom E.
 Proof. intros. induction E.
   simpl. apply subset_refl.
   destruct a. destruct b.
   simpl. repeat(rewrite cons_to_push). repeat(rewrite dom_push).
     eapply subset_trans. eapply subset_union_2.
     eapply subset_refl. exact IHE. apply subset_refl.
-  simpl. destruct* (effer_typ t).
+  simpl. destruct* (clos_typ t).
     repeat(rewrite cons_to_push; rewrite dom_push).
       apply* subset_union_2. apply subset_refl.
     rewrite cons_to_push. rewrite dom_push.
       eapply subset_trans. exact IHE. apply subset_union_weak_r.
 Qed.
 
-Lemma effer_env_binds: forall E x, ok E -> binds x bind_X (effer_env E) -> binds x bind_X E.
+Lemma clos_env_binds: forall E x, ok E -> binds x bind_X (clos_env E) -> binds x bind_X E.
 Proof. intros. induction E.
   simpl in *. autos.
   destruct a. destruct b.
     simpl in *. rewrite cons_to_push in *. destruct (binds_push_inv H0).
       destruct H1. subst. apply binds_push_eq.
       destruct H1. apply* binds_push_neq.
-    simpl in *.  rewrite cons_to_push in *. destruct (effer_typ t).
+    simpl in *.  rewrite cons_to_push in *. destruct (clos_typ t).
       destruct (binds_push_inv H0). false H1. destruct H1. apply* binds_push_neq.
       apply* binds_push_neq. intro Heq. substs. destruct (ok_push_inv H).
       apply H2. eapply get_some_inv. apply binds_get. eauto.
 Qed.
 
-Lemma effer_env_binds_reverse: forall E x, binds x bind_X E -> binds x bind_X (effer_env E).
+Lemma clos_env_binds_reverse: forall E x, binds x bind_X E -> binds x bind_X (clos_env E).
 Proof. intros. induction E.
   simpl in *. autos.
   destruct a. destruct b.
@@ -1124,94 +1124,94 @@ Proof. intros. induction E.
       destruct H0. subst. apply binds_push_eq.
       destruct H0. apply* binds_push_neq.
     simpl in *. rewrite cons_to_push in *. destruct (binds_push_inv H). false H0.
-      destruct H0. destruct* (effer_typ t).
+      destruct H0. destruct* (clos_typ t).
 Qed.
 
-Lemma effer_env_wft: forall E V, ok E -> wft (effer_env E) V -> wft E V.
-Proof. intros. remember (effer_env E) as G. gen E. induction H0; intros; subst.
-  apply wft_var. apply* effer_env_binds.
+Lemma clos_env_wft: forall E V, ok E -> wft (clos_env E) V -> wft E V.
+Proof. intros. remember (clos_env E) as G. gen E. induction H0; intros; subst.
+  apply wft_var. apply* clos_env_binds.
   apply* wft_arrow.
-  apply* wft_arrow_effer.
+  apply* wft_arrow_clos.
   apply_fresh* wft_all as Y. apply* H0. repeat(rewrite <- cons_to_push). autos.
-  apply_fresh* wft_all_effer as Y. apply* H0. repeat(rewrite <- cons_to_push). autos.
+  apply_fresh* wft_all_clos as Y. apply* H0. repeat(rewrite <- cons_to_push). autos.
 Qed.
 
-Lemma effer_env_wft_weaken: forall E F G V,
-  ok (E & F & G) -> wft (E & (effer_env F) & G) V -> wft (E & F & G) V.
+Lemma clos_env_wft_weaken: forall E F G V,
+  ok (E & F & G) -> wft (E & (clos_env F) & G) V -> wft (E & F & G) V.
 Proof. intros. inductions H0; intros; subst.
   apply wft_var. binds_cases H0.
     apply binds_concat_left; autos. apply* binds_concat_left_ok.
-    apply binds_concat_left; autos. apply* binds_concat_right. apply* effer_env_binds.
+    apply binds_concat_left; autos. apply* binds_concat_right. apply* clos_env_binds.
       lets*: ok_concat_inv_r (ok_concat_inv_l H).
     apply binds_concat_right. auto.
   apply* wft_arrow.
-  apply* wft_arrow_effer.
+  apply* wft_arrow_clos.
   apply_fresh* wft_all as Y.
     assert (HI: ok (E & F & (G & [: Y :]))).
       rewrite concat_assoc. apply* ok_push.
     forwards~ HII: (H0 Y). apply HI.  rewrite* concat_assoc.
     rewrite* <- concat_assoc.
-  apply_fresh* wft_all_effer as Y.
+  apply_fresh* wft_all_clos as Y.
     assert (HI: ok (E & F & (G & [: Y :]))).
       rewrite concat_assoc. apply* ok_push.
     forwards~ HII: (H0 Y). apply HI.  rewrite* concat_assoc.
     rewrite* <- concat_assoc.
 Qed.
 
-Lemma effer_env_wft_reverse: forall E V, wft E V -> wft (effer_env E) V.
+Lemma clos_env_wft_reverse: forall E V, wft E V -> wft (clos_env E) V.
 Proof. intros. induction H.
-  apply wft_var. apply* effer_env_binds_reverse.
+  apply wft_var. apply* clos_env_binds_reverse.
   apply* wft_arrow.
-  apply* wft_arrow_effer.
+  apply* wft_arrow_clos.
   apply_fresh* wft_all as Y. forwards~ HI: (H0 Y).
-    rewrite effer_env_dist in HI. rewrite single_def in *. autos.
-  apply_fresh* wft_all_effer as Y. forwards~ HI: (H0 Y).
-    rewrite effer_env_dist in HI. rewrite single_def in *. autos.
+    rewrite clos_env_dist in HI. rewrite single_def in *. autos.
+  apply_fresh* wft_all_clos as Y. forwards~ HI: (H0 Y).
+    rewrite clos_env_dist in HI. rewrite single_def in *. autos.
 Qed.
 
-Lemma effer_env_okt : forall E,
-  okt E -> okt (effer_env E).
+Lemma clos_env_okt : forall E,
+  okt E -> okt (clos_env E).
 Proof. intros. induction* E.
   destruct a. destruct b; simpl; rewrite cons_to_push in *.
   apply okt_X. apply IHE. lets*: okt_push_X_inv H.
-  unfolds. lets(_ & HI): okt_push_X_inv H. autos* (effer_env_dom_subset E).
-  destructs (okt_push_x_inv H). destruct* (effer_typ t).
-    apply okt_typ. apply* IHE. apply* effer_env_wft_reverse.
-    lets: effer_env_dom_subset E. unfolds subset.
+  unfolds. lets(_ & HI): okt_push_X_inv H. autos* (clos_env_dom_subset E).
+  destructs (okt_push_x_inv H). destruct* (clos_typ t).
+    apply okt_typ. apply* IHE. apply* clos_env_wft_reverse.
+    lets: clos_env_dom_subset E. unfolds subset.
     unfolds notin. autos.
 Qed.
 
-Lemma effer_env_okt_push : forall E X,
-  okt E -> okt ((effer_env E) & [:X:]) -> okt (E & [:X:]).
+Lemma clos_env_okt_push : forall E X,
+  okt E -> okt ((clos_env E) & [:X:]) -> okt (E & [:X:]).
 Proof. admit. Qed.
 
-Lemma effer_typ_subst : forall Z P T, effer_typ P = true -> effer_typ T = true ->
-  effer_typ (subst_tt Z P T) = true.
+Lemma clos_typ_subst : forall Z P T, clos_typ P = true -> clos_typ T = true ->
+  clos_typ (subst_tt Z P T) = true.
 Proof. admit. Qed.
 
-Lemma effer_typ_subst_false : forall Z P T, effer_typ P = true -> effer_typ T = false ->
-  effer_typ (subst_tt Z P T) = false.
+Lemma clos_typ_subst_false : forall Z P T, clos_typ P = true -> clos_typ T = false ->
+  clos_typ (subst_tt Z P T) = false.
 Proof. admit. Qed.
 
-Lemma effer_env_map : forall E Z P, effer_typ P = true ->
-  effer_env (map (subst_tb Z P) E) = map (subst_tb Z P) (effer_env E).
+Lemma clos_env_map : forall E Z P, clos_typ P = true ->
+  clos_env (map (subst_tb Z P) E) = map (subst_tb Z P) (clos_env E).
 Proof. intros. induction E.
   simpl. rewrite <- empty_def. rewrite map_empty. rewrite empty_def. reflexivity.
   destruct a. destruct b; simpl.
     repeat(rewrite cons_to_push). repeat(rewrite map_push). simpl.
       rewrite <- cons_to_push. simpl. rewrite cons_to_push. rewrite* IHE.
     repeat(rewrite cons_to_push). repeat(rewrite map_push). simpl.
-      rewrite <- cons_to_push. simpl. remember (effer_typ t). destruct b; symmetry in Heqb.
-      lets*: (@effer_typ_subst Z P t H Heqb). rewrite H0. rewrite map_push.
+      rewrite <- cons_to_push. simpl. remember (clos_typ t). destruct b; symmetry in Heqb.
+      lets*: (@clos_typ_subst Z P t H Heqb). rewrite H0. rewrite map_push.
         rewrite <- cons_to_push. simpl. rewrite* IHE.
-      lets*: (@effer_typ_subst_false Z P t H Heqb). rewrite* H0.
+      lets*: (@clos_typ_subst_false Z P t H Heqb). rewrite* H0.
 Qed.
 
-Lemma effer_env_eq : forall E, effer_env (effer_env E) = effer_env E.
+Lemma clos_env_eq : forall E, clos_env (clos_env E) = clos_env E.
 Proof. intros. induction E; autos.
   destruct a. destruct b; autos.
   simpls. rewrite* IHE.
-  simpls. remember (effer_typ t). symmetry in Heqb. destruct* b.
+  simpls. remember (clos_typ t). symmetry in Heqb. destruct* b.
     simpls. rewrite* Heqb. rewrite* IHE.
 Qed.
 
@@ -1230,32 +1230,32 @@ Proof.
   apply* typing_var. apply* binds_weaken.
   apply_fresh* typing_abs as x. forwards~ K: (H x).
     apply_ih_bind (H0 x); eauto.
-  apply_fresh* typing_abs_effer as x.
-    repeat(rewrite effer_env_dist in *). rewrite <- concat_assoc.
-    apply* H1. rewrite* concat_assoc. rewrite concat_assoc. repeat(rewrite <- effer_env_dist).
-    apply okt_typ.  apply* effer_env_okt.
+  apply_fresh* typing_abs_clos as x.
+    repeat(rewrite clos_env_dist in *). rewrite <- concat_assoc.
+    apply* H1. rewrite* concat_assoc. rewrite concat_assoc. repeat(rewrite <- clos_env_dist).
+    apply okt_typ.  apply* clos_env_okt.
     forwards~ K: (H0 x). lets(Hk & _): typing_regular K. lets: wft_from_okt_typ Hk.
-    apply effer_env_wft_reverse. apply* wft_weaken. apply* effer_env_wft. rewrite* effer_env_dist.
+    apply clos_env_wft_reverse. apply* wft_weaken. apply* clos_env_wft. rewrite* clos_env_dist.
     assert (Ha: x \notin dom E \u dom F \u dom G) by autos.
-    intros HI. apply Ha. repeat(rewrite effer_env_dist in HI). repeat(rewrite dom_concat in HI).
+    intros HI. apply Ha. repeat(rewrite clos_env_dist in HI). repeat(rewrite dom_concat in HI).
       repeat(rewrite in_union in *). rewrite or_assoc in HI.  branches HI.
-     branch 1. lets*: effer_env_dom_subset E.
-     branch 2. lets*: effer_env_dom_subset F.
-     branch 3. lets*: effer_env_dom_subset G.
+     branch 1. lets*: clos_env_dom_subset E.
+     branch 2. lets*: clos_env_dom_subset F.
+     branch 3. lets*: clos_env_dom_subset G.
   apply* typing_app.
   apply_fresh* typing_tabs as X. forwards~ K: (H X).
     apply_ih_bind (H0 X); eauto.
-  apply_fresh* typing_tabs_effer as X.
-    repeat(rewrite effer_env_dist in *). rewrite <- concat_assoc.
-    apply* H1. rewrite* concat_assoc. rewrite concat_assoc. repeat(rewrite <- effer_env_dist).
-    apply okt_X.  apply* effer_env_okt.
+  apply_fresh* typing_tabs_clos as X.
+    repeat(rewrite clos_env_dist in *). rewrite <- concat_assoc.
+    apply* H1. rewrite* concat_assoc. rewrite concat_assoc. repeat(rewrite <- clos_env_dist).
+    apply okt_X.  apply* clos_env_okt.
     forwards~ K: (H0 X). lets(Hk & _): typing_regular K.
     assert (Ha: X \notin dom E \u dom F \u dom G) by autos.
-    intros HI. apply Ha. repeat(rewrite effer_env_dist in HI). repeat(rewrite dom_concat in HI).
+    intros HI. apply Ha. repeat(rewrite clos_env_dist in HI). repeat(rewrite dom_concat in HI).
       repeat(rewrite in_union in *). rewrite or_assoc in HI.  branches HI.
-     branch 1. lets*: effer_env_dom_subset E.
-     branch 2. lets*: effer_env_dom_subset F.
-     branch 3. lets*: effer_env_dom_subset G.
+     branch 1. lets*: clos_env_dom_subset E.
+     branch 2. lets*: clos_env_dom_subset F.
+     branch 3. lets*: clos_env_dom_subset G.
   apply* typing_tapp.
   apply* typing_sub_abs.
   apply* typing_sub_tabs.
@@ -1268,18 +1268,18 @@ Proof.
     lets(H2 & _): (typing_regular H1). autos* (wft_from_okt_typ H2).
     pick_fresh x. forwards~: (H0 x). replace E with (E & empty) by rewrite* concat_empty_r.
     eapply wft_strengthen. rewrite* concat_empty_r.
-  apply wft_arrow_effer. pick_fresh x. forwards~: (H0 x).
+  apply wft_arrow_clos. pick_fresh x. forwards~: (H0 x).
     lets(H3 & _): (typing_regular H2). lets*: wft_from_okt_typ H3.
-    apply* effer_env_wft.
+    apply* clos_env_wft.
 
     pick_fresh x. forwards~: (H1 x).
     rewrite <- (@concat_empty_r bind (x ~: V) ) in H2. rewrite concat_assoc in H2.
-    lets: wft_strengthen H2. rewrite concat_empty_r in H3. apply* effer_env_wft.
+    lets: wft_strengthen H2. rewrite concat_empty_r in H3. apply* clos_env_wft.
   inverts* IHtyping1.
   apply* (@wft_all L).
-  apply* (@wft_all_effer L). intros. forwards~: (H1 X). rewrite <- (@concat_empty_l bind E).
-    apply effer_env_wft_weaken; rewrite* concat_empty_l. forwards~: (H0 X).
-    lets(HI & _): typing_regular H4. apply ok_from_okt. apply* effer_env_okt_push.
+  apply* (@wft_all_clos L). intros. forwards~: (H1 X). rewrite <- (@concat_empty_l bind E).
+    apply clos_env_wft_weaken; rewrite* concat_empty_l. forwards~: (H0 X).
+    lets(HI & _): typing_regular H4. apply ok_from_okt. apply* clos_env_okt_push.
   apply* wft_open.
   inverts* IHtyping.
   inverts* IHtyping.
@@ -1381,10 +1381,10 @@ Proof.
   apply_fresh* typing_abs as y.
     rewrite* subst_ee_open_ee_var.
     apply_ih_bind* H0. lets*: (typing_regular TypU).
-  apply typing_abs_effer with L. eauto.
-    (* if U is effer, then x is free in e1; else use IH *)
+  apply typing_abs_clos with L. eauto.
+    (* if U is clos, then x is free in e1; else use IH *)
     rewrite* subst_ee_open_ee_var.
-    repeat(rewrite effer_env_dist in *). rewrite <- concat_assoc.
+    repeat(rewrite clos_env_dist in *). rewrite <- concat_assoc.
     apply H1 with U; autos.
     pick_fresh y. forwards~ HI: (H1 y).
     assert (HII: typing empty (trm_cap V e1) (typ_arrow V T1))
