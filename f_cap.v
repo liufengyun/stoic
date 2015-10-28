@@ -155,10 +155,18 @@ Inductive wft : env -> typ -> Prop :=
       wft E T1 ->
       wft E T2 ->
       wft E (typ_arrow T1 T2)
+  | wft_arrow_effer : forall E T1 T2,
+      wft E T1 ->
+      wft E T2 ->
+      wft E (typ_arrow_effer T1 T2)
   | wft_all : forall L E T,
       (forall X, X \notin L ->
         wft (E & [: X :]) (T open_tt_var X)) ->
-      wft E (typ_all T).
+      wft E (typ_all T)
+  | wft_all_effer : forall L E T,
+      (forall X, X \notin L ->
+        wft (E & [: X :]) (T open_tt_var X)) ->
+      wft E (typ_all_effer T).
 
 (** A environment E is well-formed if it contains no duplicate bindings
   and if each type in it is well-formed with respect to the environment
@@ -746,6 +754,7 @@ Proof.
   (* case arrow *)
   (* case: all *)
   apply_fresh* wft_all as Y. apply_ih_bind* H0.
+  apply_fresh* wft_all_effer as Y. apply_ih_bind* H0.
 Qed.
 
 (** Through strengthening *)
@@ -763,6 +772,7 @@ Proof.
       apply~ binds_concat_left.
   (* todo: binds_cases tactic *)
   apply_fresh* wft_all as Y. apply_ih_bind* H0.
+  apply_fresh* wft_all_effer as Y. apply_ih_bind* H0.
 Qed.
 
 (** Through type substitution *)
@@ -785,6 +795,11 @@ Proof.
         subst. false~.
         applys wft_var. apply* binds_concat_left.
   apply_fresh* wft_all as Y.
+   unsimpl ((subst_tb Z P) bind_X).
+   lets: wft_type.
+   rewrite* subst_tt_open_tt_var.
+   apply_ih_map_bind* H0.
+  apply_fresh* wft_all_effer as Y.
    unsimpl ((subst_tb Z P) bind_X).
    lets: wft_type.
    rewrite* subst_tt_open_tt_var.
@@ -980,6 +995,7 @@ Proof.
   rewrite notin_singleton. intro. subst. applys binds_fresh_inv H Fr.
   notin_simpl; auto.
   notin_simpl; auto. pick_fresh Y. apply* (@notin_fv_tt_open Y).
+  notin_simpl; auto. pick_fresh Y. apply* (@notin_fv_tt_open Y).
 Qed.
 
 Lemma map_subst_tb_id : forall G Z P,
@@ -1117,7 +1133,9 @@ Lemma effer_env_wft: forall E V, ok E -> wft (effer_env E) V -> wft E V.
 Proof. intros. remember (effer_env E) as G. gen E. induction H0; intros; subst.
   apply wft_var. apply* effer_env_binds.
   apply* wft_arrow.
+  apply* wft_arrow_effer.
   apply_fresh* wft_all as Y. apply* H0. repeat(rewrite <- cons_to_push). autos.
+  apply_fresh* wft_all_effer as Y. apply* H0. repeat(rewrite <- cons_to_push). autos.
 Qed.
 
 Lemma effer_env_wft_weaken: forall E F G V,
@@ -1129,7 +1147,13 @@ Proof. intros. inductions H0; intros; subst.
       lets*: ok_concat_inv_r (ok_concat_inv_l H).
     apply binds_concat_right. auto.
   apply* wft_arrow.
+  apply* wft_arrow_effer.
   apply_fresh* wft_all as Y.
+    assert (HI: ok (E & F & (G & [: Y :]))).
+      rewrite concat_assoc. apply* ok_push.
+    forwards~ HII: (H0 Y). apply HI.  rewrite* concat_assoc.
+    rewrite* <- concat_assoc.
+  apply_fresh* wft_all_effer as Y.
     assert (HI: ok (E & F & (G & [: Y :]))).
       rewrite concat_assoc. apply* ok_push.
     forwards~ HII: (H0 Y). apply HI.  rewrite* concat_assoc.
@@ -1140,7 +1164,10 @@ Lemma effer_env_wft_reverse: forall E V, wft E V -> wft (effer_env E) V.
 Proof. intros. induction H.
   apply wft_var. apply* effer_env_binds_reverse.
   apply* wft_arrow.
+  apply* wft_arrow_effer.
   apply_fresh* wft_all as Y. forwards~ HI: (H0 Y).
+    rewrite effer_env_dist in HI. rewrite single_def in *. autos.
+  apply_fresh* wft_all_effer as Y. forwards~ HI: (H0 Y).
     rewrite effer_env_dist in HI. rewrite single_def in *. autos.
 Qed.
 
@@ -1155,6 +1182,10 @@ Proof. intros. induction* E.
     lets: effer_env_dom_subset E. unfolds subset.
     unfolds notin. autos.
 Qed.
+
+Lemma effer_env_okt_push : forall E X,
+  okt E -> okt ((effer_env E) & [:X:]) -> okt (E & [:X:]).
+Proof. admit. Qed.
 
 Lemma effer_typ_subst : forall Z P T, effer_typ P = true -> effer_typ T = true ->
   effer_typ (subst_tt Z P T) = true.
@@ -1239,59 +1270,42 @@ Proof.
     lets(H2 & _): (typing_regular H1). autos* (wft_from_okt_typ H2).
     pick_fresh x. forwards~: (H0 x). replace E with (E & empty) by rewrite* concat_empty_r.
     eapply wft_strengthen. rewrite* concat_empty_r.
-  apply wft_arrow. pick_fresh x. forwards~: (H0 x).
-    lets(H3 & _): (typing_regular H2). rewrite* <- concat_empty_l in H3.
-    lets*: wft_from_okt_typ H3.
-    replace E with (empty & E) by (rewrite* concat_empty_l).
-    apply* wft_weaken_right. rewrite* concat_empty_l.
+  apply wft_arrow_effer. pick_fresh x. forwards~: (H0 x).
+    lets(H3 & _): (typing_regular H2). lets*: wft_from_okt_typ H3.
+    apply* effer_env_wft.
 
     pick_fresh x. forwards~: (H1 x).
-    replace E with (empty & E) by (rewrite* concat_empty_l).
-    apply wft_weaken_right.
-    replace (x~:V) with (empty & x~:V & empty) in H2
-      by (rewrite* concat_empty_l; rewrite* concat_empty_r).
-    apply wft_strengthen in H2. rewrite* concat_empty_l in H2.
-    rewrite* concat_empty_l.
+    rewrite <- (@concat_empty_r bind (x ~: V) ) in H2. rewrite concat_assoc in H2.
+    lets: wft_strengthen H2. rewrite concat_empty_r in H3. apply* effer_env_wft.
   inverts* IHtyping1.
   apply* (@wft_all L).
+  apply* (@wft_all_effer L). intros. forwards~: (H1 X). rewrite <- (@concat_empty_l bind E).
+    apply effer_env_wft_weaken; rewrite* concat_empty_l. forwards~: (H0 X).
+    lets(HI & _): typing_regular H4. apply ok_from_okt. apply* effer_env_okt_push.
   apply* wft_open.
+  inverts* IHtyping.
+  inverts* IHtyping.
 Qed.
-
 
 (************************************************************************ *)
 (** Preservation by Term Substitution (8) *)
 
 Lemma open_tt_fv_subset: forall k U T,
   fv_tt T \c fv_tt (open_tt_rec k U T).
-Proof. intros. gen k. induction T; intros; simpl.
-  apply subset_empty_l.
-  apply subset_refl.
-  apply* subset_union_2.
-  autos.
+Proof. intros. gen k. induction T; intros; simpls;
+  autos* subset_refl subset_empty_l subset_union_2.
 Qed.
 
 Lemma open_te_fv_subset: forall k U e,
   fv_te e \c fv_te (open_te_rec k U e).
-Proof. intros. gen k. induction e; intros; simpls.
-  apply subset_empty_l.
-  apply subset_empty_l.
-  apply* subset_union_2. apply open_tt_fv_subset.
-  apply* subset_union_2. apply open_tt_fv_subset.
-  apply* subset_union_2.
-  autos.
-  apply* subset_union_2. apply open_tt_fv_subset.
+Proof. intros. gen k. induction e; intros; simpls;
+  autos* subset_empty_l subset_union_2 open_tt_fv_subset.
 Qed.
 
 Lemma open_ee_fv_subset: forall k u e,
   fv_ee e \c fv_ee (open_ee_rec k u e).
-Proof. intros. gen k. induction e; intros; simpls.
-  apply subset_empty_l.
-  apply subset_refl.
-  autos.
-  autos.
-  apply* subset_union_2.
-  autos.
-  autos.
+Proof. intros. gen k. induction e; intros; simpls;
+  autos* subset_empty_l subset_refl subset_union_2.
 Qed.
 
 Lemma open_ee_te_fv_eq: forall k U e,
@@ -1304,65 +1318,53 @@ Qed.
 
 Lemma open_te_ee_fv_subset: forall k u e,
   fv_te e \c fv_te (open_ee_rec k u e).
-Proof. intros. gen k. induction e; intros; simpls; autos.
-  apply subset_empty_l.
-  apply subset_empty_l.
-  apply* subset_union_2. apply subset_refl.
-  apply* subset_union_2. apply subset_refl.
-  apply* subset_union_2.
-  apply* subset_union_2. apply subset_refl.
+Proof. intros. gen k. induction e; intros; simpls;
+  autos* subset_empty_l subset_union_2 subset_refl.
 Qed.
 
 Lemma open_tt_tt_fv_subset: forall k T1 T2,
   fv_tt (open_tt_rec k T1 T2) \c fv_tt T1 \u fv_tt T2.
-Proof. intros. gen k. induction T2; intros; simpls; autos.
+Proof. intros. gen k. induction T2; intros; simpls;
+  autos* union_comm subset_empty_l subset_union_weak_r.
   destruct (prop_degeneracy (k = n)).
     (* k = n*)
-    apply is_True_inv in H. rewrite* If_l. apply subset_union_weak_l.
+    apply is_True_inv in H2. rewrite* If_l. apply subset_union_weak_l.
     (* k != n*)
-    apply is_False_inv in H. rewrite* If_r. simpl. apply subset_empty_l.
-
-  apply subset_union_weak_r.
+    apply is_False_inv in H2. rewrite* If_r.
 
   lets*: (subset_union_2 (IHT2_1 k) (IHT2_2 k)).
-  rewrite union_assoc in H.
-  rewrite union_comm in H.
-  replace ((fv_tt T1 \u fv_tt T2_1) \u fv_tt T1) with (fv_tt T1 \u fv_tt T2_1) in H.
-  rewrite union_assoc. rewrite union_comm. autos.
+  rewrite union_assoc in H2.
+  rewrite union_comm in H2.
+  replace ((fv_tt T1 \u fv_tt T2_1) \u fv_tt T1) with (fv_tt T1 \u fv_tt T2_1) in H2 by
+    (rewrite union_comm; rewrite <- union_assoc; rewrite* union_same).
+  rewrite union_assoc. rewrite*  union_comm.
 
-  rewrite union_comm. rewrite <- union_assoc.
-  rewrite union_same. reflexivity.
-Qed.
-
-
-Lemma subset_trans: forall (T: Type) (a b c: fset T),
-  a \c b -> b \c c -> a \c c.
-Proof. unfolds subset. autos. Qed.
-
-Lemma subset_strengthen: forall (T: Type) (a b: fset T) (x: T),
-  a \c (b \u \{x}) -> x \notin a -> a \c b.
-Proof. unfolds subset. intros. forwards K: (H x0 H1).
-  rewrite in_union in K. destruct* K.
-  rewrite in_singleton in H2. subst.
-  tryfalse.
+  lets*: (subset_union_2 (IHT2_1 k) (IHT2_2 k)).
+  rewrite union_assoc in H2.
+  rewrite union_comm in H2.
+  replace ((fv_tt T1 \u fv_tt T2_1) \u fv_tt T1) with (fv_tt T1 \u fv_tt T2_1) in H2 by
+    (rewrite union_comm; rewrite <- union_assoc; rewrite* union_same).
+  rewrite union_assoc. rewrite*  union_comm.
 Qed.
 
 Lemma wft_fv_tt: forall E T,
   wft E T -> fv_tt T \c dom E.
 Proof.
-  intros. induction H.
-  simpl. lets: get_some_inv (binds_get H).
-  unfolds. intros. rewrite in_singleton in H1. rewrite* H1.
-  simpl. replace (dom E) with (dom E \u dom E) by (autos* union_same).
-  apply* subset_union_2.
-  pick_fresh X. forwards~ HI: (H0 X). simpl. rewrite dom_concat in HI.
-  rewrite dom_single in HI.
-
-  assert (HII: fv_tt T \c dom E \u \{X}).
-    apply subset_trans with (fv_tt (T open_tt_var X)).
-    autos* open_tt_fv_subset. autos.
-
-  apply subset_strengthen with X; autos.
+  intros. induction H; simpls.
+  lets: get_some_inv (binds_get H). unfolds. intros.
+    rewrite in_singleton in H1. rewrite* H1.
+  replace (dom E) with (dom E \u dom E) by (autos* union_same). apply* subset_union_2.
+  replace (dom E) with (dom E \u dom E) by (autos* union_same). apply* subset_union_2.
+  pick_fresh X. forwards~ HI: (H0 X). rewrite dom_concat in HI. rewrite dom_single in HI.
+    assert (HII: fv_tt T \c dom E \u \{X}).
+      apply subset_trans with (fv_tt (T open_tt_var X)).
+      autos* open_tt_fv_subset. autos.
+    apply subset_strengthen with X; autos.
+  pick_fresh X. forwards~ HI: (H0 X). rewrite dom_concat in HI. rewrite dom_single in HI.
+    assert (HII: fv_tt T \c dom E \u \{X}).
+      apply subset_trans with (fv_tt (T open_tt_var X)).
+      autos* open_tt_fv_subset. autos.
+    apply subset_strengthen with X; autos.
 Qed.
 
 Lemma typing_env_fv : forall E e T,
