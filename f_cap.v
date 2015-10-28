@@ -174,7 +174,7 @@ Inductive okt : env -> Prop :=
 
 (* pure rules *)
 Fixpoint pure_typ(t: typ) := match t with
-  | typ_bvar _          => true
+  | typ_bvar _          => false  (* impossible, ill-formed *)
   | typ_fvar _          => true
   | typ_base            => true
   | typ_eff             => false
@@ -274,6 +274,9 @@ Definition progress := forall e T,
   typing empty e T ->
      value e
   \/ exists e', red e e'.
+
+(* effect safety : it's impossible to construct a term of type_eff in pure environment  *)
+Definition effect_safety := forall E, ~exists e, typing (pure_env E) e typ_eff.
 
 (* ********************************************************************** *)
 (** * Additional Definitions Used in the Proofs *)
