@@ -275,7 +275,7 @@ Definition progress := forall e T,
      value e
   \/ exists e', red e e'.
 
-(* effect safety : it's impossible to construct a term of type_eff in pure environment  *)
+(* effect safety : it's impossible to construct a term of typ_eff in pure environment  *)
 Definition effect_safety := forall E, ~exists e, typing (pure_env E) e typ_eff.
 
 (* ********************************************************************** *)
