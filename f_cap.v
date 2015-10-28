@@ -284,7 +284,14 @@ Definition progress := forall e T,
   \/ exists e', red e e'.
 
 (* effect safety : it's impossible to construct a term of typ_eff in pure environment  *)
-Definition effect_safety := forall E, ~exists e, typing (clos_env E) e typ_eff.
+(* FIXME : x : B -> E could be in E  *)
+Definition effect_safety := forall E, ~exists e, typing (closed_env E) e typ_eff.
+
+Definition effect_safety_arrow := forall E e S T, typing (closed_env E) e (typ_arrow S T) ->
+  typing (closed_env E) e (typ_arrow_closed S T).
+
+Definition effect_safety_all := forall E e T, typing (closed_env E) e (typ_all T) ->
+  typing (closed_env E) e (typ_all_closed T).
 
 (* ********************************************************************** *)
 (** * Additional Definitions Used in the Proofs *)
