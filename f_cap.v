@@ -221,7 +221,7 @@ Inductive typing : env -> trm -> typ -> Prop :=
       okt E ->
       (forall X, X \notin L ->
         typing ((pure_env E) & [: X :]) (e1 open_te_var X) (T1 open_tt_var X)) ->
-      typing E (trm_tabs e1) (typ_all T1)
+      typing E (trm_tabs e1) (typ_all_pure T1)
   | typing_tapp : forall T1 E e1 T,
       wft E T ->
       typing E e1 (typ_all T1) ->
