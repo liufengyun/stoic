@@ -13,15 +13,15 @@ Implicit Types X : var.
 
 (** Representation of pre-types *)
 
-Inductive typ      : Set   :=
-  | typ_bvar       : nat -> typ
-  | typ_fvar       : var -> typ
-  | typ_base       : typ
-  | typ_eff        : typ
-  | typ_arrow      : typ -> typ -> typ
-  | typ_arrow_pure : typ -> typ -> typ       (* pure term abstraction *)
-  | typ_all        : typ -> typ
-  | typ_all_pure   : typ -> typ.             (* pure type abstraction *)
+Inductive typ       : Set   :=
+  | typ_bvar        : nat -> typ
+  | typ_fvar        : var -> typ
+  | typ_base        : typ
+  | typ_eff         : typ
+  | typ_arrow       : typ -> typ -> typ
+  | typ_arrow_effer : typ -> typ -> typ       (* effect closed term abstraction *)
+  | typ_all         : typ -> typ
+  | typ_all_effer   : typ -> typ.             (* effect closed type abstraction *)
 
 (** Representation of pre-terms *)
 
@@ -42,9 +42,9 @@ Fixpoint open_tt_rec (K : nat) (U : typ) (T : typ) {struct T} : typ :=
   | typ_base              => typ_base
   | typ_eff               => typ_eff
   | typ_arrow T1 T2       => typ_arrow (open_tt_rec K U T1) (open_tt_rec K U T2)
-  | typ_arrow_pure T1 T2  => typ_arrow_pure (open_tt_rec K U T1) (open_tt_rec K U T2)
+  | typ_arrow_effer T1 T2  => typ_arrow_effer (open_tt_rec K U T1) (open_tt_rec K U T2)
   | typ_all T1            => typ_all (open_tt_rec (S K) U T1)
-  | typ_all_pure T1       => typ_all_pure (open_tt_rec (S K) U T1)
+  | typ_all_effer T1       => typ_all_effer (open_tt_rec (S K) U T1)
   end.
 
 Definition open_tt T U := open_tt_rec 0 U T.
@@ -94,16 +94,16 @@ Inductive type : typ -> Prop :=
       type T1 ->
       type T2 ->
       type (typ_arrow T1 T2)
-  | type_arrow_pure : forall T1 T2,
+  | type_arrow_effer : forall T1 T2,
       type T1 ->
       type T2 ->
-      type (typ_arrow_pure T1 T2)
+      type (typ_arrow_effer T1 T2)
   | type_all : forall L T2,
       (forall X, X \notin L -> type (T2 open_tt_var X)) ->
       type (typ_all T2)
-  | type_all_pure : forall L T2,
+  | type_all_effer : forall L T2,
       (forall X, X \notin L -> type (T2 open_tt_var X)) ->
-      type (typ_all_pure T2).
+      type (typ_all_effer T2).
 
 (** Terms as locally closed pre-terms *)
 
@@ -179,9 +179,9 @@ Fixpoint pure_typ(t: typ) := match t with
   | typ_base            => true
   | typ_eff             => false
   | typ_arrow U V       => false
-  | typ_arrow_pure U V  => true   (* pure lambda abstraction *)
+  | typ_arrow_effer U V => true   (* pure lambda abstraction *)
   | typ_all T           => false
-  | typ_all_pure T      => true   (* pure type abstraction *)
+  | typ_all_effer T     => true   (* pure type abstraction *)
   end.
 
 Fixpoint pure_env(E: env) := match E with
@@ -204,11 +204,11 @@ Inductive typing : env -> trm -> typ -> Prop :=
       (forall x, x \notin L ->
         typing (E & x ~: V) (e1 open_ee_var x) T1) ->
       typing E (trm_abs V e1) (typ_arrow V T1)
-  | typing_abs_pure: forall L E V e1 T1,
+  | typing_abs_effer: forall L E V e1 T1,
       okt E ->
       (forall x, x \notin L ->
         typing ((pure_env E) & x ~: V) (e1 open_ee_var x) T1) ->
-      typing E (trm_abs V e1) (typ_arrow_pure V T1)
+      typing E (trm_abs V e1) (typ_arrow_effer V T1)
   | typing_app : forall T1 E e1 e2 T2,
       typing E e1 (typ_arrow T1 T2) ->
       typing E e2 T1 ->
@@ -217,19 +217,19 @@ Inductive typing : env -> trm -> typ -> Prop :=
       (forall X, X \notin L ->
         typing (E & [: X :]) (e1 open_te_var X) (T1 open_tt_var X)) ->
       typing E (trm_tabs e1) (typ_all T1)
-  | typing_tabs_pure : forall L E e1 T1,
+  | typing_tabs_effer : forall L E e1 T1,
       okt E ->
       (forall X, X \notin L ->
         typing ((pure_env E) & [: X :]) (e1 open_te_var X) (T1 open_tt_var X)) ->
-      typing E (trm_tabs e1) (typ_all_pure T1)
+      typing E (trm_tabs e1) (typ_all_effer T1)
   | typing_tapp : forall T1 E e1 T,
       wft E T ->
       typing E e1 (typ_all T1) ->
       typing E (trm_tapp e1 T) (open_tt T1 T)
   | typing_sub_abs: forall E e S T,
-      typing E e (typ_arrow_pure S T) -> typing E e (typ_arrow S T)
+      typing E e (typ_arrow_effer S T) -> typing E e (typ_arrow S T)
   | typing_sub_tabs: forall E e T,
-      typing E e (typ_all_pure T) -> typing E e (typ_all T).
+      typing E e (typ_all_effer T) -> typing E e (typ_all T).
 
 (** Values *)
 
@@ -285,13 +285,14 @@ Definition effect_safety := forall E, ~exists e, typing (pure_env E) e typ_eff.
 
 Fixpoint fv_tt (T : typ) {struct T} : vars :=
   match T with
-  | typ_bvar J      => \{}
-  | typ_base        => \{}
-  | typ_eff         => \{}
-  | typ_fvar X      => \{X}
-  | typ_arrow T1 T2 => (fv_tt T1) \u (fv_tt T2)
-  | typ_pure T1 T2  => (fv_tt T1) \u (fv_tt T2)
-  | typ_all T1      => (fv_tt T1)
+  | typ_bvar J            => \{}
+  | typ_base              => \{}
+  | typ_eff               => \{}
+  | typ_fvar X            => \{X}
+  | typ_arrow T1 T2       => (fv_tt T1) \u (fv_tt T2)
+  | typ_arrow_effer T1 T2 => (fv_tt T1) \u (fv_tt T2)
+  | typ_all T1            => (fv_tt T1)
+  | typ_all_effer T1      => (fv_tt T1)
   end.
 
 (** Computing free type variables in a term *)
@@ -324,13 +325,14 @@ Definition fv (e : trm) := (fv_te e) \u (fv_ee e).
 
 Fixpoint subst_tt (Z : var) (U : typ) (T : typ) {struct T} : typ :=
   match T with
-  | typ_bvar J      => typ_bvar J
-  | typ_base        => typ_base
-  | typ_eff         => typ_eff
-  | typ_fvar X      => If X = Z then U else (typ_fvar X)
-  | typ_arrow T1 T2 => typ_arrow (subst_tt Z U T1) (subst_tt Z U T2)
-  | typ_pure T1 T2  => typ_pure (subst_tt Z U T1) (subst_tt Z U T2)
-  | typ_all T       => typ_all (subst_tt Z U T)
+  | typ_bvar J            => typ_bvar J
+  | typ_base              => typ_base
+  | typ_eff               => typ_eff
+  | typ_fvar X            => If X = Z then U else (typ_fvar X)
+  | typ_arrow T1 T2       => typ_arrow (subst_tt Z U T1) (subst_tt Z U T2)
+  | typ_arrow_effer T1 T2 => typ_arrow_effer (subst_tt Z U T1) (subst_tt Z U T2)
+  | typ_all T             => typ_all (subst_tt Z U T)
+  | typ_all_effer T        => typ_all_effer (subst_tt Z U T)
   end.
 
 (** Substitution for free type variables in terms. *)
