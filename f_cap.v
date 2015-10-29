@@ -1218,6 +1218,11 @@ Proof. intros.
   rewrite empty_def. simpls. reflexivity.
 Qed.
 
+Lemma closed_env_single_tvar : forall X, closed_env ([:X:]) = [:X:].
+Proof. intros. replace ([:X:]) with (empty & [:X:]) by rewrite* concat_empty_l.
+  rewrite <- cons_to_push. simpl. rewrite empty_def. reflexivity.
+Qed.
+
 Lemma closed_env_single_false : forall x U, closed_typ U = false ->
   closed_env (x ~: U) = empty.
 Proof. intros.
@@ -1226,6 +1231,7 @@ Proof. intros.
   rewrite empty_def. simpls. reflexivity.
 Qed.
 
+(* Fixme: this three lemmas might be incorrect *)
 Lemma closed_typ_subst : forall Z P T, closed_typ P = true -> closed_typ T = true ->
   closed_typ (subst_tt Z P T) = true.
 Proof. admit. Qed.
@@ -1301,6 +1307,12 @@ Proof.
   apply* typing_sub_abs.
   apply* typing_sub_tabs.
 Qed.
+
+Lemma typing_weakening_env : forall E F G e T,
+  typing (E & (closed_env F) & G) e T ->
+  okt (E & F & G) ->
+  typing (E & F & G) e T.
+Proof. admit. Qed.
 
 Lemma typing_wft: forall E e T, typing E e T -> wft E T.
 Proof.
@@ -1484,6 +1496,7 @@ Qed.
 (************************************************************************ *)
 (** Preservation by Type Substitution (11) *)
 
+(* Fixme: this lemma doesn't hold !! *)
 Lemma typing_through_subst_te : forall E F Z e T P,
   typing (E & [: Z :] & F) e T ->
   wft E P ->
@@ -1497,26 +1510,23 @@ Proof.
     unsimpl (subst_tb Z P (bind_x V)).
     rewrite* subst_te_open_ee_var.
     apply_ih_map_bind* H0.
-  apply_fresh* typing_cap as y.
-    assert (HI: typing empty (trm_cap V e1) (typ_arrow V T1))
-           by apply* typing_cap.
-    apply typing_term_closeded in HI. destruct HI as [HI HII].
-    unfold fv in HI. simpl in HI. apply union_empty_inv in HI. destruct HI.
-    destruct (union_empty_inv H2).
-    simpl in HII. destruct (union_empty_inv HII).
-
-    rewrite* subst_te_fresh.
-    repeat(rewrite* subst_tt_fresh).
-    rewrite* H7.
-    rewrite* H6.
-    rewrite* H5.
+  apply_fresh* typing_abs_closed as y.
+    repeat(rewrite closed_env_dist in *).
+    unsimpl (subst_tb Z P (bind_x V)).
+    rewrite* subst_te_open_ee_var.
+    rewrite closed_env_map. apply_ih_map_bind* H1.
+    simpl. rewrite closed_env_single_tvar. rewrite* concat_assoc.
+    admit. admit.
   apply* typing_app.
   apply_fresh* typing_tabs as Y.
     unsimpl (subst_tb Z P bind_X).
     rewrite* subst_te_open_te_var; eauto using wft_type.
     rewrite* subst_tt_open_tt_var; eauto using wft_type.
     apply_ih_map_bind* H0.
+  apply_fresh* typing_tabs_closed as Y. admit.
   rewrite* subst_tt_open_tt; eauto using wft_type.
+  apply* typing_sub_abs.
+  apply* typing_sub_tabs.
 Qed.
 
 (* ********************************************************************** *)
@@ -1535,14 +1545,13 @@ Proof.
   apply_empty typing_through_subst_ee; substs*.
        lets*: typing_regular Typ2.
 
-  inversions Typ1. pick_fresh x. forwards~ K: (H7 x).
+  inversions H4.  pick_fresh x. forwards~ K: (H8 x).
   rewrite* (@subst_ee_intro x).
     apply_empty typing_through_subst_ee; substs*.
-    rewrite <- (@concat_empty_l bind _).
-    rewrite concat_assoc.
-    apply* typing_weakening. rewrite* concat_empty_l.
-    apply* okt_typ. rewrite* concat_empty_l.
-    rewrite* concat_empty_l. autos* typing_wft.
+    rewrite <- (@concat_empty_l bind _). rewrite concat_assoc.
+    apply typing_weakening_env. rewrite* concat_empty_l.
+    rewrite concat_empty_l. apply* okt_typ.
+    autos* typing_wft.
     lets*: typing_regular Typ2.
   (* case: tapp *)
   inversions Red; try solve [ apply* typing_tapp ].
@@ -1553,6 +1562,10 @@ Proof.
     rewrite map_empty. rewrite~ concat_empty_r.
   apply* typing_through_subst_te.
   rewrite* concat_empty_r.
+
+  admit.
+  apply typing_sub_abs. auto.
+  apply typing_sub_tabs. auto.
 Qed.
 
 (* ********************************************************************** *)
