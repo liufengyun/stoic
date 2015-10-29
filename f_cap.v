@@ -1110,7 +1110,7 @@ Proof. intros. induction E.
       eapply subset_trans. exact IHE. apply subset_union_weak_r.
 Qed.
 
-Lemma closed_env_binds: forall E x, ok E -> binds x bind_X (closed_env E) -> binds x bind_X E.
+Lemma closed_env_binds: forall E x v, ok E -> binds x v (closed_env E) -> binds x v E.
 Proof. intros. induction E.
   simpl in *. autos.
   destruct a. destruct b.
@@ -1118,9 +1118,10 @@ Proof. intros. induction E.
       destruct H1. subst. apply binds_push_eq.
       destruct H1. apply* binds_push_neq.
     simpl in *.  rewrite cons_to_push in *. destruct (closed_typ t).
-      destruct (binds_push_inv H0). false H1. destruct H1. apply* binds_push_neq.
-      apply* binds_push_neq. intro Heq. substs. destruct (ok_push_inv H).
-      apply H2. eapply get_some_inv. apply binds_get. eauto.
+      destruct (binds_push_inv H0).
+        destruct H1. substs. apply* binds_push_eq.
+        destruct H1. apply* binds_push_neq.
+      rewrite <- concat_empty_r. apply binds_weaken; rewrite* concat_empty_r.
 Qed.
 
 Lemma closed_env_binds_reverse: forall E x, binds x bind_X E -> binds x bind_X (closed_env E).
@@ -1132,6 +1133,23 @@ Proof. intros. induction E.
       destruct H0. apply* binds_push_neq.
     simpl in *. rewrite cons_to_push in *. destruct (binds_push_inv H). false H0.
       destruct H0. destruct* (closed_typ t).
+Qed.
+
+Lemma closed_env_binds_in: forall E x T, closed_typ T = true ->
+   binds x (bind_x T) E -> binds x (bind_x T) (closed_env E).
+Proof. intros. induction E.
+  (* nil *)
+  rewrite <- empty_def in H0. destruct(binds_empty_inv H0).
+  (* x::xs *)
+  destruct a. destruct b.
+    (* bind_X *)
+    simpl. rewrite cons_to_push in *. destruct (binds_push_inv H0).
+    destruct H1. inversion H2.
+    destruct H1. apply* binds_push_neq.
+    (* bind_x *)
+    simpls. rewrite cons_to_push in *. destruct (binds_push_inv H0).
+    destruct H1. inversions H2. rewrite* H.
+    destruct H1. destruct* (closed_typ t).
 Qed.
 
 Lemma closed_env_wft: forall E V, ok E -> wft (closed_env E) V -> wft E V.
@@ -1191,6 +1209,22 @@ Qed.
 Lemma closed_env_okt_push : forall E X,
   okt E -> okt ((closed_env E) & [:X:]) -> okt (E & [:X:]).
 Proof. admit. Qed.
+
+Lemma closed_env_single_true : forall x U, closed_typ U = true ->
+  closed_env (x ~: U) = x ~: U.
+Proof. intros.
+  replace (x ~: U) with (empty & x ~: U) by rewrite* concat_empty_l.
+  rewrite <- cons_to_push. simpls. rewrite H.
+  rewrite empty_def. simpls. reflexivity.
+Qed.
+
+Lemma closed_env_single_false : forall x U, closed_typ U = false ->
+  closed_env (x ~: U) = empty.
+Proof. intros.
+  replace (x ~: U) with (empty & x ~: U) by rewrite* concat_empty_l.
+  rewrite <- cons_to_push. simpls. rewrite H.
+  rewrite empty_def. simpls. reflexivity.
+Qed.
 
 Lemma closed_typ_subst : forall Z P T, closed_typ P = true -> closed_typ T = true ->
   closed_typ (subst_tt Z P T) = true.
@@ -1292,6 +1326,16 @@ Proof.
   inverts* IHtyping.
 Qed.
 
+Lemma typing_strengthen_env: forall E u U, value u -> typing E u U ->
+  closed_typ U = true -> typing (closed_env E) u U.
+Proof. intros. induction H0; simpls; inversion H1.
+  apply typing_var. apply* closed_env_okt. apply* closed_env_binds_in.
+  apply_fresh* typing_abs_closed as y. apply* closed_env_okt. rewrite* closed_env_eq.
+  inversion H.
+  apply_fresh* typing_tabs_closed as y. apply* closed_env_okt. rewrite* closed_env_eq.
+  inversion H.
+Qed.
+
 (************************************************************************ *)
 (** Preservation by Term Substitution (8) *)
 
@@ -1377,32 +1421,63 @@ Lemma typing_env_fv : forall E e T,
 Proof. admit. Qed.
 
 Lemma typing_through_subst_ee : forall U E F x T e u,
+  value u ->
   typing (E & x ~: U & F) e T ->
   typing E u U ->
   typing (E & F) (subst_ee x u e) T.
 Proof.
-  introv TypT TypU. inductions TypT; introv; simpl.
+  introv Hv TypT TypU. inductions TypT; introv; simpl.
   case_var.
     binds_get H0. apply_empty* typing_weakening.
     binds_cases H0; apply* typing_var.
   apply_fresh* typing_abs as y.
     rewrite* subst_ee_open_ee_var.
     apply_ih_bind* H0. lets*: (typing_regular TypU).
-  apply typing_abs_closed with L. eauto.
-    (* if U is closed, then x is free in e1; else use IH *)
+  apply_fresh* typing_abs_closed as y. destruct (typing_regular TypU).
     rewrite* subst_ee_open_ee_var.
-    repeat(rewrite closed_env_dist in *). rewrite <- concat_assoc.
-    apply H1 with U; autos.
-    pick_fresh y. forwards~ HI: (H1 y).
-    assert (HII: typing empty (trm_cap V e1) (typ_arrow V T1))
-           by apply* typing_cap.
-    apply typing_term_closeded in HII. unfold fv in HII. simpl in HII.
-    destruct HII. destruct (union_empty_inv H2). rewrite* H5.
+    (* if U is closed, then use IH; else  x is free in e1; *)
+    repeat(rewrite closed_env_dist in *). remember (closed_typ U) as b. destruct b.
+      (* closed_typ U = true *)
+      symmetry in Heqb. rewrite* closed_env_single_true in H1.
+      intros. rewrite <- concat_assoc. apply H1 with U; autos. rewrite* concat_assoc.
+      apply* typing_strengthen_env.
+      (* closed_typ U = false *)
+      symmetry in Heqb. rewrite* closed_env_single_false in H0. rewrite concat_empty_r in H0.
+      lets: ok_middle_inv (ok_from_okt H). forwards~ HI: H0 y.
+      rewrite* subst_ee_fresh. destructs (typing_env_fv HI). unfolds notin. intros HII.
+      assert (HIII: x \in dom (closed_env E & closed_env F & y ~: V)) by unfolds* subset.
+      repeat(rewrite dom_concat in HIII). repeat(rewrite in_union in HIII).
+      rewrite dom_single in HIII. rewrite or_assoc in HIII. destruct H4. branches HIII.
+        apply H4. lets*: closed_env_dom_subset E.
+        apply H8. lets*: closed_env_dom_subset F.
+        rewrite in_singleton in H9. substs. apply* Fry. repeat(rewrite in_union).
+          autos* in_singleton_self.
   apply* typing_app.
   apply_fresh* typing_tabs as Y.
     rewrite* subst_ee_open_te_var.
     apply_ih_bind* H0.  lets*: (typing_regular TypU).
+  apply_fresh* typing_tabs_closed as Y.  destruct (typing_regular TypU).
+    rewrite* subst_ee_open_te_var.
+    (* if U is closed, then use IH; else  x is free in e1; *)
+    repeat(rewrite closed_env_dist in *). remember (closed_typ U) as b. destruct b.
+      (* closed_typ U = true *)
+      symmetry in Heqb. rewrite* closed_env_single_true in H1.
+      intros. rewrite <- concat_assoc. apply H1 with U; autos. rewrite* concat_assoc.
+      apply* typing_strengthen_env.
+      (* closed_typ U = false *)
+      symmetry in Heqb. rewrite* closed_env_single_false in H0. rewrite concat_empty_r in H0.
+      lets: ok_middle_inv (ok_from_okt H). forwards~ HI: H0 Y.
+      rewrite* subst_ee_fresh. destructs (typing_env_fv HI). unfolds notin. intros HII.
+      assert (HIII: x \in dom (closed_env E & closed_env F & [:Y:])) by unfolds* subset.
+      repeat(rewrite dom_concat in HIII). repeat(rewrite in_union in HIII).
+      rewrite dom_single in HIII. rewrite or_assoc in HIII. destruct H4. branches HIII.
+        apply H4. lets*: closed_env_dom_subset E.
+        apply H8. lets*: closed_env_dom_subset F.
+        rewrite in_singleton in H9. substs. apply* FrY. repeat(rewrite in_union).
+          autos* in_singleton_self.
   apply* typing_tapp.
+  apply* typing_sub_abs.
+  apply* typing_sub_tabs.
 Qed.
 
 
