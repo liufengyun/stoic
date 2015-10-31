@@ -1210,17 +1210,20 @@ Lemma closed_env_okt_push : forall E X,
   okt E -> okt ((closed_env E) & [:X:]) -> okt (E & [:X:]).
 Proof. admit. Qed.
 
+Lemma closed_env_empty : closed_env empty = empty.
+Proof. rewrite empty_def. reflexivity. Qed.
+
 Lemma closed_env_single_true : forall x U, closed_typ U = true ->
   closed_env (x ~: U) = x ~: U.
 Proof. intros.
   replace (x ~: U) with (empty & x ~: U) by rewrite* concat_empty_l.
   rewrite <- cons_to_push. simpls. rewrite H.
-  rewrite empty_def. simpls. reflexivity.
+  rewrite closed_env_empty. reflexivity.
 Qed.
 
 Lemma closed_env_single_tvar : forall X, closed_env ([:X:]) = [:X:].
 Proof. intros. replace ([:X:]) with (empty & [:X:]) by rewrite* concat_empty_l.
-  rewrite <- cons_to_push. simpl. rewrite empty_def. reflexivity.
+  rewrite <- cons_to_push. simpl. rewrite closed_env_empty. reflexivity.
 Qed.
 
 Lemma closed_env_single_false : forall x U, closed_typ U = false ->
@@ -1228,7 +1231,7 @@ Lemma closed_env_single_false : forall x U, closed_typ U = false ->
 Proof. intros.
   replace (x ~: U) with (empty & x ~: U) by rewrite* concat_empty_l.
   rewrite <- cons_to_push. simpls. rewrite H.
-  rewrite empty_def. simpls. reflexivity.
+  rewrite closed_env_empty. reflexivity.
 Qed.
 
 (* Fixme: this three lemmas might be incorrect *)
@@ -1243,7 +1246,7 @@ Proof. admit. Qed.
 Lemma closed_env_map : forall E Z P, closed_typ P = true ->
   closed_env (map (subst_tb Z P) E) = map (subst_tb Z P) (closed_env E).
 Proof. intros. induction E.
-  simpl. rewrite <- empty_def. rewrite map_empty. rewrite empty_def. reflexivity.
+  simpl. rewrite <- empty_def. rewrite map_empty. apply closed_env_empty.
   destruct a. destruct b; simpl.
     repeat(rewrite cons_to_push). repeat(rewrite map_push). simpl.
       rewrite <- cons_to_push. simpl. rewrite cons_to_push. rewrite* IHE.
@@ -1563,7 +1566,16 @@ Proof.
   apply* typing_through_subst_te.
   rewrite* concat_empty_r.
 
-  admit.
+  inversions H5. pick_fresh X. forwards~ : H7 X.
+  rewrite* (@subst_te_intro X).
+  rewrite* (@subst_tt_intro X).
+  asserts_rewrite (E = E & map (subst_tb X T) empty).
+    rewrite map_empty. rewrite~ concat_empty_r.
+  apply* typing_through_subst_te. rewrite concat_empty_r.
+  rewrite <- (@concat_empty_l bind E).
+  apply typing_weakening_env. rewrite* concat_empty_l.
+  rewrite concat_empty_l. apply* okt_X.
+
   apply typing_sub_abs. auto.
   apply typing_sub_tabs. auto.
 Qed.
@@ -1576,12 +1588,14 @@ Qed.
 
 Lemma canonical_form_abs : forall t U1 U2,
   value t -> typing empty t (typ_arrow U1 U2) ->
-  exists V, exists e1, t = trm_abs V e1 \/ t = trm_cap V e1.
+  exists V, exists e1, t = trm_abs V e1.
 Proof.
   introv Val Typ. gen_eq E: (@empty bind).
   gen_eq T: (typ_arrow U1 U2). gen U1 U2.
   induction Typ; introv EQT EQE;
    try solve [ inversion Val | inversion EQT | eauto ].
+  (* typ_arrow_closed *)
+  inversions EQT. inversions Typ; try solve [ inversion Val | eauto ].
 Qed.
 
 Lemma canonical_form_tabs : forall t U1,
@@ -1592,26 +1606,29 @@ Proof.
   gen_eq T: (typ_all U1). gen U1.
   induction Typ; introv EQT EQE;
    try solve [ inversion Val | inversion EQT | eauto ].
+  (* typ_all_closed *)
+  inversions EQT. inversions Typ; try solve [ inversion Val | eauto ].
 Qed.
 
 Lemma progress_result : progress.
 Proof.
   introv Typ. gen_eq E: (@empty bind). lets Typ': Typ.
-  induction Typ; intros EQ; subst.
+  induction Typ; intros EQ; subst; autos.
   (* case: var *)
   false* binds_empty_inv.
   (* case: abs *)
   left*. apply value_abs. lets*: typing_regular Typ'.
-  left*. apply value_cap. lets*: typing_regular Typ'.
+  (* case: abs closed *)
+  left*. apply value_abs. lets*: typing_regular Typ'.
   (* case: app *)
   right. destruct* IHTyp1 as [Val1 | [e1' Rede1']].
     destruct* IHTyp2 as [Val2 | [e2' Rede2']].
     destruct (canonical_form_abs Val1 Typ1) as [S [e3 EQ]].
-      subst. exists* (open_ee e3 e2). destruct EQ; subst.
-        apply* red_abs. lets*: typing_regular Typ1.
-        apply* red_cap. lets*: typing_regular Typ1.
+      subst. exists* (open_ee e3 e2). apply* red_abs. lets*: typing_regular Typ1.
     exists* (trm_app e1' e2). apply* red_app_1. lets*: typing_regular Typ2.
   (* case: tabs *)
+  left*. apply* value_tabs. lets*: typing_regular Typ'.
+  (* case: tabs_closed *)
   left*. apply* value_tabs. lets*: typing_regular Typ'.
   (* case: tapp *)
   right. destruct~ IHTyp as [Val1 | [e1' Rede1']].
