@@ -1307,12 +1307,6 @@ Proof.
   apply* typing_sub_tabs.
 Qed.
 
-Lemma typing_weakening_env : forall E F G e T,
-  typing (E & (closed_env F) & G) e T ->
-  okt (E & F & G) ->
-  typing (E & F & G) e T.
-Proof. admit. Qed.
-
 Lemma typing_wft: forall E e T, typing E e T -> wft E T.
 Proof.
   intros. induction H. applys~ wft_from_env_has_typ x.
@@ -1335,6 +1329,32 @@ Proof.
   apply* wft_open.
   inverts* IHtyping.
   inverts* IHtyping.
+Qed.
+
+Lemma typing_weakening_env : forall E F G e T,
+  typing (E & (closed_env F) & G) e T ->
+  okt (E & F & G) ->
+  typing (E & F & G) e T.
+Proof. intros. inductions H.
+  apply* typing_var. binds_cases H0; autos.
+    apply* binds_weaken. apply* binds_concat_left.
+    apply binds_concat_right. apply* closed_env_binds.
+    autos* ok_concat_inv_l ok_concat_inv_r ok_from_okt.
+  apply_fresh typing_abs as x.  apply_ih_bind* H0.
+    apply okt_typ; auto. forwards~ : H x.
+    destruct(typing_regular H2). lets: wft_from_okt_typ H3.
+    apply* closed_env_wft_weaken.
+  apply_fresh typing_abs_closed as x. auto.
+    repeat(rewrite closed_env_dist in *). rewrite closed_env_eq in *.
+    apply_ih_bind* H1. rewrite* closed_env_eq. forwards~ : H0 x.
+  apply* typing_app.
+  apply_fresh typing_tabs as X. apply_ih_bind* H0.
+  apply_fresh typing_tabs_closed as X; auto.
+    repeat(rewrite closed_env_dist in *). rewrite closed_env_eq in *.
+    apply_ih_bind* H1. rewrite* closed_env_eq. forwards~ : H0 X.
+  apply typing_tapp; auto. apply* closed_env_wft_weaken.
+  apply* typing_sub_abs.
+  apply* typing_sub_tabs.
 Qed.
 
 Lemma typing_strengthen_env: forall E u U, value u -> typing E u U ->
