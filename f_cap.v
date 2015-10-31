@@ -1194,22 +1194,6 @@ Proof. intros. induction H.
     rewrite closed_env_dist in HI. rewrite single_def in *. autos.
 Qed.
 
-Lemma closed_env_okt : forall E,
-  okt E -> okt (closed_env E).
-Proof. intros. induction* E.
-  destruct a. destruct b; simpl; rewrite cons_to_push in *.
-  apply okt_X. apply IHE. lets*: okt_push_X_inv H.
-  unfolds. lets(_ & HI): okt_push_X_inv H. autos* (closed_env_dom_subset E).
-  destructs (okt_push_x_inv H). destruct* (closed_typ t).
-    apply okt_typ. apply* IHE. apply* closed_env_wft_reverse.
-    lets: closed_env_dom_subset E. unfolds subset.
-    unfolds notin. autos.
-Qed.
-
-Lemma closed_env_okt_push : forall E X,
-  okt E -> okt ((closed_env E) & [:X:]) -> okt (E & [:X:]).
-Proof. admit. Qed.
-
 Lemma closed_env_empty : closed_env empty = empty.
 Proof. rewrite empty_def. reflexivity. Qed.
 
@@ -1232,6 +1216,18 @@ Proof. intros.
   replace (x ~: U) with (empty & x ~: U) by rewrite* concat_empty_l.
   rewrite <- cons_to_push. simpls. rewrite H.
   rewrite closed_env_empty. reflexivity.
+Qed.
+
+Lemma closed_env_okt : forall E,
+  okt E -> okt (closed_env E).
+Proof. intros. induction* E.
+  destruct a. destruct b; simpl; rewrite cons_to_push in *.
+  apply okt_X. apply IHE. lets*: okt_push_X_inv H.
+  unfolds. lets(_ & HI): okt_push_X_inv H. autos* (closed_env_dom_subset E).
+  destructs (okt_push_x_inv H). destruct* (closed_typ t).
+    apply okt_typ. apply* IHE. apply* closed_env_wft_reverse.
+    lets: closed_env_dom_subset E. unfolds subset.
+    unfolds notin. autos.
 Qed.
 
 (* Fixme: this three lemmas might be incorrect *)
@@ -1333,9 +1329,9 @@ Proof.
     lets: wft_strengthen H2. rewrite concat_empty_r in H3. apply* closed_env_wft.
   inverts* IHtyping1.
   apply* (@wft_all L).
-  apply* (@wft_all_closed L). intros. forwards~: (H1 X). rewrite <- (@concat_empty_l bind E).
-    apply closed_env_wft_weaken; rewrite* concat_empty_l. forwards~: (H0 X).
-    lets(HI & _): typing_regular H4. apply ok_from_okt. apply* closed_env_okt_push.
+  let L := gather_vars in (apply* (@wft_all_closed L)). intros.
+    forwards~: (H1 X). rewrite <- (@concat_empty_l bind E).
+    apply closed_env_wft_weaken; rewrite* concat_empty_l.
   apply* wft_open.
   inverts* IHtyping.
   inverts* IHtyping.
