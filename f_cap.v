@@ -1591,11 +1591,48 @@ Proof.
     rewrite* subst_te_open_ee_var.
     apply_ih_map_bind* H0.
   apply_fresh* typing_abs_closed as y.
-    repeat(rewrite closed_env_dist in *).
+    repeat(rewrite closed_env_dist in *). rewrite closed_env_single_tvar in *.
+    lets: H1 y. rewrite <- concat_assoc in H2. forwards~ : H2. apply closed_env_wft.
+    admit. rewrite closed_env_eq. apply* closed_env_wft_reverse.
+    rewrite map_push in H3. simpl in H3.
+    (* Proof gets stuck with the following two terms, which are not equal
+       in current system:
+
+       - (map (subst_tb Z P) (closed_env F)  = A
+       - closed_env (map (subst_tb Z P) F)   = B
+
+       If Z can't be captured in closed env, then Z is free in e1 and T1. However,
+       it makes difficult to prove okt env. In addition, capturing typvar is a very
+       natural requirement. So, [: Z :] should be allowed in closed environment.
+
+       Should we allow x ~: Z in closed env?  Allow (x: Z) in closed env is dangerous,
+       for example:
+
+           e = \X.\x:X.\y:B.x
+
+       If we allow (x:X) in closed env, then we can type \y:B.x as effect-closed.
+       The typing of e will be: All_closed X, X -> B -> X.
+
+       Let t = e E c, according to standard typing rules, t will be typed as B -> E,
+       which is absurd, as B -> E can never be effect-closed.
+
+       Either we need to modify typing_abs_closed/typing_tabs_closde or typing_tapp.
+
+       1. change typing_abs_closed & typing_tabs_closed. Treat x:X as effect-capturing.
+       2. change typing_tapp. Disallow capability types to be parametric.
+
+       If we disallow x:X in closed env, then A \c B. Then there's hope to prove this
+       theorem based a special typing weakening lemma.
+
+       If we change typing_tapp, there's hope to prove A = B, and there's no
+       need for a special typing weakening lemma. It seems that we only need to
+       disallow direct use of capability types, no need to worry about
+       capability producing types such as B -> E.
+    *)
     unsimpl (subst_tb Z P (bind_x V)).
     rewrite* subst_te_open_ee_var.
     rewrite closed_env_map. apply_ih_map_bind* H1.
-    simpl. rewrite closed_env_single_tvar. rewrite* concat_assoc.
+    simpl. rewrite* concat_assoc.
     admit. admit.
   apply* typing_app.
   apply_fresh* typing_tabs as Y.
@@ -1634,7 +1671,7 @@ Proof.
     autos* typing_wft.
     lets*: typing_regular Typ2.
   (* case: tapp *)
-  inversions Red; try solve [ apply* typing_tapp ].
+  inversions Red. try solve [ apply* typing_tapp ].
   inversions Typ. pick_fresh X. forwards~ K: (H5 X).
   rewrite* (@subst_te_intro X).
   rewrite* (@subst_tt_intro X).
