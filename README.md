@@ -18,13 +18,19 @@ effect systems have the benefits of more succinct syntax and better
 handling of effect polymorphism. Thus capability-based effect systems
 stand a better chance to be adopted by programmers.
 
+In the capability-based effect system, the effects can be controlled
+via effect-closed function types. Effect-closed functions can't
+capture any capability variables in the outer lexical scope. To have
+effect, the capability instances must be passed in, thus visible from
+type signature.
+
 For example, in the following example, the type system would report an
 error on `foo`, as it's not allowed to capture any capability
 variables in the environment:
 
 ``` scala
 def map(xs: List[Int], f: Int => Int)(implicit c: IO): List[Int]
-def pmap(xs: List[Int], f: Int -> Int): List[Int]                //  => means f is closed
+def pmap(xs: List[Int], f: Int -> Int): List[Int]                //  => means f is effect-closed
 def print(x: Any)(implicit c: IO): ()
 
 def bar(xs: List[Int])(implicit c: IO) = {
@@ -33,6 +39,18 @@ def bar(xs: List[Int])(implicit c: IO) = {
 
 def foo(xs: List[Int])(implicit c: IO) = {
     pmap(xs, { x => print(x); x })                              // Error, can't capture c:IO
+}
+```
+
+If the designer of `pmap` want the passed function `f` to only have
+allowed side effects, it simply adapts the signature of `pmap` as
+follows:
+
+``` scala
+def pmap(xs: List[Int], f: Int -> IO -> Int)(implicit c: IO): List[Int]
+
+def foo(xs: List[Int])(implicit c: IO) = {
+    pmap(xs, { x => c => print(x)(c); x })                       // capability c is passed in by pmap
 }
 ```
 
@@ -93,7 +111,7 @@ Prerequisite: Install `Coq v8.5beta2`.
 
 ### Get Started
 
-1. clone the reop: `git clone git@github.com:liufengyun/typed-closure.git`
+1. clone the repo: `git clone git@github.com:liufengyun/typed-closure.git`
 1. init submodules: `git submodule init`
 1. compile libs: `make lib`
 1. compile project: `make`
