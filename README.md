@@ -7,7 +7,7 @@ The core idea is to introduce *capability types* and *effect-closed
 functions* explicitly in the system.  Compared to ordinary functions,
 *effect-closed functions* are not allowed to capture variables of
 capability types in the lexial scope, as well as variables of ordinary
-functions.
+functions types.
 
 ## Motivation
 
@@ -20,17 +20,17 @@ stand a better chance to be adopted by programmers.
 
 In a capability-based effect system, effects can be controlled via
 effect-closed functions. Effect-closed functions can't capture any
-capability variables in the outer lexical scope. To have side effects,
-the capability instances must be passed in as parameters by the
-caller, thus visible from type signature and can be controlled by the
-caller.
+capability variables in the outer lexical scope or ordinary functions
+that could have potential side effects. To have side effects, the
+capability instances must be passed in as parameters by the caller,
+thus visible from type signature and can be controlled by the caller.
 
 For example, in the following example, the type system would report an
 error on `foo`, as it's not allowed to capture any capability
 variables in the environment:
 
 ``` scala
-def map(xs: List[Int], f: Int => Int)(implicit c: IO): List[Int]
+def map(xs: List[Int], f: Int => Int): List[Int]
 def pmap(xs: List[Int], f: Int -> Int): List[Int]                //  => means f is effect-closed
 def print(x: Any)(implicit c: IO): ()
 
@@ -43,9 +43,12 @@ def foo(xs: List[Int])(implicit c: IO) = {
 }
 ```
 
+In the code above, `map` allows the passed in function `f` to have any
+side effects, while `pmap` forbids any side effects.
+
 If the designer of `pmap` wants the passed function `f` to only have
-input/output side effects, he can simply adapts the signature of
-`pmap` as follows:
+input/output side effects, he can simply adapt the signature of `pmap`
+as follows:
 
 ``` scala
 def pmap(xs: List[Int], f: Int -> IO -> Int)(implicit c: IO): List[Int]
