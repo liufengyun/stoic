@@ -100,6 +100,13 @@ An **ordinary type abstraction** is a type abstraction which can
 capture anything in the lexical scope. Its type is represented by `All
 X.T`.
 
+An *effect-closed typing environment* is **healthy** if it contains no
+variables of ill types, such as `All X.X`, `B -> E` and so on.
+
+**Effect Safety**. A capability-based type-and-effect system is
+*effect-safe* if a **healthy** *effect-closed typing environment* is
+*also an *effect-closed environment*.
+
 ## Steps
 
 | Milestones                   |          Description                                   |         status      |
