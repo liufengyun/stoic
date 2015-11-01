@@ -7,24 +7,24 @@ The core idea is to introduce *capability types* and *effect-closed
 functions* explicitly in the system.  Compared to ordinary functions,
 *effect-closed functions* are not allowed to capture variables of
 capability types in the lexial scope, as well as variables of ordinary
-functions types.
+function types.
 
 ## Motivation
 
 Compared to existing effect systems in the literature(Gifford and
 Lucassen, [1986](http://dl.acm.org/citation.cfm?id=319848),
 [1988](http://dl.acm.org/citation.cfm?id=73564)), capability-based
-effect systems have the benefits of more succinct syntax and better
+effect systems have the advantage of more succinct syntax and better
 handling of effect polymorphism. Thus capability-based effect systems
 stand a better chance to be adopted by programmers.
 
 In a capability-based effect system, effects can be controlled via
-effect-closed functions. Effect-closed functions can't capture any
-capability variables in the outer lexical scope or ordinary function
-type variables that could have potential side effects. To have side
-effects, the capability instances or ordinary functions must be passed
-in as parameters by the caller, thus visible from type signature and
-can be controlled by the caller.
+effect-closed functions. Effect-closed functions cannot capture any
+capability variables in the outer lexical scope or variables of
+ordinary function types that might have potential side effects. To
+have side effects, the capability instances or ordinary functions must
+be passed in as parameters by the caller, thus visible from type
+signature and can be controlled by the caller.
 
 For example, in the following example, the type system would report an
 error on `foo`, as it's not allowed to capture any capability
@@ -84,11 +84,11 @@ appear in the *effect-closed typing environment*, thus makes it
 possible to create a term of type `E`. This doesn't pose a problem, as
 from absurdity it's possible to infer anything.
 
-An **effect-closed type abstraction** is a term abstraction that can
+An **effect-closed term abstraction** is a term abstraction that can
 be typed in *effect-closed typing environment*. Its type is represented by `A
 -> B`.
 
-An **effect-closed term abstraction** is a term that can be typed in
+An **effect-closed type abstraction** is a term that can be typed in
 *effect-closed typing environment*. Its type is represented by `All_Closed
 X.T`.
 
