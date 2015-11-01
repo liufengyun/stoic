@@ -66,7 +66,7 @@ a passed in function can have.
 A **capability** is a term of type *E*.
 
 An **effect-closed environment** is an environment from which (1) it’s
-impossible to construct a term whose type is E. (2) any constructed
+impossible to construct a term whose type is E; (2) any constructed
 term which is an arrow type is effect-closed; (3) any constructed term
 which is a universal type is effect-closed.
 
@@ -103,9 +103,9 @@ X.T`.
 An *effect-closed typing environment* is **healthy** if it contains no
 variables of ill types, such as `All X.X`, `B -> E` and so on.
 
-**Effect Safety**. A capability-based type-and-effect system is
-*effect-safe* if a **healthy** *effect-closed typing environment* is
-*also an *effect-closed environment*.
+A capability-based type-and-effect system is **effect-safe** if a
+*healthy effect-closed typing environment* is an *effect-closed
+environment*.
 
 ## Steps
 
