@@ -63,32 +63,31 @@ a passed in function can have.
 
 ## Concepts
 
-A **capability** is a term of type *E*.
+A **capability** is a term of type *E*. The *base type* is represented as `B`.
 
 An **effect-closed environment** is an environment from which (1) it’s
 impossible to construct a term whose type is E; (2) any constructed
 term which is an arrow type is effect-closed; (3) any constructed term
 which is a universal type is effect-closed.
 
-An **effect-closed typing environment** is an environment which only
-contains type variables and term variables of following types:
-
-- X               -- type var
-- B               -- base type
-- S -> T          -- effect closed arrow types
-- All_Closed X.T  -- effect closed universal types
+An **effect-closed typing environment** is a subset of the ordinary
+typing environment, which particularly excludes variables of ordinary
+functions, variables of capability types and so on. Different systems
+may differ in details about what types can be kept in the
+*effect-closed typing environment*, though they must all be
+*effect-safe*.
 
 Note that an *effect-closed typing environment* is not an
-*effect-closed environment*, as `B -> E` and `All_Closed X.X` can
+*effect-closed environment*, as `B -> E` and `All_Closed X.X` might
 appear in the *effect-closed typing environment*, thus makes it
-possible to create a term of type `E`. This doesn't pose a problem,
-as from absurdity it's possible to infer anything.
+possible to create a term of type `E`. This doesn't pose a problem, as
+from absurdity it's possible to infer anything.
 
 An **effect-closed type abstraction** is a term abstraction that can
 be typed in *effect-closed typing environment*. Its type is represented by `A
 -> B`.
 
-An **effect-closed term abstraction** is a terms that can be typed in
+An **effect-closed term abstraction** is a term that can be typed in
 *effect-closed typing environment*. Its type is represented by `All_closed
 X.T`.
 
@@ -104,7 +103,7 @@ An *effect-closed typing environment* is **healthy** if it contains no
 variables of ill types, such as `All X.X`, `B -> E` and so on.
 
 A capability-based type-and-effect system is **effect-safe** if a
-*healthy effect-closed typing environment* is an *effect-closed
+*healthy effect-closed typing environment* is also an *effect-closed
 environment*.
 
 ## Steps
