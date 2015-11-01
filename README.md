@@ -1,36 +1,30 @@
 # Typed Closure
 
-The purpose of this project is to provide a sound type system
-to control effects of closures.
+The purpose of this project is to construct a sound and effect-safe
+type-and-effect system based on *capabilities*.
+
+The core idea is to introduce *capability types* and *effect-closed
+functions* explicitly in the system.  Compared to ordinary functions,
+*effect-closed functions* are not allowed to capture variables of
+capability types in the lexial scope, as well as variables of ordinary
+functions.
 
 ## Motivation
 
-The primary concern of this project is to provide a type-safe solution
-for distributed data-parallel computation like
-[Spark](https://spark.apache.org), where sending a function over the
-wire is very common.
-
-When sending a function over the wire, it's important to defend
-against following closure-related hazards:
-
-1. accidental capture of non-serializable variables(including `this`)
-2. capturing references to mutable objects
-3. unwanted transitive references
-4. the function has no side effect or its side effect can be controlled
-  (via type system)
-
-[Spores](http://infoscience.epfl.ch/record/191239) provide a type-safe
-abstraction to deal with the first three problems. This project
-focuses on the last problem, namely to control side effects of
-closures based on a type system.
+Compared to existing effect systems in the literature(Gifford and
+Lucassen, [1986](http://dl.acm.org/citation.cfm?id=319848),
+[1988](http://dl.acm.org/citation.cfm?id=73564)), capability-based
+effect systems have the benefits of more succinct syntax and better
+handling of effect polymorphism. Thus capability-based effect systems
+stand a better chance to be adopted by programmers.
 
 For example, in the following example, the type system would report an
-error on `foo`, as it's not allowed to capture any variables in the
-environment, including `c`(but also `print`?):
+error on `foo`, as it's not allowed to capture any capability
+variables in the environment:
 
 ``` scala
 def map(xs: List[Int], f: Int => Int)(implicit c: IO): List[Int]
-def pmap(xs: List[Int], f: Int (=>) Int): List[Int]                //  (=>) means f is closed
+def pmap(xs: List[Int], f: Int -> Int): List[Int]                //  => means f is closed
 def print(x: Any)(implicit c: IO): ()
 
 def bar(xs: List[Int])(implicit c: IO) = {
@@ -38,9 +32,48 @@ def bar(xs: List[Int])(implicit c: IO) = {
 }
 
 def foo(xs: List[Int])(implicit c: IO) = {
-    pmap(xs, { x => print(x); x })
+    pmap(xs, { x => print(x); x })                              // Error, can't capture c:IO
 }
 ```
+
+## Concepts
+
+A **capability** is a term of type *E*.
+
+An **effect-closed environment** is an environment from which (1) it’s
+impossible to construct a term whose type is E. (2) any constructed
+term which is an arrow type is effect-closed; (3) any constructed term
+which is a universal type is effect-closed.
+
+An **effect-closed typing environment** is an environment which only
+contains type variables and term variables of following types:
+
+- X               -- type var
+- B               -- base type
+- S -> T          -- effect closed arrow types
+- All_Closed X.T  -- effect closed universal types
+
+Note that an *effect-closed typing environment* is not an
+*effect-closed environment*, as `B -> E` and `All_Closed X.X` can
+appear in the *effect-closed typing environment*, thus makes it
+possible to create a term of type `E`. This doesn't pose a problem,
+as from absurdity it's possible to infer anything.
+
+An **effect-closed type abstraction** is a term abstraction that can
+be typed in *effect-closed typing environment*. Its type is represented by `A
+-> B`.
+
+An **effect-closed term abstraction** is a terms that can be typed in
+*effect-closed typing environment*. Its type is represented by `All_closed
+X.T`.
+
+An **ordinary term abstraction** is a term abstraction which can
+capture anything in the lexical scope.  Its type is represented by `A
+=> B`.
+
+An **ordinary type abstraction** is a type abstraction which can
+capture anything in the lexical scope. Its type is represented by `All
+X.T`.
 
 ## Steps
 
@@ -102,9 +135,14 @@ put a `.dir-locals.el` file under `lib/ln/ln`:
 
 ## Reference
 
-1. [Spores](http://infoscience.epfl.ch/record/191239)
-2. [Software Foundations](http://www.cis.upenn.edu/~bcpierce/sf)
-3. [Types and programming languages](https://www.cis.upenn.edu/~bcpierce/tapl/)
-4. [Certified Programming with Dependent Types](http://adam.chlipala.net/cpdt/)
-5. [Locally Nameless](http://www.chargueraud.org/softs/ln/)
-6. [TLC](http://www.chargueraud.org/softs/tlc/)
+1. [Spores](http://infoscience.epfl.ch/record/191239)  *Heather Miller et al*, 2014
+2. [Software Foundations](http://www.cis.upenn.edu/~bcpierce/sf)  *Benjamin C. Pierce et al*
+3. [Types and programming languages](https://www.cis.upenn.edu/~bcpierce/tapl/)  *Benjamin C. Pierce*
+4. [Certified Programming with Dependent Types](http://adam.chlipala.net/cpdt/)  *Adam Chlipala*
+5. [Locally Nameless](http://www.chargueraud.org/softs/ln/)  *Arthur Charguéraud*
+6. [TLC](http://www.chargueraud.org/softs/tlc/)  *Arthur Charguéraud*
+7. [Integrating functional and imperative programming](http://dl.acm.org/citation.cfm?id=319848)  *D. K. Gifford & J. M. Lucassen*, 1986
+8. [Polymorphic effect systems](http://dl.acm.org/citation.cfm?id=73564)  *J. M. Lucassen & D. K. Gifford*, 1988
+9. [Witnessing Purity, Constancy and Mutability](http://link.springer.com/chapter/10.1007/978-3-642-10672-9_9)  *Ben Lippmeier*, 2009
+10. [The marriage of effects and monads](http://dl.acm.org/citation.cfm?id=289429) *Philip Wadler*, 1999
+11. [Type and Effect Systems](http://www2.imm.dtu.dk/~fnie/Papers/NiNi99tes.pdf)  *Flemming Nielson & Hanne Riis Nielson*, 1999
