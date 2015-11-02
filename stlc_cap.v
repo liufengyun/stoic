@@ -92,11 +92,19 @@ where "t --> t'" := (red t t').
 
 Definition ctx := env typ.
 
+Fixpoint closed_typ(t: typ) := match t with
+  | typ_base            => true
+  | typ_eff             => false
+  | typ_arrow U V       => false
+  | typ_arrow_closed U V => true   (* pure lambda abstraction *)
+  end.
+
 Fixpoint closed_env(E: ctx) := match E with
   | nil => nil
-  | cons (x, typ_eff) E' => closed_env E'
-  | cons (x, typ_arrow _ _) E' => closed_env E'
-  | cons b E' => cons b (closed_env E')
+  | cons (x, T) E' => if closed_typ T then
+                        cons (x, T) (closed_env E')
+                      else
+                        closed_env E'
   end.
 
 (* ********************************************************************** *)
@@ -319,6 +327,35 @@ Proof. unfolds subset. intros. forwards K: (H x0 H1).
   tryfalse.
 Qed.
 
+Lemma value_regular : forall e,
+  value e -> term e.
+Proof. induction 1; autos*. Qed.
+
+Lemma red_regular : forall e e',
+  red e e' -> term e /\ term e'.
+Proof. induction 1; autos* value_regular. Qed.
+
+Hint Extern 1 (ok ?E) =>
+  match goal with
+  | H: typing E _ _ |- _ => apply (proj1 (typing_regular H))
+  end.
+
+Hint Extern 1 (term ?t) =>
+  match goal with
+  | H: typing _ t _ |- _ => apply (proj2 (typing_regular H))
+  | H: red t _ |- _ => apply (proj1 (red_regular H))
+  | H: red _ t |- _ => apply (proj2 (red_regular H))
+  | H: value t |- _ => apply (value_regular H)
+  end.
+
+(* ********************************************************************** *)
+(** * Properties of environment *)
+Lemma closed_env_dist: forall E F, closed_env (E & F) = closed_env E & closed_env F.
+Proof. rewrite concat_def. intros. gen E. induction F; intros E; autos.
+  rewrite LibList.app_cons. destruct a.
+  simpl. destruct* (closed_typ t). rewrite LibList.app_cons. rewrite* <- IHF.
+Qed.
+
 Lemma closed_env_dom_subset : forall E, dom (closed_env E) \c dom E.
 Proof. intros. induction E.
   simpl. apply subset_refl.
@@ -333,6 +370,55 @@ Proof. intros. induction E.
            rewrite cons_to_push; rewrite dom_push;
            autos* subset_trans IHE subset_union_weak_r
        end.
+Qed.
+
+Lemma closed_env_binds: forall E x v, ok E -> binds x v (closed_env E) -> binds x v E.
+Proof. intros. induction E.
+  simpl in *. autos.
+  destruct a.
+    simpl in *.  rewrite cons_to_push in *. destruct (closed_typ t).
+      destruct (binds_push_inv H0).
+        destruct H1. substs. apply* binds_push_eq.
+        destruct H1. apply* binds_push_neq.
+      rewrite <- concat_empty_r. apply binds_weaken; rewrite* concat_empty_r.
+Qed.
+
+Lemma closed_env_binds_in: forall E x T, closed_typ T = true ->
+   binds x T E -> binds x T (closed_env E).
+Proof. intros. induction E.
+  (* nil *)
+  rewrite <- empty_def in H0. destruct(binds_empty_inv H0).
+  (* x::xs *)
+  destruct a.
+    simpls. rewrite cons_to_push in *. destruct (binds_push_inv H0).
+    destruct H1. inversions H2. rewrite* H.
+    destruct H1. destruct* (closed_typ t).
+Qed.
+
+Lemma closed_env_empty : closed_env empty = empty.
+Proof. rewrite empty_def. reflexivity. Qed.
+
+Lemma closed_env_single_true : forall x U, closed_typ U = true ->
+  closed_env (x ~ U) = x ~ U.
+Proof. intros.
+  replace (x ~ U) with (empty & x ~ U) by rewrite* concat_empty_l.
+  rewrite <- cons_to_push. simpls. rewrite H.
+  rewrite closed_env_empty. reflexivity.
+Qed.
+
+Lemma closed_env_single_false : forall x U, closed_typ U = false ->
+  closed_env (x ~ U) = empty.
+Proof. intros.
+  replace (x ~ U) with (empty & x ~ U) by rewrite* concat_empty_l.
+  rewrite <- cons_to_push. simpls. rewrite H.
+  rewrite closed_env_empty. reflexivity.
+Qed.
+
+Lemma closed_env_eq : forall E, closed_env (closed_env E) = closed_env E.
+Proof. intros. induction E; autos.
+  destruct a.
+  simpls. remember (closed_typ t). symmetry in Heqb. destruct* b.
+    simpls. rewrite* Heqb. rewrite* IHE.
 Qed.
 
 Lemma typing_env_fv : forall E e T,
@@ -357,27 +443,6 @@ Proof. intros. induction* H; subst.
   simpl. replace (dom E) with (dom E \u dom E) by (autos* union_same).
   apply subset_union_2; autos.
 Qed.
-
-Lemma value_regular : forall e,
-  value e -> term e.
-Proof. induction 1; autos*. Qed.
-
-Lemma red_regular : forall e e',
-  red e e' -> term e /\ term e'.
-Proof. induction 1; autos* value_regular. Qed.
-
-Hint Extern 1 (ok ?E) =>
-  match goal with
-  | H: typing E _ _ |- _ => apply (proj1 (typing_regular H))
-  end.
-
-Hint Extern 1 (term ?t) =>
-  match goal with
-  | H: typing _ t _ |- _ => apply (proj2 (typing_regular H))
-  | H: red t _ |- _ => apply (proj1 (red_regular H))
-  | H: red _ t |- _ => apply (proj2 (red_regular H))
-  | H: value t |- _ => apply (value_regular H)
-  end.
 
 (* ********************************************************************** *)
 (** ** Checking that the main proofs still type-check *)
