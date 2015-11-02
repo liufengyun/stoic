@@ -149,6 +149,24 @@ Definition progress_statement := forall t T,
      value t
   \/ exists t', t --> t'.
 
+(* over-approximation of capability producing types *)
+Fixpoint caprod (T: typ) := match T with
+  | typ_base => false
+  | typ_eff => true
+  | typ_arrow _ _=> true
+  | typ_arrow_closed _ U => caprod U
+  end.
+
+Inductive healthy: ctx -> Prop :=
+  | healty_empty: healthy empty
+  | healty_push: forall x E T, caprod T = false -> healthy E -> healthy (E & x ~ T).
+
+Definition effect_safety := forall E, healthy (closed_env E) ->
+  ~exists e, typing (closed_env E) e typ_eff.
+
+Definition effect_safety_arrow := forall E e S T, healthy (closed_env E) ->
+  typing (closed_env E) e (typ_arrow S T) ->
+  typing (closed_env E) e (typ_arrow_closed S T).
 
 (* ********************************************************************** *)
 (* ********************************************************************** *)
