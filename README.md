@@ -67,9 +67,10 @@ a passed in function can have.
 A **capability** is a term of type *E*. The *base type* is represented as `B`.
 
 An **effect-closed environment** is a typing environment from which
-(1) it’s impossible to construct a term whose type is E; (2) any
-constructed term which is an arrow type is effect-closed; (3) any
-constructed term which is a universal type is effect-closed.
+(1) it’s impossible to construct a term whose type is E; (2) it's
+impossible to construct an application where the first term is not
+effect-closed; (3) any constructed term which is a universal type is
+effect-closed.
 
 An **effect-closed typing environment** is a subset of the ordinary
 typing environment, which particularly excludes variables of ordinary
