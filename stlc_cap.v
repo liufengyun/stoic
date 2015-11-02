@@ -395,6 +395,16 @@ Proof. intros. induction E.
     destruct H1. destruct* (closed_typ t).
 Qed.
 
+Lemma closed_env_ok : forall E,
+  ok E -> ok (closed_env E).
+Proof. intros. induction* E.
+  destruct a. rewrite cons_to_push in H.
+    destructs (ok_push_inv H). simpl. destruct* (closed_typ t).
+    rewrite cons_to_push. apply ok_push. autos.
+    lets: closed_env_dom_subset E. unfolds subset.
+    unfolds notin. autos.
+Qed.
+
 Lemma closed_env_empty : closed_env empty = empty.
 Proof. rewrite empty_def. reflexivity. Qed.
 
@@ -452,31 +462,84 @@ Lemma typing_weaken : forall G E F t T,
    ok (E & F & G) ->
    (E & F & G) |= t ~: T.
 Proof.
-  introv Typ. gen_eq H: (E & G). gen G.
-  induction Typ; intros G EQ Ok; subst.
+  introv Typ. gen_eq H: (E & G). gen E F G.
+  induction Typ; intros; subst.
   apply* typing_var. apply* binds_weaken.
   apply_fresh* typing_abs as y. apply_ih_bind* H0.
-  apply_fresh* typing_abs_closed as y. apply_ih_bind* H0.
+  apply_fresh* typing_abs_closed as y.
+    repeat(rewrite closed_env_dist in *). rewrite <- concat_assoc.
+    apply* H1. rewrite* concat_assoc.
+    rewrite concat_assoc. apply ok_push.
+    repeat(rewrite <- closed_env_dist). apply* closed_env_ok.
+    assert (Ha: y \notin dom E0 \u dom F \u dom G) by autos.
+    intros HI. apply Ha. repeat(rewrite dom_concat in HI).
+    repeat(rewrite in_union in *). rewrite or_assoc in HI. branches HI.
+      branch 1. lets*: closed_env_dom_subset E0.
+      branch 2. lets*: closed_env_dom_subset F.
+      branch 3. lets*: closed_env_dom_subset G.
   apply* typing_app.
+  apply* typing_sub_abs.
+Qed.
+
+Lemma typing_weakening_env : forall E F G e T,
+  typing (E & (closed_env F) & G) e T ->
+  ok (E & F & G) ->
+  typing (E & F & G) e T.
+Proof. intros. inductions H.
+  apply* typing_var. binds_cases H0; autos.
+    apply* binds_weaken. apply* binds_concat_left.
+    apply binds_concat_right. apply* closed_env_binds.
+    autos* ok_concat_inv_l ok_concat_inv_r.
+  apply_fresh typing_abs as x.  apply_ih_bind* H0.
+  apply_fresh typing_abs_closed as x. auto.
+    repeat(rewrite closed_env_dist in *). rewrite closed_env_eq in *.
+    apply_ih_bind* H1. rewrite* closed_env_eq. forwards~ : H0 x.
+  apply* typing_app.
+  apply* typing_sub_abs.
+Qed.
+
+Lemma typing_strengthen_env: forall E u U, value u -> typing E u U ->
+  closed_typ U = true -> typing (closed_env E) u U.
+Proof. intros. induction H0; simpls; inversion H1.
+  apply typing_var. apply* closed_env_ok. apply* closed_env_binds_in.
+  apply_fresh* typing_abs_closed as y. apply* closed_env_ok. rewrite* closed_env_eq.
+  inversion H.
 Qed.
 
 Lemma typing_subst : forall F E t T z u U,
+  value u ->
   (E & z ~ U & F) |= t ~: T ->
   E |= u ~: U ->
   (E & F) |= [z ~> u]t ~: T.
 Proof.
-  introv Typt Typu. gen_eq G: (E & z ~ U & F). gen F.
-  induction Typt; intros G Equ; subst; simpl subst.
+  introv Hv Typt Typu. gen_eq G: (E & z ~ U & F). gen E F.
+  induction Typt; intros; subst; simpl subst.
   case_var.
     binds_get H0. apply_empty* typing_weaken.
     binds_cases H0; apply* typing_var.
   apply_fresh typing_abs as y.
     rewrite* subst_open_var. apply_ih_bind* H0.
-  assert (Hyp: E & G |= (trm_cap t1) ~: typ_arrow U0 T)
-      by autos* typing_cap.
-  forwards~ K : typing_cap_closed Hyp.
-  rewrite* subst_fresh. rewrite* K.
+  apply_fresh typing_abs_closed as y. autos.
+    rewrite* subst_open_var.
+    (* if U is closed, then use IH; else  x is free in e1; *)
+    repeat(rewrite closed_env_dist in *). remember (closed_typ U) as b. destruct b.
+      (* closed_typ U = true *)
+      symmetry in Heqb. rewrite* closed_env_single_true in H1. rewrite <- concat_assoc.
+      apply* H1. apply* typing_strengthen_env.
+      rewrite* concat_assoc.
+      (* closed_typ U = false, z is free in e1 *)
+      symmetry in Heqb. rewrite* closed_env_single_false in H0. rewrite concat_empty_r in H0.
+      destruct (ok_middle_inv H). forwards~ HI: H0 y.
+      rewrite* subst_fresh. lets: typing_env_fv HI. unfolds notin. intros HII.
+      assert (HIII: z \in dom (closed_env E0 & closed_env F & y ~ V)) by unfolds* subset.
+      repeat(rewrite dom_concat in HIII). repeat(rewrite in_union in HIII).
+      rewrite dom_single in HIII. rewrite or_assoc in HIII. branches HIII.
+        apply H2. lets*: closed_env_dom_subset E0.
+        apply H3. lets*: closed_env_dom_subset F.
+        rewrite in_singleton in H5. substs. apply* Fry. repeat(rewrite in_union).
+          autos* in_singleton_self.
   apply* typing_app.
+  apply* typing_sub_abs.
 Qed.
 
 Lemma preservation_result : preservation_statement.
@@ -484,22 +547,24 @@ Proof.
   introv Typ. gen t'.
   induction Typ; intros t' Red; inversions Red.
   inversions Typ1. pick_fresh x. rewrite* (@subst_intro x).
-   apply_empty* typing_subst.
-  inversions Typ1. pick_fresh x. rewrite* (@subst_intro x).
-   apply_empty* typing_subst.
-   replace E with (empty & E) by (apply* concat_empty_l).
-   apply* typing_weaken. rewrite* concat_empty_l.
-   rewrite* concat_empty_l.
+    apply_empty* typing_subst.
+
+    inversions H4. pick_fresh x. rewrite* (@subst_intro x).
+      apply_empty* typing_subst. rewrite <- (@concat_empty_l typ E).
+      apply* typing_weakening_env. rewrite* concat_empty_l.
+      rewrite* concat_empty_l.
   apply* typing_app.
   apply* typing_app.
+  apply* typing_sub_abs.
+  apply* typing_sub_abs.
+  apply* typing_sub_abs.
 Qed.
 
 Lemma progress_result : progress_statement.
 Proof.
   introv Typ. gen_eq E: (empty:ctx). lets Typ': Typ.
-  induction Typ; intros; subst.
+  inductions Typ; intros; subst; autos.
   false* binds_empty_inv.
-  left*. left*.
   right.
     destruct~ IHTyp1 as [Val1 | [t1' Red1]].
     destruct~ IHTyp2 as [Val2 | [t2' Red2]].
