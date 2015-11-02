@@ -161,10 +161,10 @@ Inductive healthy: ctx -> Prop :=
   | healty_empty: healthy empty
   | healty_push: forall x E T, caprod T = false -> healthy E -> healthy (E & x ~ T).
 
-Definition effect_safety := forall E, healthy (closed_env E) ->
+Definition effect_safety_statement := forall E, healthy (closed_env E) ->
   ~exists e, typing (closed_env E) e typ_eff.
 
-Definition effect_safety_arrow := forall E e S T, healthy (closed_env E) ->
+Definition effect_safety_arrow_statement := forall E e S T, healthy (closed_env E) ->
   typing (closed_env E) e (typ_arrow S T) ->
   typing (closed_env E) e (typ_arrow_closed S T).
 
@@ -591,3 +591,44 @@ Proof.
       exists* (trm_app t1 t2').
     exists* (trm_app t1' t2).
 Qed.
+
+(* ********************************************************************** *)
+(** * effect safety *)
+
+Lemma closed_env_no_capability : forall E x, ~binds x typ_eff (closed_env E).
+Proof. introv H.
+  inductions E. simpls. apply* binds_empty_inv. rewrite* empty_def.
+  destruct a. simpl in H. cases (closed_typ t).
+    (* closed_typ t = true *)
+    rewrite cons_to_push in H. destruct (binds_push_inv H); destruct H0.
+    substs. simpls. inversion Eq.
+    apply* (IHE x).
+    (* closed_typ t = false *)
+    apply* (IHE x).
+Qed.
+
+Lemma closed_env_no_arrow : forall E S T x, ~binds x (typ_arrow S T) (closed_env E).
+Proof. introv H.
+  inductions E. simpls. apply* binds_empty_inv. rewrite* empty_def.
+  destruct a. simpl in H. cases (closed_typ t).
+    (* closed_typ t = true *)
+    rewrite cons_to_push in H. destruct (binds_push_inv H); destruct H0.
+    substs. simpls. inversion Eq.
+    apply* (IHE S T x).
+    (* closed_typ t = false *)
+    apply* (IHE S T x).
+Qed.
+
+Lemma healthy_env_no_bind_S_E : forall E x S, healthy (closed_env E) ->
+  ~ binds x (typ_arrow S typ_eff) (closed_env E).
+Proof. intros E x S H Hb. inductions E.
+  simpls. rewrite <- empty_def in Hb. eapply binds_empty_inv. eauto.
+  destruct a. simpls. cases (closed_typ t).
+    rewrite cons_to_push in Hb. destruct (binds_push_inv Hb).
+      destruct H0. substs. simpls. false.
+      destruct H0. apply* IHE. rewrite cons_to_push in H.
+        inversions H. rewrite empty_def in H3. rewrite <- cons_to_push in H3. inversion H3.
+        repeat(rewrite <- cons_to_push in H2). inversions H2. auto.
+    apply* IHE.
+Qed.
+
