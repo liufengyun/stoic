@@ -130,8 +130,10 @@ Inductive typing : ctx -> trm -> typ -> Prop :=
       E |= t1 ~: (typ_arrow S T) ->
       E |= t2 ~: S ->
       E |= (trm_app t1 t2) ~: T
-  | typing_sub_abs: forall E e S T,
-      E |= e ~: (typ_arrow_closed S T) -> E |= e ~: (typ_arrow S T)
+  | typing_app_closed : forall S T E t1 t2,
+      E |= t1 ~: (typ_arrow_closed S T) ->
+      E |= t2 ~: S ->
+      E |= (trm_app t1 t2) ~: T
 
 where "E |= t ~: T" := (typing E t T).
 
@@ -149,15 +151,15 @@ Definition progress_statement := forall t T,
      value t
   \/ exists t', t --> t'.
 
-(* over-approximation of capability producing types *)
-Inductive caprod: typ -> Prop :=
-  | caprod_eff: caprod typ_eff
-  | caprod_arrow: forall S T, caprod (typ_arrow S T)
-  | caprod_closed: forall S T, caprod T -> caprod (typ_arrow_closed S T).
+(* over-approximation of healthy types *)
+Inductive healthy_typ: typ -> Prop :=
+| healthy_typ_base: healthy_typ typ_base
+| healthy_typ_closed: forall S T, healthy_typ T -> healthy_typ (typ_arrow_closed S T).
 
 Inductive healthy: ctx -> Prop :=
-  | healty_empty: healthy empty
-  | healty_push: forall x E T, ~caprod T -> healthy E -> healthy (E & x ~ T).
+  | healthy_empty: healthy empty
+  | healthy_push: forall x E T, healthy_typ T -> healthy E ->
+                               x # E -> healthy (E & x ~ T).
 
 Definition effect_safety_statement := forall E, healthy E ->
   ~exists e, typing E e typ_eff.
@@ -468,6 +470,9 @@ Proof. intros. induction* H; subst.
   (* app *)
   simpl. replace (dom E) with (dom E \u dom E) by (autos* union_same).
   apply subset_union_2; autos.
+  (* app closed *)
+  simpl. replace (dom E) with (dom E \u dom E) by (autos* union_same).
+  apply subset_union_2; autos.
 Qed.
 
 (* ********************************************************************** *)
@@ -494,7 +499,7 @@ Proof.
       branch 2. lets*: closed_env_dom_subset F.
       branch 3. lets*: closed_env_dom_subset G.
   apply* typing_app.
-  apply* typing_sub_abs.
+  apply* typing_app_closed.
 Qed.
 
 Lemma typing_weakening_env : forall E F G e T,
@@ -511,7 +516,7 @@ Proof. intros. inductions H.
     repeat(rewrite closed_env_dist in *). rewrite closed_env_eq in *.
     apply_ih_bind* H1. rewrite* closed_env_eq. forwards~ : H0 x.
   apply* typing_app.
-  apply* typing_sub_abs.
+  apply* typing_app_closed.
 Qed.
 
 Lemma typing_strengthen_env: forall E u U, value u -> typing E u U ->
@@ -519,6 +524,7 @@ Lemma typing_strengthen_env: forall E u U, value u -> typing E u U ->
 Proof. intros. induction H0; simpls; inversion H1.
   apply typing_var. apply* closed_env_ok. apply* closed_env_binds_in.
   apply_fresh* typing_abs_closed as y. apply* closed_env_ok. rewrite* closed_env_eq.
+  inversion H.
   inversion H.
 Qed.
 
@@ -555,7 +561,7 @@ Proof.
         rewrite in_singleton in H5. substs. apply* Fry. repeat(rewrite in_union).
           autos* in_singleton_self.
   apply* typing_app.
-  apply* typing_sub_abs.
+  apply* typing_app_closed.
 Qed.
 
 Lemma preservation_result : preservation_statement.
@@ -564,16 +570,15 @@ Proof.
   induction Typ; intros t' Red; inversions Red.
   inversions Typ1. pick_fresh x. rewrite* (@subst_intro x).
     apply_empty* typing_subst.
+  apply* typing_app.
+  apply* typing_app.
 
-    inversions H4. pick_fresh x. rewrite* (@subst_intro x).
+  inversions Typ1. inversions H3. pick_fresh x. rewrite* (@subst_intro x).
       apply_empty* typing_subst. rewrite <- (@concat_empty_l typ E).
       apply* typing_weakening_env. rewrite* concat_empty_l.
       rewrite* concat_empty_l.
-  apply* typing_app.
-  apply* typing_app.
-  apply* typing_sub_abs.
-  apply* typing_sub_abs.
-  apply* typing_sub_abs.
+  apply* typing_app_closed.
+  apply* typing_app_closed.
 Qed.
 
 Lemma progress_result : progress_statement.
@@ -584,8 +589,15 @@ Proof.
   right.
     destruct~ IHTyp1 as [Val1 | [t1' Red1]].
     destruct~ IHTyp2 as [Val2 | [t2' Red2]].
-      inversions Typ1; inversions Val1. exists* (t0 ^^ t2).
+      inversions Typ1; inversions Val1.
       exists* (t0 ^^ t2).
+      exists* (trm_app t1 t2').
+      exists* (trm_app t1' t2).
+  right.
+    destruct~ IHTyp1 as [Val1 | [t1' Red1]].
+    destruct~ IHTyp2 as [Val2 | [t2' Red2]].
+      inversions Typ1; inversions Val1.
+      exists* (e1 ^^ t2).
       exists* (trm_app t1 t2').
     exists* (trm_app t1' t2).
 Qed.
@@ -593,24 +605,27 @@ Qed.
 (* ********************************************************************** *)
 (** * effect safety *)
 
-Hint Constructors caprod.
+Hint Constructors healthy_typ.
 
-Lemma caprod_closed_typ: forall T, ~caprod T -> closed_typ T = true.
-Proof. intros. inductions T; try reflexivity; try false; autos. Qed.
+Lemma healthy_env_ok : forall E, healthy E -> ok E.
+Proof. intros. inductions H; autos. Qed.
+
+Lemma healthy_closed_typ: forall T, healthy_typ T -> closed_typ T = true.
+Proof. intros. inductions H; try reflexivity; try false; autos. Qed.
 
 Lemma healthy_env_closed: forall E, healthy E -> closed_env E = E.
 Proof. intros. inductions H.
   rewrite empty_def. reflexivity.
-  rewrite <- cons_to_push. simpls. lets: caprod_closed_typ H.
-    rewrite* H1. rewrite* IHhealthy.
+  rewrite <- cons_to_push. simpls. lets: healthy_closed_typ H.
+    rewrite* H2. rewrite* IHhealthy.
 Qed.
 
 Lemma healthy_env_no_capability : forall E x, healthy E -> ~binds x typ_eff E.
 Proof. introv H Hb. inductions H.
   apply* binds_empty_inv.
   destruct (binds_push_inv Hb).
-    destruct H1. subst. autos.
-    destruct H1. autos.
+    destruct H2. subst. inversion H.
+    destruct H2. autos.
 Qed.
 
 Lemma healthy_env_no_arrow : forall E S T x, healthy E ->
@@ -618,16 +633,45 @@ Lemma healthy_env_no_arrow : forall E S T x, healthy E ->
 Proof. introv H Hb. inductions H.
   apply* binds_empty_inv.
   destruct (binds_push_inv Hb).
-    destruct H1. subst. autos.
-    destruct H1. autos.
+    destruct H2. subst. inversion H.
+    destruct H2. autos.
 Qed.
 
-Lemma healthy_env_no_caprod : forall E S x, healthy E ->
-   ~ (binds x S E /\ caprod S).
-Proof. introv H Hb. destruct Hb. inductions H.
-  apply* binds_empty_inv.
-  destruct (binds_push_inv H1).
-    destruct H3. subst. autos.
-    destruct H3. autos.
+Lemma healthy_env_healthy : forall E S x, healthy E ->
+   binds x S E ->  healthy_typ S.
+Proof. introv H Hb. inductions H.
+  false. apply* binds_empty_inv.
+  destruct (binds_push_inv Hb).
+    destruct H2. subst. autos.
+    destruct H2. autos.
 Qed.
 
+Lemma healthy_app_healthy_arrow: forall E x y T, healthy E ->
+  E |=  (trm_app (trm_fvar x) (trm_fvar y)) ~: T -> healthy_typ T.
+Proof. intros. inversions H0. admit.
+  inversions H4. lets*: healthy_env_healthy H3.
+  inversions H0. assumption.
+Qed.
+
+Lemma effect_safety_arrow: effect_safety_arrow_statement.
+Proof. admit. Qed.
+
+Lemma typing_deterministic: forall E t S T,
+  E |= t ~: S ->
+  E |= t ~: T ->
+  S = T.
+Proof. admit. Qed.
+
+
+Lemma healthy_typ_app_healthy: forall E t1 t2 T1 T2 T,
+  healthy_typ T1 -> healthy_typ T2 ->
+  E |= t1 ~: T1 -> E |= t2 ~: T2 ->
+  E |= (trm_app t1 t2) ~: T ->
+  healthy_typ T.
+Proof. intros. inversions H3.
+  lets*: typing_deterministic H1 H7. substs. inversions H.
+  lets*: typing_deterministic H1 H7. substs. inversions H. auto.
+Qed.
+
+Lemma effect_safety_result : effect_safety_statement.
+Proof. admit. Qed.
