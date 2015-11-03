@@ -161,12 +161,12 @@ Inductive healthy: ctx -> Prop :=
   | healty_empty: healthy empty
   | healty_push: forall x E T, caprod T = false -> healthy E -> healthy (E & x ~ T).
 
-Definition effect_safety_statement := forall E, healthy (closed_env E) ->
-  ~exists e, typing (closed_env E) e typ_eff.
+Definition effect_safety_statement := forall E, healthy E ->
+  ~exists e, typing E e typ_eff.
 
-Definition effect_safety_arrow_statement := forall E e S T, healthy (closed_env E) ->
-  typing (closed_env E) e (typ_arrow S T) ->
-  typing (closed_env E) e (typ_arrow_closed S T).
+Definition effect_safety_arrow_statement := forall E e S T, healthy E ->
+  typing E e (typ_arrow S T) ->
+  typing E e (typ_arrow_closed S T).
 
 (* ********************************************************************** *)
 (* ********************************************************************** *)
@@ -595,40 +595,32 @@ Qed.
 (* ********************************************************************** *)
 (** * effect safety *)
 
-Lemma closed_env_no_capability : forall E x, ~binds x typ_eff (closed_env E).
-Proof. introv H.
-  inductions E. simpls. apply* binds_empty_inv. rewrite* empty_def.
-  destruct a. simpl in H. cases (closed_typ t).
-    (* closed_typ t = true *)
-    rewrite cons_to_push in H. destruct (binds_push_inv H); destruct H0.
-    substs. simpls. inversion Eq.
-    apply* (IHE x).
-    (* closed_typ t = false *)
-    apply* (IHE x).
+Lemma caprod_closed_typ: forall T, caprod T = false -> closed_typ T = true.
+Proof. intros. inductions T; try reflexivity; try false. Qed.
+
+Lemma closed_env_healthy_eq: forall E, healthy E -> closed_env E = E.
+Proof. intros. inductions H.
+  rewrite empty_def. reflexivity.
+  rewrite <- cons_to_push. simpls. lets: caprod_closed_typ H.
+    rewrite* H1. rewrite* IHhealthy.
 Qed.
 
-Lemma closed_env_no_arrow : forall E S T x, ~binds x (typ_arrow S T) (closed_env E).
-Proof. introv H.
-  inductions E. simpls. apply* binds_empty_inv. rewrite* empty_def.
-  destruct a. simpl in H. cases (closed_typ t).
-    (* closed_typ t = true *)
-    rewrite cons_to_push in H. destruct (binds_push_inv H); destruct H0.
-    substs. simpls. inversion Eq.
-    apply* (IHE S T x).
-    (* closed_typ t = false *)
-    apply* (IHE S T x).
+Lemma healthy_env_no_capability : forall E x, healthy E -> ~binds x typ_eff E.
+Proof. introv H Hb. inductions H.
+  apply* binds_empty_inv.
+  destruct (binds_push_inv Hb).
+    destruct H1. subst. simpls. false.
+    destruct H1. autos.
 Qed.
 
-Lemma healthy_env_no_bind_S_E : forall E x S, healthy (closed_env E) ->
-  ~ binds x (typ_arrow S typ_eff) (closed_env E).
-Proof. intros E x S H Hb. inductions E.
-  simpls. rewrite <- empty_def in Hb. eapply binds_empty_inv. eauto.
-  destruct a. simpls. cases (closed_typ t).
-    rewrite cons_to_push in Hb. destruct (binds_push_inv Hb).
-      destruct H0. substs. simpls. false.
-      destruct H0. apply* IHE. rewrite cons_to_push in H.
-        inversions H. rewrite empty_def in H3. rewrite <- cons_to_push in H3. inversion H3.
-        repeat(rewrite <- cons_to_push in H2). inversions H2. auto.
-    apply* IHE.
+Lemma healthy_env_no_arrow : forall E S T x, healthy E ->
+   ~binds x (typ_arrow S T) E.
+Proof. introv H Hb. inductions H.
+  apply* binds_empty_inv.
+  destruct (binds_push_inv Hb).
+    destruct H1. subst. simpls. false.
+    destruct H1. autos.
+Qed.
+
 Qed.
 
