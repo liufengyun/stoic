@@ -150,16 +150,14 @@ Definition progress_statement := forall t T,
   \/ exists t', t --> t'.
 
 (* over-approximation of capability producing types *)
-Fixpoint caprod (T: typ) := match T with
-  | typ_base => false
-  | typ_eff => true
-  | typ_arrow _ _=> true
-  | typ_arrow_closed _ U => caprod U
-  end.
+Inductive caprod: typ -> Prop :=
+  | caprod_eff: caprod typ_eff
+  | caprod_arrow: forall S T, caprod (typ_arrow S T)
+  | caprod_closed: forall S T, caprod T -> caprod (typ_arrow_closed S T).
 
 Inductive healthy: ctx -> Prop :=
   | healty_empty: healthy empty
-  | healty_push: forall x E T, caprod T = false -> healthy E -> healthy (E & x ~ T).
+  | healty_push: forall x E T, ~caprod T -> healthy E -> healthy (E & x ~ T).
 
 Definition effect_safety_statement := forall E, healthy E ->
   ~exists e, typing E e typ_eff.
@@ -595,10 +593,12 @@ Qed.
 (* ********************************************************************** *)
 (** * effect safety *)
 
-Lemma caprod_closed_typ: forall T, caprod T = false -> closed_typ T = true.
-Proof. intros. inductions T; try reflexivity; try false. Qed.
+Hint Constructors caprod.
 
-Lemma closed_env_healthy_eq: forall E, healthy E -> closed_env E = E.
+Lemma caprod_closed_typ: forall T, ~caprod T -> closed_typ T = true.
+Proof. intros. inductions T; try reflexivity; try false; autos. Qed.
+
+Lemma healthy_env_closed: forall E, healthy E -> closed_env E = E.
 Proof. intros. inductions H.
   rewrite empty_def. reflexivity.
   rewrite <- cons_to_push. simpls. lets: caprod_closed_typ H.
@@ -609,7 +609,7 @@ Lemma healthy_env_no_capability : forall E x, healthy E -> ~binds x typ_eff E.
 Proof. introv H Hb. inductions H.
   apply* binds_empty_inv.
   destruct (binds_push_inv Hb).
-    destruct H1. subst. simpls. false.
+    destruct H1. subst. autos.
     destruct H1. autos.
 Qed.
 
@@ -618,9 +618,16 @@ Lemma healthy_env_no_arrow : forall E S T x, healthy E ->
 Proof. introv H Hb. inductions H.
   apply* binds_empty_inv.
   destruct (binds_push_inv Hb).
-    destruct H1. subst. simpls. false.
+    destruct H1. subst. autos.
     destruct H1. autos.
 Qed.
 
+Lemma healthy_env_no_caprod : forall E S x, healthy E ->
+   ~ (binds x S E /\ caprod S).
+Proof. introv H Hb. destruct Hb. inductions H.
+  apply* binds_empty_inv.
+  destruct (binds_push_inv H1).
+    destruct H3. subst. autos.
+    destruct H3. autos.
 Qed.
 
