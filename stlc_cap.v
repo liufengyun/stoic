@@ -456,16 +456,6 @@ Qed.
 (* ********************************************************************** *)
 (** ** Checking that the main proofs still type-check *)
 
-Lemma typing_deterministic: forall E t S T,
-  E |= t ~: S ->
-  E |= t ~: T ->
-  S = T.
-Proof. intros. gen T. induction H; intros.
-  inversions H0. inversions H1. inversions H5. rewrite H3 in H1. inversions* H1.
-  inversions H2. pick_fresh x. forwards~ : H1 x T0. rewrite* H2.
-  inversions H1. lets: IHtyping2 H7. substs. lets: IHtyping1 H5. inversions* H1.
-Qed.
-
 Lemma typing_weaken : forall G E F t T,
    (E & G) |= t ~: T ->
    ok (E & F & G) ->
@@ -589,14 +579,6 @@ Proof. intros. inductions H.
     rewrite* H2. rewrite* IHhealthy.
 Qed.
 
-Lemma healthy_env_no_capability : forall E x, healthy E -> ~binds x typ_eff E.
-Proof. introv H Hb. inductions H.
-  apply* binds_empty_inv.
-  destruct (binds_push_inv Hb).
-    destruct H2. subst. inversion H.
-    destruct H2. autos.
-Qed.
-
 Lemma healthy_env_healthy : forall E S x, healthy E ->
    binds x S E ->  healthy_typ S.
 Proof. introv H Hb. inductions H.
@@ -621,14 +603,6 @@ Qed.
 
 Lemma healthy_caprod_classic: forall T, healthy_typ T \/ caprod T.
 Proof. intros T. inductions T. left*. right*. destruct* IHT2. Qed.
-
-Lemma healthy_app_healthy_arrow: forall E x y T, healthy E ->
-  E |=  (trm_app (trm_fvar x) (trm_fvar y)) ~: T -> healthy_typ T.
-Proof. intros. inversions H0.
-  inversions H4. lets*: healthy_env_healthy H3.
-  inversions H0. inversions H6. lets*: healthy_env_healthy H7. false* healthy_not_caprod.
-  assumption.
-Qed.
 
 Lemma healthy_env_term_healthy: forall E t T,
   healthy E ->
