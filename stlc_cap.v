@@ -566,6 +566,27 @@ Qed.
 
 Hint Constructors healthy_typ caprod.
 
+Lemma healthy_not_caprod : forall T, healthy_typ T -> ~ caprod T.
+Proof. intros T H Hc. inductions T; inversions Hc. inversions H.
+  inversions H; auto.
+Qed.
+
+Lemma healthy_caprod_classic: forall T, healthy_typ T \/ caprod T.
+Proof. intros T. inductions T. left*. right*. destruct* IHT2. Qed.
+
+Lemma healthy_typ_decidable: forall T, healthy_typ T \/ ~ healthy_typ T.
+Proof. intros. destruct (healthy_caprod_classic T). left*.
+  right. intros Hc. lets*: healthy_not_caprod Hc.
+Qed.
+
+Lemma not_healthy_caprod : forall T, ~healthy_typ T -> caprod T.
+Proof. intros T H. inductions T; auto.
+  false. apply* H. destruct* (healthy_typ_decidable T1).
+  destruct* (healthy_typ_decidable T2).
+    false. apply* H.
+    false. apply* H.
+Qed.
+
 Lemma healthy_env_ok : forall E, healthy E -> ok E.
 Proof. intros. inductions H; autos. Qed.
 
@@ -588,29 +609,13 @@ Proof. introv H Hb. inductions H.
     destruct H2. autos.
 Qed.
 
-Lemma healthy_not_caprod : forall T, healthy_typ T -> ~ caprod T.
-Proof. intros T H Hc. inductions T; inversions Hc. inversions H.
-  inversions H; auto.
-Qed.
-
-Lemma not_healthy_caprod : forall T, ~healthy_typ T -> caprod T.
-Proof. intros T H. inductions T; auto.
-  false. apply* H. destruct* (classic (healthy_typ T1)).
-  destruct* (classic (healthy_typ T2)).
-    false. apply* H.
-    false. apply* H.
-Qed.
-
-Lemma healthy_caprod_classic: forall T, healthy_typ T \/ caprod T.
-Proof. intros T. inductions T. left*. right*. destruct* IHT2. Qed.
-
 Lemma healthy_env_term_healthy: forall E t T,
   healthy E ->
   E |= t ~: T ->
   healthy_typ T.
 Proof. intros. inductions H0.
   apply *healthy_env_healthy.
-  pick_fresh x. forwards~ : H1 x. destruct* (classic (healthy_typ V)).
+  pick_fresh x. forwards~ : H1 x. destruct* (healthy_typ_decidable V).
     apply healthy_typ_X_B. apply* (H2 x). rewrite* (healthy_env_closed H).
       apply* healthy_push.
       apply healthy_typ_E_X. apply* not_healthy_caprod.
