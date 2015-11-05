@@ -117,7 +117,10 @@ environment*.
 |  Milestone 3                 |    F + closed functions + type variable capture        |      Finished       |
 |  Milestone 4                 |    F<: + closed functions                              |      Finished       |
 |  Milestone 5                 |    F<: + closed functions + type variable capture      |      Finished       |
-|  Milestone 6                 |    F + capabilities                                    |      working        |
+|  Milestone 6                 |    STLC + capabilities (pure)                          |      Finished       |
+|  Milestone 7                 |    F + capabilities (pure)                             |      working        |
+|  Milestone 8                 |    STLC + capabilities + => (impure)                   |      -              |
+|  Milestone 9                 |    F + capabilities + => (impure)                      |      -              |
 |  ...                         |                                                        |                     |
 
 ## Development
