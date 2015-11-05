@@ -184,8 +184,8 @@ Fixpoint closed_env(E: env) := match E with
 Inductive capsafe: typ -> Prop :=
 | capsafe_B: capsafe typ_base
 | capsafe_X: forall X, capsafe (typ_fvar X)
-| capsafe_C_X: forall S T, caprod S -> capsafe (typ_arrow_closed S T)
-| capsafe_X_S: forall S T, capsafe T -> capsafe (typ_arrow_closed S T)
+| capsafe_C_X: forall S T, type T -> caprod S -> capsafe (typ_arrow_closed S T)
+| capsafe_X_S: forall S T, type S -> capsafe T -> capsafe (typ_arrow_closed S T)
 | capsafe_A: forall L T, type T ->
                          (forall X, X \notin L -> capsafe (T open_tt_var X)) ->
                          capsafe (typ_all_closed T)
@@ -1306,10 +1306,39 @@ Qed.
 (* ********************************************************************** *)
 (** * Properties of Healthy Evnironment *)
 
-Lemma capsafe_subst_tt: forall Z P T, capsafe T ->
-                                      capsafe P ->
-                                      capsafe (subst_tt Z P T).
-Proof. admit. Qed.
+Hint Constructors capsafe caprod.
+
+Scheme capsafe_mut := Induction for capsafe Sort Prop
+with caprod_mut := Induction for caprod Sort Prop.
+
+Lemma capsafe_regular: forall T, capsafe T -> type T.
+  apply (capsafe_mut
+           (fun T safeT => type T )
+           (fun T prodT => type T )
+        );  eauto.
+Qed.
+
+Lemma caprod_regular: forall T, caprod T -> type T.
+  apply (caprod_mut
+           (fun T safeT => type T )
+           (fun T prodT => type T )
+        );  eauto.
+Qed.
+
+Hint Immediate capsafe_regular caprod_regular.
+
+Lemma capsafe_subst_tt: forall T,
+  capsafe T -> forall Z P, capsafe P -> capsafe (subst_tt Z P T).
+  apply (capsafe_mut
+           (fun T safeT => forall Z P, capsafe P -> capsafe (subst_tt Z P T) )
+           (fun T prodT => forall Z P, capsafe P -> caprod (subst_tt Z P T) )
+        ); intros; simpls; eauto.
+  case_if*.
+  let L' := gather_vars in apply capsafe_A with L'; auto.
+    intros. rewrite* subst_tt_open_tt_var.
+  let L' := gather_vars in apply caprod_A with L'; auto.
+    intros. rewrite* subst_tt_open_tt_var.
+Qed.
 
 Lemma capsafe_closed_typ: forall T, capsafe T -> closed_typ T = true.
 Proof. intros. inductions H; try reflexivity; try false; autos. Qed.
@@ -1585,5 +1614,4 @@ Proof.
     destruct (canonical_form_tabs Val1 Typ) as [e EQ].
       subst. exists* (open_te e T). apply* red_tabs. lets*: typing_regular Typ.
       autos* wft_type.
-      exists* (trm_tapp e1' T). apply* red_tapp. autos* wft_type.
 Qed.
