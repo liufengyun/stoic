@@ -143,11 +143,12 @@ Definition progress_statement := forall t T,
 (* healthy types are not capability producing, i.e. capable of creating an instance of E *)
 Inductive healthy_typ: typ -> Prop :=
 | healthy_typ_base: healthy_typ typ_base
-| healthy_typ_E_X: forall S T, caprod S -> healthy_typ (typ_arrow_closed S T)
-| healthy_typ_X_B: forall S T, healthy_typ T -> healthy_typ (typ_arrow_closed S T)
+| healthy_typ_C_X: forall S T, caprod S -> healthy_typ (typ_arrow_closed S T)
+| healthy_typ_X_H: forall S T, healthy_typ T -> healthy_typ (typ_arrow_closed S T)
+
 with caprod: typ -> Prop :=
  | caprod_eff: caprod typ_eff
- | caprod_B_E: forall S T, healthy_typ S -> caprod T -> caprod (typ_arrow_closed S T).
+ | caprod_H_C: forall S T, healthy_typ S -> caprod T -> caprod (typ_arrow_closed S T).
 
 Inductive healthy: ctx -> Prop :=
   | healthy_empty: healthy empty
@@ -616,9 +617,9 @@ Lemma healthy_env_term_healthy: forall E t T,
 Proof. intros. inductions H0.
   apply *healthy_env_healthy.
   pick_fresh x. forwards~ : H1 x. destruct* (healthy_typ_decidable V).
-    apply healthy_typ_X_B. apply* (H2 x). rewrite* (healthy_env_closed H).
+    apply healthy_typ_X_H. apply* (H2 x). rewrite* (healthy_env_closed H).
       apply* healthy_push.
-      apply healthy_typ_E_X. apply* not_healthy_caprod.
+      apply healthy_typ_C_X. apply* not_healthy_caprod.
   forwards~ : IHtyping1 H. forwards~ : IHtyping2 H. inversions* H0.
   lets*: healthy_not_caprod S.
 Qed.
