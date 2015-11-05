@@ -142,12 +142,12 @@ Definition progress_statement := forall t T,
 
 (* healthy types are not capability producing, i.e. capable of creating an instance of E *)
 Inductive healthy_typ: typ -> Prop :=
-| healthy_typ_base: healthy_typ typ_base
+| healthy_typ_B: healthy_typ typ_base
 | healthy_typ_C_X: forall S T, caprod S -> healthy_typ (typ_arrow_closed S T)
 | healthy_typ_X_H: forall S T, healthy_typ T -> healthy_typ (typ_arrow_closed S T)
 
 with caprod: typ -> Prop :=
- | caprod_eff: caprod typ_eff
+ | caprod_E: caprod typ_eff
  | caprod_H_C: forall S T, healthy_typ S -> caprod T -> caprod (typ_arrow_closed S T).
 
 Inductive healthy: ctx -> Prop :=
