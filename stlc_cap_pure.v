@@ -140,19 +140,21 @@ Definition progress_statement := forall t T,
      value t
   \/ exists t', t --> t'.
 
-(* healthy types are not capability producing, i.e. capable of creating an instance of E *)
-Inductive healthy_typ: typ -> Prop :=
-| healthy_typ_B: healthy_typ typ_base
-| healthy_typ_C_X: forall S T, caprod S -> healthy_typ (typ_arrow_closed S T)
-| healthy_typ_X_H: forall S T, healthy_typ T -> healthy_typ (typ_arrow_closed S T)
+(* Capability-safe types are not capability producing, i.e. capable of
+   creating an instance of E *)
+
+Inductive capsafe: typ -> Prop :=
+| capsafe_B: capsafe typ_base
+| capsafe_C_X: forall S T, caprod S -> capsafe (typ_arrow_closed S T)
+| capsafe_X_S: forall S T, capsafe T -> capsafe (typ_arrow_closed S T)
 
 with caprod: typ -> Prop :=
  | caprod_E: caprod typ_eff
- | caprod_H_C: forall S T, healthy_typ S -> caprod T -> caprod (typ_arrow_closed S T).
+ | caprod_S_C: forall S T, capsafe S -> caprod T -> caprod (typ_arrow_closed S T).
 
 Inductive healthy: ctx -> Prop :=
   | healthy_empty: healthy empty
-  | healthy_push: forall x E T, healthy_typ T -> healthy E ->
+  | healthy_push: forall x E T, capsafe T -> healthy E ->
                                x # E -> healthy (E & x ~ T).
 
 Definition effect_safety_statement := forall E, healthy E ->
@@ -565,44 +567,41 @@ Qed.
 (* ********************************************************************** *)
 (** * effect safety *)
 
-Hint Constructors healthy_typ caprod.
+Hint Constructors capsafe caprod.
 
-Lemma healthy_not_caprod : forall T, healthy_typ T -> ~ caprod T.
+Lemma capsafe_not_caprod : forall T, capsafe T -> ~ caprod T.
 Proof. intros T H Hc. inductions T; inversions Hc. inversions H.
   inversions H; auto.
 Qed.
 
-Lemma healthy_caprod_classic: forall T, healthy_typ T \/ caprod T.
+Lemma capsafe_caprod_classic: forall T, capsafe T \/ caprod T.
 Proof. intros T. inductions T. left*. right*. destruct* IHT2. Qed.
 
-Lemma healthy_typ_decidable: forall T, healthy_typ T \/ ~ healthy_typ T.
-Proof. intros. destruct (healthy_caprod_classic T). left*.
-  right. intros Hc. lets*: healthy_not_caprod Hc.
+Lemma capsafe_decidable: forall T, capsafe T \/ ~ capsafe T.
+Proof. intros. destruct (capsafe_caprod_classic T). left*.
+  right. intros Hc. lets*: capsafe_not_caprod Hc.
 Qed.
 
-Lemma not_healthy_caprod : forall T, ~healthy_typ T -> caprod T.
+Lemma not_capsafe_caprod : forall T, ~capsafe T -> caprod T.
 Proof. intros T H. inductions T; auto.
-  false. apply* H. destruct* (healthy_typ_decidable T1).
-  destruct* (healthy_typ_decidable T2).
+  false. apply* H. destruct* (capsafe_decidable T1).
+  destruct* (capsafe_decidable T2).
     false. apply* H.
     false. apply* H.
 Qed.
 
-Lemma healthy_env_ok : forall E, healthy E -> ok E.
-Proof. intros. inductions H; autos. Qed.
-
-Lemma healthy_closed_typ: forall T, healthy_typ T -> closed_typ T = true.
+Lemma capsafe_closed_typ: forall T, capsafe T -> closed_typ T = true.
 Proof. intros. inductions H; try reflexivity; try false; autos. Qed.
 
 Lemma healthy_env_closed: forall E, healthy E -> closed_env E = E.
 Proof. intros. inductions H.
   rewrite empty_def. reflexivity.
-  rewrite <- cons_to_push. simpls. lets: healthy_closed_typ H.
+  rewrite <- cons_to_push. simpls. lets: capsafe_closed_typ H.
     rewrite* H2. rewrite* IHhealthy.
 Qed.
 
-Lemma healthy_env_healthy : forall E S x, healthy E ->
-   binds x S E ->  healthy_typ S.
+Lemma healthy_env_capsafe : forall E S x, healthy E ->
+   binds x S E ->  capsafe S.
 Proof. introv H Hb. inductions H.
   false. apply* binds_empty_inv.
   destruct (binds_push_inv Hb).
@@ -610,21 +609,21 @@ Proof. introv H Hb. inductions H.
     destruct H2. autos.
 Qed.
 
-Lemma healthy_env_term_healthy: forall E t T,
+Lemma healthy_env_term_capsafe: forall E t T,
   healthy E ->
   E |= t ~: T ->
-  healthy_typ T.
+  capsafe T.
 Proof. intros. inductions H0.
-  apply *healthy_env_healthy.
-  pick_fresh x. forwards~ : H1 x. destruct* (healthy_typ_decidable V).
-    apply healthy_typ_X_H. apply* (H2 x). rewrite* (healthy_env_closed H).
+  apply *healthy_env_capsafe.
+  pick_fresh x. forwards~ : H1 x. destruct* (capsafe_decidable V).
+    apply capsafe_X_S. apply* (H2 x). rewrite* (healthy_env_closed H).
       apply* healthy_push.
-      apply healthy_typ_C_X. apply* not_healthy_caprod.
+      apply capsafe_C_X. apply* not_capsafe_caprod.
   forwards~ : IHtyping1 H. forwards~ : IHtyping2 H. inversions* H0.
-  lets*: healthy_not_caprod S.
+  lets*: capsafe_not_caprod S.
 Qed.
 
 Lemma effect_safety_result : effect_safety_statement.
 Proof. intros E H He. destruct He.
-  lets*: healthy_env_term_healthy H0. inversions H1.
+  lets*: healthy_env_term_capsafe H0. inversions H1.
 Qed.
