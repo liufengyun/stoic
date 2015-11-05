@@ -1,5 +1,5 @@
 (***************************************************************************
-* Preservation and Progress for System-F with capabilities                 *
+* System-F pure with capabilities                                          *
 * (based on the F<: implementation in locally-nameless project)            *
 ***************************************************************************)
 
@@ -18,9 +18,7 @@ Inductive typ       : Set   :=
   | typ_fvar        : var -> typ
   | typ_base        : typ
   | typ_eff         : typ
-  | typ_arrow       : typ -> typ -> typ
   | typ_arrow_closed  : typ -> typ -> typ       (* effect closeded term abstraction *)
-  | typ_all         : typ -> typ
   | typ_all_closed    : typ -> typ.             (* effect closeded type abstraction *)
 
 (** Representation of pre-terms *)
@@ -41,9 +39,7 @@ Fixpoint open_tt_rec (K : nat) (U : typ) (T : typ) {struct T} : typ :=
   | typ_fvar X            => typ_fvar X
   | typ_base              => typ_base
   | typ_eff               => typ_eff
-  | typ_arrow T1 T2       => typ_arrow (open_tt_rec K U T1) (open_tt_rec K U T2)
   | typ_arrow_closed T1 T2  => typ_arrow_closed (open_tt_rec K U T1) (open_tt_rec K U T2)
-  | typ_all T1            => typ_all (open_tt_rec (S K) U T1)
   | typ_all_closed T1       => typ_all_closed (open_tt_rec (S K) U T1)
   end.
 
@@ -90,17 +86,10 @@ Inductive type : typ -> Prop :=
       type (typ_fvar X)
   | type_base: type typ_base
   | type_eff: type typ_eff
-  | type_arrow : forall T1 T2,
-      type T1 ->
-      type T2 ->
-      type (typ_arrow T1 T2)
   | type_arrow_closed : forall T1 T2,
       type T1 ->
       type T2 ->
       type (typ_arrow_closed T1 T2)
-  | type_all : forall L T2,
-      (forall X, X \notin L -> type (T2 open_tt_var X)) ->
-      type (typ_all T2)
   | type_all_closed : forall L T2,
       (forall X, X \notin L -> type (T2 open_tt_var X)) ->
       type (typ_all_closed T2).
@@ -151,18 +140,10 @@ Inductive wft : env -> typ -> Prop :=
   | wft_var : forall E X,
       binds X bind_X E ->
       wft E (typ_fvar X)
-  | wft_arrow : forall E T1 T2,
-      wft E T1 ->
-      wft E T2 ->
-      wft E (typ_arrow T1 T2)
   | wft_arrow_closed : forall E T1 T2,
       wft E T1 ->
       wft E T2 ->
       wft E (typ_arrow_closed T1 T2)
-  | wft_all : forall L E T,
-      (forall X, X \notin L ->
-        wft (E & [: X :]) (T open_tt_var X)) ->
-      wft E (typ_all T)
   | wft_all_closed : forall L E T,
       (forall X, X \notin L ->
         wft (E & [: X :]) (T open_tt_var X)) ->
@@ -186,9 +167,7 @@ Fixpoint closed_typ(t: typ) := match t with
   | typ_fvar _          => true
   | typ_base            => true
   | typ_eff             => false
-  | typ_arrow U V       => false
   | typ_arrow_closed U V => true   (* pure lambda abstraction *)
-  | typ_all T           => false
   | typ_all_closed T     => true   (* pure type abstraction *)
   end.
 
@@ -201,6 +180,31 @@ Fixpoint closed_env(E: env) := match E with
                                closed_env E'
     end.
 
+(* capfree types are not capability producing, i.e. capable of creating an instance of E *)
+Inductive capsafe: typ -> Prop :=
+| capsafe_B: capsafe typ_base
+| capsafe_X: forall X, capsafe (typ_fvar X)
+| capsafe_C_X: forall S T, caprod S -> capsafe (typ_arrow_closed S T)
+| capsafe_X_S: forall S T, capsafe T -> capsafe (typ_arrow_closed S T)
+| capsafe_A: forall L T, type T ->
+                         (forall X, X \notin L -> capsafe (T open_tt_var X)) ->
+                         capsafe (typ_all_closed T)
+
+with caprod: typ -> Prop :=
+ | caprod_E: caprod typ_eff
+ | caprod_S_C: forall S T, capsafe S -> caprod T -> caprod (typ_arrow_closed S T)
+ | caprod_A: forall L T, type T ->
+                         (forall X, X \notin L -> caprod (T open_tt_var X)) ->
+                         caprod (typ_all_closed T).
+
+Inductive healthy: env -> Prop :=
+  | healthy_empty: healthy empty
+  | healthy_push_x: forall x E T, capsafe T -> healthy E ->
+                                  x # E -> healthy (E & x ~: T)
+  | healthy_push_X: forall X E, healthy E ->
+                                  X # E -> healthy (E & [: X :]).
+
+
 (** Typing relation *)
 
 Inductive typing : env -> trm -> typ -> Prop :=
@@ -208,36 +212,24 @@ Inductive typing : env -> trm -> typ -> Prop :=
       okt E ->
       binds x (bind_x T) E ->
       typing E (trm_fvar x) T
-  | typing_abs : forall L E V e1 T1,
-      (forall x, x \notin L ->
-        typing (E & x ~: V) (e1 open_ee_var x) T1) ->
-      typing E (trm_abs V e1) (typ_arrow V T1)
   | typing_abs_closed: forall L E V e1 T1,
       okt E ->
       (forall x, x \notin L ->
         typing ((closed_env E) & x ~: V) (e1 open_ee_var x) T1) ->
       typing E (trm_abs V e1) (typ_arrow_closed V T1)
   | typing_app : forall T1 E e1 e2 T2,
-      typing E e1 (typ_arrow T1 T2) ->
+      typing E e1 (typ_arrow_closed T1 T2) ->
       typing E e2 T1 ->
       typing E (trm_app e1 e2) T2
-  | typing_tabs : forall L E e1 T1,
-      (forall X, X \notin L ->
-        typing (E & [: X :]) (e1 open_te_var X) (T1 open_tt_var X)) ->
-      typing E (trm_tabs e1) (typ_all T1)
   | typing_tabs_closed : forall L E e1 T1,
       okt E ->
       (forall X, X \notin L ->
         typing ((closed_env E) & [: X :]) (e1 open_te_var X) (T1 open_tt_var X)) ->
       typing E (trm_tabs e1) (typ_all_closed T1)
   | typing_tapp : forall T1 E e1 T,
-      wft E T ->
-      typing E e1 (typ_all T1) ->
-      typing E (trm_tapp e1 T) (open_tt T1 T)
-  | typing_sub_abs: forall E e S T,
-      typing E e (typ_arrow_closed S T) -> typing E e (typ_arrow S T)
-  | typing_sub_tabs: forall E e T,
-      typing E e (typ_all_closed T) -> typing E e (typ_all T).
+      wft E T -> capsafe T ->
+      typing E e1 (typ_all_closed T1) ->
+      typing E (trm_tapp e1 T) (open_tt T1 T).
 
 (** Values *)
 
@@ -284,14 +276,8 @@ Definition progress := forall e T,
   \/ exists e', red e e'.
 
 (* effect safety : it's impossible to construct a term of typ_eff in pure environment  *)
-(* FIXME : x : B -> E could be in E  *)
-Definition effect_safety := forall E, ~exists e, typing (closed_env E) e typ_eff.
-
-Definition effect_safety_arrow := forall E e S T, typing (closed_env E) e (typ_arrow S T) ->
-  typing (closed_env E) e (typ_arrow_closed S T).
-
-Definition effect_safety_all := forall E e T, typing (closed_env E) e (typ_all T) ->
-  typing (closed_env E) e (typ_all_closed T).
+Definition effect_safety := forall E, healthy E ->
+  ~exists e, typing E e typ_eff.
 
 (* ********************************************************************** *)
 (** * Additional Definitions Used in the Proofs *)
@@ -304,9 +290,7 @@ Fixpoint fv_tt (T : typ) {struct T} : vars :=
   | typ_base              => \{}
   | typ_eff               => \{}
   | typ_fvar X            => \{X}
-  | typ_arrow T1 T2       => (fv_tt T1) \u (fv_tt T2)
   | typ_arrow_closed T1 T2 => (fv_tt T1) \u (fv_tt T2)
-  | typ_all T1            => (fv_tt T1)
   | typ_all_closed T1      => (fv_tt T1)
   end.
 
@@ -342,9 +326,7 @@ Fixpoint subst_tt (Z : var) (U : typ) (T : typ) {struct T} : typ :=
   | typ_base              => typ_base
   | typ_eff               => typ_eff
   | typ_fvar X            => If X = Z then U else (typ_fvar X)
-  | typ_arrow T1 T2       => typ_arrow (subst_tt Z U T1) (subst_tt Z U T2)
   | typ_arrow_closed T1 T2 => typ_arrow_closed (subst_tt Z U T1) (subst_tt Z U T2)
-  | typ_all T             => typ_all (subst_tt Z U T)
   | typ_all_closed T        => typ_all_closed (subst_tt Z U T)
   end.
 
@@ -497,7 +479,6 @@ Lemma open_tt_rec_type : forall T U,
   type T -> forall k, T = open_tt_rec k U T.
 Proof.
   induction 1; intros; simpl; f_equal*. unfolds open_tt.
-  pick_fresh X. apply* (@open_tt_rec_type_core T2 0 (typ_fvar X)).
   pick_fresh X. apply* (@open_tt_rec_type_core T2 0 (typ_fvar X)).
 Qed.
 
@@ -716,7 +697,6 @@ Lemma subst_tt_type : forall T Z P,
 Proof.
   induction 1; intros; simpl; auto.
   case_var*.
-  apply_fresh* type_all as X. rewrite* subst_tt_open_tt_var.
   apply_fresh* type_all_closed as X. rewrite* subst_tt_open_tt_var.
 Qed.
 
@@ -764,7 +744,6 @@ Proof.
   apply wft_var. apply* binds_weaken.
   (* case arrow *)
   (* case: all *)
-  apply_fresh* wft_all as Y. apply_ih_bind* H0.
   apply_fresh* wft_all_closed as Y. apply_ih_bind* H0.
 Qed.
 
@@ -782,7 +761,6 @@ Proof.
       subst. false.
       apply~ binds_concat_left.
   (* todo: binds_cases tactic *)
-  apply_fresh* wft_all as Y. apply_ih_bind* H0.
   apply_fresh* wft_all_closed as Y. apply_ih_bind* H0.
 Qed.
 
@@ -805,11 +783,6 @@ Proof.
       destruct (binds_push_inv H1) as [[? ?]|[? ?]].
         subst. false~.
         applys wft_var. apply* binds_concat_left.
-  apply_fresh* wft_all as Y.
-   unsimpl ((subst_tb Z P) bind_X).
-   lets: wft_type.
-   rewrite* subst_tt_open_tt_var.
-   apply_ih_map_bind* H0.
   apply_fresh* wft_all_closed as Y.
    unsimpl ((subst_tb Z P) bind_X).
    lets: wft_type.
@@ -821,7 +794,7 @@ Qed.
 
 Lemma wft_open : forall E U T,
   ok E ->
-  wft E (typ_all T) ->
+  wft E (typ_all_closed T) ->
   wft E U ->
   wft E (open_tt T U).
 Proof.
@@ -993,8 +966,6 @@ Proof.
  introv. unfold open_tt. generalize 0.
  induction T; simpl; intros k Fr; auto.
  specializes IHT1 k. specializes IHT2 k. auto.
- specializes IHT1 k. specializes IHT2 k. auto.
- apply* IHT.
  apply* IHT.
 Qed.
 
@@ -1005,7 +976,6 @@ Proof.
   eauto.
   rewrite notin_singleton. intro. subst. applys binds_fresh_inv H Fr.
   notin_simpl; auto.
-  notin_simpl; auto. pick_fresh Y. apply* (@notin_fv_tt_open Y).
   notin_simpl; auto. pick_fresh Y. apply* (@notin_fv_tt_open Y).
 Qed.
 
@@ -1027,26 +997,17 @@ Lemma typing_regular : forall E e T,
 Proof.
   induction 1; auto.
   splits.
-   pick_fresh y. specializes H0 y. destructs~ H0.
-    forwards*: okt_push_x_inv.
-   apply_fresh* term_abs as y.
-     pick_fresh y. specializes H0 y. destructs~ H0.
-      forwards*: okt_push_x_inv.
-     specializes H0 y. destructs~ H0.
+    pick_fresh y. specializes H1 y. destructs~ H1.
+    apply_fresh* term_abs as y.
+      pick_fresh y. specializes H1 y. destructs~ H1.
+        forwards*: okt_push_x_inv.
+      specializes H1 y. destructs~ H1.
   splits*.
-   apply_fresh* term_abs as y.
-     pick_fresh y. specializes H1 y. destructs~ H1.
-      forwards*: okt_push_x_inv.
-     specializes H1 y. destructs~ H1.
   splits*.
-  splits.
-   pick_fresh y. specializes H0 y. destructs~ H0. lets*: (okt_push_X_inv H0).
-     apply term_tabs with L. intros. apply* H0.
-  splits.
-   pick_fresh y. specializes H1 y. destructs~ H1.
-     apply term_tabs with L. intros. apply* H1.
-  splits*. lets(H1 & H2): IHtyping.
-   apply* term_tapp. apply* wft_type.
+    apply term_tabs with L. intros.
+    specializes H1 X. destructs~ H1.
+  splits*. destructs IHtyping.
+     apply* term_tapp. apply* wft_type.
 Qed.
 
 (** The value relation is restricted to well-formed objects. *)
@@ -1161,9 +1122,7 @@ Qed.
 Lemma closed_env_wft: forall E V, ok E -> wft (closed_env E) V -> wft E V.
 Proof. intros. remember (closed_env E) as G. gen E. induction H0; intros; subst.
   apply wft_var. apply* closed_env_binds.
-  apply* wft_arrow.
   apply* wft_arrow_closed.
-  apply_fresh* wft_all as Y. apply* H0. repeat(rewrite <- cons_to_push). autos.
   apply_fresh* wft_all_closed as Y. apply* H0. repeat(rewrite <- cons_to_push). autos.
 Qed.
 
@@ -1175,13 +1134,7 @@ Proof. intros. inductions H0; intros; subst.
     apply binds_concat_left; autos. apply* binds_concat_right. apply* closed_env_binds.
       lets*: ok_concat_inv_r (ok_concat_inv_l H).
     apply binds_concat_right. auto.
-  apply* wft_arrow.
   apply* wft_arrow_closed.
-  apply_fresh* wft_all as Y.
-    assert (HI: ok (E & F & (G & [: Y :]))).
-      rewrite concat_assoc. apply* ok_push.
-    forwards~ HII: (H0 Y). apply HI.  rewrite* concat_assoc.
-    rewrite* <- concat_assoc.
   apply_fresh* wft_all_closed as Y.
     assert (HI: ok (E & F & (G & [: Y :]))).
       rewrite concat_assoc. apply* ok_push.
@@ -1192,10 +1145,7 @@ Qed.
 Lemma closed_env_wft_reverse: forall E V, wft E V -> wft (closed_env E) V.
 Proof. intros. induction H.
   apply wft_var. apply* closed_env_binds_reverse.
-  apply* wft_arrow.
   apply* wft_arrow_closed.
-  apply_fresh* wft_all as Y. forwards~ HI: (H0 Y).
-    rewrite closed_env_dist in HI. rewrite single_def in *. autos.
   apply_fresh* wft_all_closed as Y. forwards~ HI: (H0 Y).
     rewrite closed_env_dist in HI. rewrite single_def in *. autos.
 Qed.
@@ -1280,8 +1230,6 @@ Lemma typing_weakening : forall E F G e T,
 Proof.
   introv Typ. gen F. inductions Typ; introv Ok.
   apply* typing_var. apply* binds_weaken.
-  apply_fresh* typing_abs as x. forwards~ K: (H x).
-    apply_ih_bind (H0 x); eauto.
   apply_fresh* typing_abs_closed as x.
     repeat(rewrite closed_env_dist in *). rewrite <- concat_assoc.
     apply* H1. rewrite* concat_assoc. rewrite concat_assoc. repeat(rewrite <- closed_env_dist).
@@ -1295,8 +1243,6 @@ Proof.
      branch 2. lets*: closed_env_dom_subset F.
      branch 3. lets*: closed_env_dom_subset G.
   apply* typing_app.
-  apply_fresh* typing_tabs as X. forwards~ K: (H X).
-    apply_ih_bind (H0 X); eauto.
   apply_fresh* typing_tabs_closed as X.
     repeat(rewrite closed_env_dist in *). rewrite <- concat_assoc.
     apply* H1. rewrite* concat_assoc. rewrite concat_assoc. repeat(rewrite <- closed_env_dist).
@@ -1309,17 +1255,11 @@ Proof.
      branch 2. lets*: closed_env_dom_subset F.
      branch 3. lets*: closed_env_dom_subset G.
   apply* typing_tapp.
-  apply* typing_sub_abs.
-  apply* typing_sub_tabs.
 Qed.
 
 Lemma typing_wft: forall E e T, typing E e T -> wft E T.
 Proof.
   intros. induction H. applys~ wft_from_env_has_typ x.
-  apply wft_arrow. pick_fresh x. forwards~: (H x).
-    lets(H2 & _): (typing_regular H1). autos* (wft_from_okt_typ H2).
-    pick_fresh x. forwards~: (H0 x). replace E with (E & empty) by rewrite* concat_empty_r.
-    eapply wft_strengthen. rewrite* concat_empty_r.
   apply wft_arrow_closed. pick_fresh x. forwards~: (H0 x).
     lets(H3 & _): (typing_regular H2). lets*: wft_from_okt_typ H3.
     apply* closed_env_wft.
@@ -1328,13 +1268,10 @@ Proof.
     rewrite <- (@concat_empty_r bind (x ~: V) ) in H2. rewrite concat_assoc in H2.
     lets: wft_strengthen H2. rewrite concat_empty_r in H3. apply* closed_env_wft.
   inverts* IHtyping1.
-  apply* (@wft_all L).
   let L := gather_vars in (apply* (@wft_all_closed L)). intros.
     forwards~: (H1 X). rewrite <- (@concat_empty_l bind E).
     apply closed_env_wft_weaken; rewrite* concat_empty_l.
   apply* wft_open.
-  inverts* IHtyping.
-  inverts* IHtyping.
 Qed.
 
 Lemma typing_weakening_env : forall E F G e T,
@@ -1346,21 +1283,14 @@ Proof. intros. inductions H.
     apply* binds_weaken. apply* binds_concat_left.
     apply binds_concat_right. apply* closed_env_binds.
     autos* ok_concat_inv_l ok_concat_inv_r ok_from_okt.
-  apply_fresh typing_abs as x.  apply_ih_bind* H0.
-    apply okt_typ; auto. forwards~ : H x.
-    destruct(typing_regular H2). lets: wft_from_okt_typ H3.
-    apply* closed_env_wft_weaken.
   apply_fresh typing_abs_closed as x. auto.
     repeat(rewrite closed_env_dist in *). rewrite closed_env_eq in *.
     apply_ih_bind* H1. rewrite* closed_env_eq. forwards~ : H0 x.
   apply* typing_app.
-  apply_fresh typing_tabs as X. apply_ih_bind* H0.
   apply_fresh typing_tabs_closed as X; auto.
     repeat(rewrite closed_env_dist in *). rewrite closed_env_eq in *.
     apply_ih_bind* H1. rewrite* closed_env_eq. forwards~ : H0 X.
   apply typing_tapp; auto. apply* closed_env_wft_weaken.
-  apply* typing_sub_abs.
-  apply* typing_sub_tabs.
 Qed.
 
 Lemma typing_strengthen_env: forall E u U, value u -> typing E u U ->
@@ -1372,6 +1302,19 @@ Proof. intros. induction H0; simpls; inversion H1.
   apply_fresh* typing_tabs_closed as y. apply* closed_env_okt. rewrite* closed_env_eq.
   inversion H.
 Qed.
+
+(* ********************************************************************** *)
+(** * Properties of Healthy Evnironment *)
+
+Lemma capsafe_subst_tt: forall Z P T, capsafe T ->
+                                      capsafe P ->
+                                      capsafe (subst_tt Z P T).
+Proof. admit. Qed.
+
+Lemma capsafe_closed_typ: forall T, capsafe T -> closed_typ T = true.
+Proof. intros. inductions H; try reflexivity; try false; autos. Qed.
+
+Hint Resolve capsafe_subst_tt capsafe_closed_typ.
 
 (************************************************************************ *)
 (** Preservation by Term Substitution (8) *)
@@ -1424,13 +1367,6 @@ Proof. intros. gen k. induction T2; intros; simpls;
   replace ((fv_tt T1 \u fv_tt T2_1) \u fv_tt T1) with (fv_tt T1 \u fv_tt T2_1) in H2 by
     (rewrite union_comm; rewrite <- union_assoc; rewrite* union_same).
   rewrite union_assoc. rewrite*  union_comm.
-
-  lets*: (subset_union_2 (IHT2_1 k) (IHT2_2 k)).
-  rewrite union_assoc in H2.
-  rewrite union_comm in H2.
-  replace ((fv_tt T1 \u fv_tt T2_1) \u fv_tt T1) with (fv_tt T1 \u fv_tt T2_1) in H2 by
-    (rewrite union_comm; rewrite <- union_assoc; rewrite* union_same).
-  rewrite union_assoc. rewrite*  union_comm.
 Qed.
 
 Lemma wft_fv_tt: forall E T,
@@ -1440,12 +1376,6 @@ Proof.
   lets: get_some_inv (binds_get H). unfolds. intros.
     rewrite in_singleton in H1. rewrite* H1.
   replace (dom E) with (dom E \u dom E) by (autos* union_same). apply* subset_union_2.
-  replace (dom E) with (dom E \u dom E) by (autos* union_same). apply* subset_union_2.
-  pick_fresh X. forwards~ HI: (H0 X). rewrite dom_concat in HI. rewrite dom_single in HI.
-    assert (HII: fv_tt T \c dom E \u \{X}).
-      apply subset_trans with (fv_tt (T open_tt_var X)).
-      autos* open_tt_fv_subset. autos.
-    apply subset_strengthen with X; autos.
   pick_fresh X. forwards~ HI: (H0 X). rewrite dom_concat in HI. rewrite dom_single in HI.
     assert (HII: fv_tt T \c dom E \u \{X}).
       apply subset_trans with (fv_tt (T open_tt_var X)).
@@ -1471,14 +1401,6 @@ Proof. intros. inductions H.
   simpls. splits; try solve [autos* subset_empty_l wft_fv_tt].
     forwards~ K:  get_some_inv (binds_get H0). unfolds subset.
     intros. rewrite in_singleton in H1. subst*.
-  (* abs *)
-  simpl. pick_fresh x. forwards~ : H0 x. forwards~ : H x. destructs H1.
-  rewrite dom_concat in *. rewrite dom_single in *.
-  forwards~ : subset_strengthen (subset_trans (@open_te_ee_fv_subset 0 (trm_fvar x) e1) H1).
-  forwards~ : subset_strengthen (subset_trans (@open_ee_fv_subset 0 (trm_fvar x) e1) H3).
-  forwards~ : subset_strengthen H4.
-  forwards~ : wft_fv_tt (wft_from_okt_typ (proj1 (typing_regular H2))).
-  splits_solve_subsets.
   (* abs closed *)
   simpl. pick_fresh x. forwards~ : H0 x. forwards~ : H1 x. destructs H3.
   rewrite dom_concat in *. rewrite dom_single in *.
@@ -1490,12 +1412,6 @@ Proof. intros. inductions H.
   (* app *)
   destructs IHtyping1. simpls. destruct (subset_union H3). destructs IHtyping2.
   splits_solve_subsets.
-  (* tabs *)
-  simpl. pick_fresh X. forwards~ : H0 X. destructs H1.
-  rewrite dom_concat in *. rewrite dom_single in *.
-  forwards~ : subset_strengthen (subset_trans (@open_te_fv_subset 0 (typ_fvar X) e1) H1).
-  unfold open_te in H2. rewrite <- open_ee_te_fv_eq in H2. forwards~ : subset_strengthen H2.
-  forwards~ : subset_strengthen (subset_trans (@open_tt_fv_subset 0 (typ_fvar X) T1) H3).
   (* tabs closed *)
   simpl. pick_fresh X. forwards~ : H1 X. destructs H2.
   rewrite dom_concat in *. rewrite dom_single in *.
@@ -1506,10 +1422,6 @@ Proof. intros. inductions H.
   (* tapp *)
   destructs IHtyping. simpls. lets: wft_fv_tt H. splits_solve_subsets.
   eapply subset_trans. apply open_tt_tt_fv_subset. solve_subsets.
-  (* abs sub *)
-  destructs IHtyping. simpls. splits_solve_subsets.
-  (* tabs sub *)
-  destructs IHtyping. simpls. splits_solve_subsets.
 Qed.
 
 Lemma typing_through_subst_ee : forall U E F x T e u,
@@ -1522,9 +1434,6 @@ Proof.
   case_var.
     binds_get H0. apply_empty* typing_weakening.
     binds_cases H0; apply* typing_var.
-  apply_fresh* typing_abs as y.
-    rewrite* subst_ee_open_ee_var.
-    apply_ih_bind* H0. lets*: (typing_regular TypU).
   apply_fresh* typing_abs_closed as y. destruct (typing_regular TypU).
     rewrite* subst_ee_open_ee_var.
     (* if U is closed, then use IH; else  x is free in e1; *)
@@ -1545,9 +1454,6 @@ Proof.
         rewrite in_singleton in H9. substs. apply* Fry. repeat(rewrite in_union).
           autos* in_singleton_self.
   apply* typing_app.
-  apply_fresh* typing_tabs as Y.
-    rewrite* subst_ee_open_te_var.
-    apply_ih_bind* H0.  lets*: (typing_regular TypU).
   apply_fresh* typing_tabs_closed as Y.  destruct (typing_regular TypU).
     rewrite* subst_ee_open_te_var.
     (* if U is closed, then use IH; else  x is free in e1; *)
@@ -1568,82 +1474,36 @@ Proof.
         rewrite in_singleton in H9. substs. apply* FrY. repeat(rewrite in_union).
           autos* in_singleton_self.
   apply* typing_tapp.
-  apply* typing_sub_abs.
-  apply* typing_sub_tabs.
 Qed.
 
 
 (************************************************************************ *)
 (** Preservation by Type Substitution (11) *)
 
-(* Fixme: this lemma doesn't hold !! *)
 Lemma typing_through_subst_te : forall E F Z e T P,
+  capsafe P ->
   typing (E & [: Z :] & F) e T ->
   wft E P ->
   typing (E & map (subst_tb Z P) F) (subst_te Z P e) (subst_tt Z P T).
 Proof.
-  introv Typ PsubQ.
+  introv Hcap Typ PsubQ.
   inductions Typ; introv; simpls subst_tt; simpls subst_te.
   apply* typing_var. rewrite* (@map_subst_tb_id E Z P).
    binds_cases H0; unsimpl_map_bind*. eauto using okt_weaken.
-  apply_fresh* typing_abs as y.
-    unsimpl (subst_tb Z P (bind_x V)).
-    rewrite* subst_te_open_ee_var.
-    apply_ih_map_bind* H0.
   apply_fresh* typing_abs_closed as y.
     repeat(rewrite closed_env_dist in *). rewrite closed_env_single_tvar in *.
-    lets: H1 y. rewrite <- concat_assoc in H2. forwards~ : H2. apply closed_env_wft.
-    admit. rewrite closed_env_eq. apply* closed_env_wft_reverse.
-    rewrite map_push in H3. simpl in H3.
-    (* Proof gets stuck with the following two terms, which are not equal
-       in current system:
-
-       - (map (subst_tb Z P) (closed_env F)  = A
-       - closed_env (map (subst_tb Z P) F)   = B
-
-       If Z can't be captured in closed env, then Z is free in e1 and T1. However,
-       it makes difficult to prove okt env. In addition, capturing typvar is a very
-       natural requirement. So, [: Z :] should be allowed in closed environment.
-
-       Should we allow x ~: Z in closed env?  Allow (x: Z) in closed env is dangerous,
-       for example:
-
-           e = \X.\x:X.\y:B.x
-
-       If we allow (x:X) in closed env, then we can type \y:B.x as effect-closed.
-       The typing of e will be: All_closed X, X -> B -> X.
-
-       Let t = e E c, according to standard typing rules, t will be typed as B -> E,
-       which is absurd, as B -> E can never be effect-closed.
-
-       Either we need to modify typing_abs_closed/typing_tabs_closde or typing_tapp.
-
-       1. change typing_abs_closed & typing_tabs_closed. Treat x:X as effect-capturing.
-       2. change typing_tapp. Disallow capability types to be parametric.
-
-       If we disallow x:X in closed env, then A \c B. Then there's hope to prove this
-       theorem based a special typing weakening lemma.
-
-       If we change typing_tapp, there's hope to prove A = B, and there's no
-       need for a special typing weakening lemma. It seems that we only need to
-       disallow direct use of capability types, no need to worry about
-       capability producing types such as B -> E.
-    *)
-    unsimpl (subst_tb Z P (bind_x V)).
-    rewrite* subst_te_open_ee_var.
-    rewrite closed_env_map. apply_ih_map_bind* H1.
-    simpl. rewrite* concat_assoc.
-    admit. admit.
+    rewrite* subst_te_open_ee_var. rewrite* closed_env_map.
+    unsimpl (subst_tb Z P (bind_x V)). rewrite <- concat_assoc. rewrite <- map_push.
+    apply* H1. rewrite* concat_assoc. apply* closed_env_wft_reverse.
   apply* typing_app.
-  apply_fresh* typing_tabs as Y.
-    unsimpl (subst_tb Z P bind_X).
+  apply_fresh* typing_tabs_closed as Y.
+    repeat(rewrite closed_env_dist in *). rewrite closed_env_single_tvar in *.
     rewrite* subst_te_open_te_var; eauto using wft_type.
     rewrite* subst_tt_open_tt_var; eauto using wft_type.
-    apply_ih_map_bind* H0.
-  apply_fresh* typing_tabs_closed as Y. admit.
+    rewrite* closed_env_map. unsimpl (subst_tb Z P bind_X).
+    rewrite <- concat_assoc. rewrite <- map_push.
+    apply* H1. rewrite* concat_assoc. apply* closed_env_wft_reverse.
   rewrite* subst_tt_open_tt; eauto using wft_type.
-  apply* typing_sub_abs.
-  apply* typing_sub_tabs.
 Qed.
 
 (* ********************************************************************** *)
@@ -1657,12 +1517,7 @@ Proof.
    try solve [ inversion Red ].
   (* case: app *)
   inversions Red; try solve [ apply* typing_app ].
-  inversions Typ1. pick_fresh x. forwards~ K: (H2 x).
-  rewrite* (@subst_ee_intro x).
-  apply_empty typing_through_subst_ee; substs*.
-       lets*: typing_regular Typ2.
-
-  inversions H4.  pick_fresh x. forwards~ K: (H8 x).
+  inversions Typ1. pick_fresh x. forwards~ K: (H7 x).
   rewrite* (@subst_ee_intro x).
     apply_empty typing_through_subst_ee; substs*.
     rewrite <- (@concat_empty_l bind _). rewrite concat_assoc.
@@ -1672,15 +1527,7 @@ Proof.
     lets*: typing_regular Typ2.
   (* case: tapp *)
   inversions Red. try solve [ apply* typing_tapp ].
-  inversions Typ. pick_fresh X. forwards~ K: (H5 X).
-  rewrite* (@subst_te_intro X).
-  rewrite* (@subst_tt_intro X).
-  asserts_rewrite (E = E & map (subst_tb X T) empty).
-    rewrite map_empty. rewrite~ concat_empty_r.
-  apply* typing_through_subst_te.
-  rewrite* concat_empty_r.
-
-  inversions H5. pick_fresh X. forwards~ : H7 X.
+  inversions Typ. pick_fresh X. forwards~ : H7 X.
   rewrite* (@subst_te_intro X).
   rewrite* (@subst_tt_intro X).
   asserts_rewrite (E = E & map (subst_tb X T) empty).
@@ -1689,9 +1536,6 @@ Proof.
   rewrite <- (@concat_empty_l bind E).
   apply typing_weakening_env. rewrite* concat_empty_l.
   rewrite concat_empty_l. apply* okt_X.
-
-  apply typing_sub_abs. auto.
-  apply typing_sub_tabs. auto.
 Qed.
 
 (* ********************************************************************** *)
@@ -1701,27 +1545,23 @@ Qed.
 (** Canonical Forms (14) *)
 
 Lemma canonical_form_abs : forall t U1 U2,
-  value t -> typing empty t (typ_arrow U1 U2) ->
+  value t -> typing empty t (typ_arrow_closed U1 U2) ->
   exists V, exists e1, t = trm_abs V e1.
 Proof.
   introv Val Typ. gen_eq E: (@empty bind).
-  gen_eq T: (typ_arrow U1 U2). gen U1 U2.
+  gen_eq T: (typ_arrow_closed U1 U2). gen U1 U2.
   induction Typ; introv EQT EQE;
    try solve [ inversion Val | inversion EQT | eauto ].
-  (* typ_arrow_closed *)
-  inversions EQT. inversions Typ; try solve [ inversion Val | eauto ].
 Qed.
 
 Lemma canonical_form_tabs : forall t U1,
-  value t -> typing empty t (typ_all U1) ->
+  value t -> typing empty t (typ_all_closed U1) ->
   exists e1, t = trm_tabs e1.
 Proof.
   introv Val Typ. gen_eq E: (@empty bind).
-  gen_eq T: (typ_all U1). gen U1.
+  gen_eq T: (typ_all_closed U1). gen U1.
   induction Typ; introv EQT EQE;
    try solve [ inversion Val | inversion EQT | eauto ].
-  (* typ_all_closed *)
-  inversions EQT. inversions Typ; try solve [ inversion Val | eauto ].
 Qed.
 
 Lemma progress_result : progress.
@@ -1730,8 +1570,6 @@ Proof.
   induction Typ; intros EQ; subst; autos.
   (* case: var *)
   false* binds_empty_inv.
-  (* case: abs *)
-  left*. apply value_abs. lets*: typing_regular Typ'.
   (* case: abs closed *)
   left*. apply value_abs. lets*: typing_regular Typ'.
   (* case: app *)
@@ -1740,8 +1578,6 @@ Proof.
     destruct (canonical_form_abs Val1 Typ1) as [S [e3 EQ]].
       subst. exists* (open_ee e3 e2). apply* red_abs. lets*: typing_regular Typ1.
     exists* (trm_app e1' e2). apply* red_app_1. lets*: typing_regular Typ2.
-  (* case: tabs *)
-  left*. apply* value_tabs. lets*: typing_regular Typ'.
   (* case: tabs_closed *)
   left*. apply* value_tabs. lets*: typing_regular Typ'.
   (* case: tapp *)
