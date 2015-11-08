@@ -1186,14 +1186,17 @@ Proof. intros. induction* E.
     unfolds notin. autos.
 Qed.
 
-(* Fixme: this three lemmas might be incorrect *)
-Lemma closed_typ_subst : forall Z P T, closed_typ P = true -> closed_typ T = true ->
-  closed_typ (subst_tt Z P T) = true.
-Proof. admit. Qed.
+Lemma closed_subst_tt: forall T,
+  closed_typ T = true ->
+  forall Z P, closed_typ P = true ->
+              closed_typ (subst_tt Z P T) = true.
+Proof. intros. inductions T; inversions H; simpls; auto. case_if*. Qed.
 
-Lemma closed_typ_subst_false : forall Z P T, closed_typ P = true -> closed_typ T = false ->
-  closed_typ (subst_tt Z P T) = false.
-Proof. admit. Qed.
+Lemma closed_subst_tt_false: forall T,
+  closed_typ T = false ->
+  forall Z P, closed_typ P = true ->
+              closed_typ (subst_tt Z P T) = false.
+Proof. intros. inductions T; inversions H; simpls; auto. Qed.
 
 Lemma closed_env_map : forall E Z P, closed_typ P = true ->
   closed_env (map (subst_tb Z P) E) = map (subst_tb Z P) (closed_env E).
@@ -1204,9 +1207,9 @@ Proof. intros. induction E.
       rewrite <- cons_to_push. simpl. rewrite cons_to_push. rewrite* IHE.
     repeat(rewrite cons_to_push). repeat(rewrite map_push). simpl.
       rewrite <- cons_to_push. simpl. remember (closed_typ t). destruct b; symmetry in Heqb.
-      lets*: (@closed_typ_subst Z P t H Heqb). rewrite H0. rewrite map_push.
+      lets*: (@closed_subst_tt t Heqb Z P H). rewrite H0. rewrite map_push.
         rewrite <- cons_to_push. simpl. rewrite* IHE.
-      lets*: (@closed_typ_subst_false Z P t H Heqb). rewrite* H0.
+      lets*: (@closed_subst_tt_false t Heqb Z P H). rewrite* H0.
 Qed.
 
 Lemma closed_env_eq : forall E, closed_env (closed_env E) = closed_env E.
@@ -1606,7 +1609,7 @@ Proof.
     rewrite* closed_env_map. unsimpl (subst_tb Z P bind_X).
     rewrite <- concat_assoc. rewrite <- map_push.
     apply* H1. rewrite* concat_assoc. apply* closed_env_wft_reverse.
-  rewrite* subst_tt_open_tt; eauto using wft_type.
+  rewrite* subst_tt_open_tt.
 Qed.
 
 (* ********************************************************************** *)
