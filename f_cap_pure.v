@@ -180,7 +180,7 @@ Fixpoint closed_env(E: env) := match E with
                                closed_env E'
     end.
 
-(* capfree types are not capability producing, i.e. capable of creating an instance of E *)
+(* capsafe types are not capability producing, i.e. capable of creating an instance of E *)
 Inductive capsafe: typ -> Prop :=
 | capsafe_B: capsafe typ_base
 | capsafe_X: forall X, capsafe (typ_fvar X)
