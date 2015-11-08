@@ -182,13 +182,13 @@ Fixpoint closed_env(E: env) := match E with
 
 (* capsafe types are not capability producing, i.e. capable of creating an instance of E *)
 Inductive capsafe: typ -> Prop :=
-| capsafe_B: capsafe typ_base
-| capsafe_X: forall X, capsafe (typ_fvar X)
-| capsafe_C_X: forall S T, type T -> caprod S -> capsafe (typ_arrow_closed S T)
-| capsafe_X_S: forall S T, type S -> capsafe T -> capsafe (typ_arrow_closed S T)
-| capsafe_A: forall L T, type (typ_all_closed T) ->
-                         (forall X, X \notin L -> capsafe (T open_tt_var X)) ->
-                         capsafe (typ_all_closed T)
+ | capsafe_B: capsafe typ_base
+ | capsafe_X: forall X, capsafe (typ_fvar X)
+ | capsafe_C_X: forall S T, type T -> caprod S -> capsafe (typ_arrow_closed S T)
+ | capsafe_X_S: forall S T, type S -> capsafe T -> capsafe (typ_arrow_closed S T)
+ | capsafe_A: forall L T, type (typ_all_closed T) ->
+                          (forall X, X \notin L -> capsafe (T open_tt_var X)) ->
+                          capsafe (typ_all_closed T)
 
 with caprod: typ -> Prop :=
  | caprod_E: caprod typ_eff
