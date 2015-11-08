@@ -253,20 +253,40 @@ Definition progress := forall e T,
 
 
 (* capsafe types are not capability producing, i.e. capable of creating an instance of E *)
+
+Inductive varsafe: var -> typ -> Prop :=
+  | varsafe_B: forall X, varsafe X typ_base
+  | varsafe_X: forall X Y, X <> Y -> varsafe X (typ_fvar Y)
+  | varsafe_X_S: forall X S T, type S -> varsafe X T -> varsafe X (typ_arrow_closed S T)
+  | varsafe_C_X: forall X S T, type T -> varprod X S -> varsafe X (typ_arrow_closed S T)
+  | varsafe_A: forall L T Y,
+                 (forall X, X \notin L ->
+                            varsafe X (T open_tt_var X) /\ varsafe Y (T open_tt_var X))
+                 -> varsafe Y (typ_all_closed T)
+
+with varprod: var -> typ -> Prop :=
+  | varprod_E: forall X, varprod X typ_eff
+  | varprod_X: forall X, varprod X (typ_fvar X)
+  | varprod_S_C: forall X S T, varsafe X S -> varprod X T -> varprod X (typ_arrow_closed S T)
+  | varprod_A: forall L T Y,
+                 (forall X, X \notin L ->
+                            varprod X (T open_tt_var X) \/ varprod Y (T open_tt_var X))
+                 -> varprod Y (typ_all_closed T).
+
 Inductive capsafe: typ -> Prop :=
  | capsafe_B: capsafe typ_base
  | capsafe_X: forall X, capsafe (typ_fvar X)
  | capsafe_C_X: forall S T, type T -> caprod S -> capsafe (typ_arrow_closed S T)
  | capsafe_X_S: forall S T, type S -> capsafe T -> capsafe (typ_arrow_closed S T)
  | capsafe_A: forall L T, type (typ_all_closed T) ->
-                          (forall X, X \notin L -> capsafe (T open_tt_var X)) ->
+                          (forall X, X \notin L -> varsafe X (T open_tt_var X)) ->
                           capsafe (typ_all_closed T)
 
 with caprod: typ -> Prop :=
  | caprod_E: caprod typ_eff
  | caprod_S_C: forall S T, capsafe S -> caprod T -> caprod (typ_arrow_closed S T)
  | caprod_A: forall L T, type (typ_all_closed T) ->
-                         (forall X, X \notin L -> caprod (T open_tt_var X)) ->
+                         (forall X, X \notin L -> varprod X (T open_tt_var X)) ->
                          caprod (typ_all_closed T).
 
 Inductive healthy: env -> Prop :=
