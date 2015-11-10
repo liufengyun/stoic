@@ -702,6 +702,11 @@ Proof.
   apply_fresh* type_all_closed as X. rewrite* subst_tt_open_tt_var.
 Qed.
 
+Lemma typ_all_open_tt_type: forall T U, type (typ_all_closed T) -> type U -> type (open_tt T U).
+Proof. intros. inversions H. pick_fresh X. forwards~ : H2 X.
+  rewrite* (@subst_tt_intro X). apply* subst_tt_type.
+Qed.
+
 Lemma subst_te_term : forall e Z P,
   term e -> type P -> term (subst_te Z P e).
 Proof.
@@ -719,7 +724,7 @@ Proof.
   apply_fresh* term_tabs as Y. rewrite* subst_ee_open_te_var.
 Qed.
 
-Hint Resolve subst_tt_type subst_te_term subst_ee_term.
+Hint Resolve subst_tt_type typ_all_open_tt_type subst_te_term subst_ee_term.
 
 
 (* ********************************************************************** *)
@@ -1590,6 +1595,22 @@ Qed.
 (* ********************************************************************** *)
 (** * Properties of Healthy Evnironment *)
 
+Fixpoint degree (T: typ) := match T with
+  | typ_arrow_closed T1 T2 => max (degree T1) (degree T2)
+  | typ_all_closed T => S (degree T)
+  | _ => O
+  end.
+
+Lemma degree_parent_zero: forall S T,
+  degree (typ_arrow_closed S T) = 0 ->
+  degree S = 0 /\ degree T = 0.
+Proof. intros. simpl in H. destruct (degree S); destruct (degree T); eauto.
+  simpl in H. inversion H.
+Qed.
+
+Lemma degree_all_nonzero: forall T, degree (typ_all_closed T) <> 0.
+Proof. intros T Hc. simpl in Hc. inversions Hc. Qed.
+
 Hint Constructors capsafe caprod.
 
 Scheme capsafe_mut := Induction for capsafe Sort Prop
@@ -1640,22 +1661,6 @@ Qed.
 Lemma capsafe_closed_typ: forall T, capsafe T -> closed_typ T = true.
 Proof. intros. inductions H; try reflexivity; try false; autos. Qed.
 
-Fixpoint degree (T: typ) := match T with
-  | typ_arrow_closed T1 T2 => max (degree T1) (degree T2)
-  | typ_all_closed T => S (degree T)
-  | _ => O
-  end.
-
-Lemma degree_parent_zero: forall S T,
-  degree (typ_arrow_closed S T) = 0 ->
-  degree S = 0 /\ degree T = 0.
-Proof. intros. simpl in H. destruct (degree S); destruct (degree T); eauto.
-  simpl in H. inversion H.
-Qed.
-
-Lemma degree_all_nonzero: forall T, degree (typ_all_closed T) <> 0.
-Proof. intros T Hc. simpl in Hc. inversions Hc. Qed.
-
 Lemma capsafe_not_caprod_0 : forall T, capsafe T -> degree T = 0 -> ~ caprod T.
   apply (capsafe_mut
            (fun T safeT => degree T = 0 -> ~ caprod T )
@@ -1674,8 +1679,7 @@ Proof. intros. unfolds open_tt. apply* degree_eq_open_tt_rec. Qed.
 
 Lemma capsafe_not_caprod_k : forall T k, degree T <= k -> capsafe T -> ~ caprod T.
 Proof. intros. gen T. inductions k; intros.
-  lets: Le.le_n_0_eq H.
-  apply* capsafe_not_caprod_0.
+  lets: Le.le_n_0_eq H. apply* capsafe_not_caprod_0.
   inductions T; try solve [simpls; apply* IHk; apply le_0_n].
     inversions H0. intros Hc. inversions Hc.
       simpl in H. destruct (classic (degree T1 = S k)).
@@ -1695,25 +1699,30 @@ Qed.
 Lemma capsafe_not_caprod : forall T, capsafe T -> ~ caprod T.
 Proof. intros T. apply* capsafe_not_caprod_k. Qed.
 
-Lemma caprod_not_capsafe : forall T, caprod T -> ~ capsafe T.
-  apply (caprod_mut
-           (fun T safeT => ~ caprod T )
-           (fun T prodT => ~ capsafe T )
-        ); intros; intros Hc; inversions Hc; eauto.
-  pick_fresh X. forwards~ : H X.
-  pick_fresh X. forwards~ : H X.
+Lemma capsafe_caprod_classic_0: forall T, type T -> degree T = 0 -> capsafe T \/ caprod T.
+Proof. intros T Ht Hd. inductions T; iauto.
+  inversions Ht.
+  inversions Ht. destruct (degree_parent_zero T1 T2 Hd).
+    destruct* (IHT1 H1); destruct* (IHT2 H2).
+  simpl in Hd. inversions Hd.
+Qed.
+
+Lemma capsafe_caprod_classic_k: forall T k, type T -> degree T <= k -> capsafe T \/ caprod T.
+Proof. intros. gen T. inductions k; intros.
+  lets: Le.le_n_0_eq H0. apply* capsafe_caprod_classic_0.
+  inductions T; try solve [inversion H]; eauto.
+    inversions H. simpl in H0.
+      forwards~ : IHT1. apply (Max.max_lub_l _ _ _ H0).
+      forwards~ : IHT2. apply (Max.max_lub_r _ _ _ H0).
+      destruct* H; destruct* H1.
+    simpls. lets: le_S_n H0.
+      forwards~ : IHk (open_tt T typ_eff). rewrite* <- degree_eq_open_tt.
+      forwards~ : IHk (open_tt T typ_base). rewrite* <- degree_eq_open_tt.
+      destruct H2; destruct H3; eauto.
 Qed.
 
 Lemma capsafe_caprod_classic: forall T, type T -> capsafe T \/ caprod T.
-Proof. intros T Ht. inductions Ht; iauto.
-  pick_fresh X. forwards~ : H0 X. destruct H1.
-  left. apply capsafe_A with (L \u fv_tt T2). apply* type_all_closed.
-    intros. forwards~ : capsafe_subst_tt H1 X (typ_fvar X0).
-    rewrite* <- (@subst_tt_intro X) in H3.
-  right. apply caprod_A with L. apply* type_all_closed.
-    intros. forwards~ : caprod_subst_tt H1 X (typ_fvar X0).
-    rewrite* <- (@subst_tt_intro X) in H3.
-Qed.
+Proof. intros. apply* capsafe_caprod_classic_k. Qed.
 
 Lemma capsafe_decidable: forall T, type T -> capsafe T \/ ~ capsafe T.
 Proof. intros. destruct (capsafe_caprod_classic H). left*.
