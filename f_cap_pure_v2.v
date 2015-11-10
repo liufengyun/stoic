@@ -1310,121 +1310,6 @@ Proof. intros. induction H0; simpls; inversion H1.
   inversion H.
 Qed.
 
-(* ********************************************************************** *)
-(** * Properties of Healthy Evnironment *)
-
-Hint Constructors capsafe caprod.
-
-Scheme capsafe_mut := Induction for capsafe Sort Prop
-with caprod_mut := Induction for caprod Sort Prop.
-
-Lemma capsafe_regular: forall T, capsafe T -> type T.
-  apply (capsafe_mut
-           (fun T safeT => type T )
-           (fun T prodT => type T )
-        );  eauto.
-Qed.
-
-Lemma caprod_regular: forall T, caprod T -> type T.
-  apply (caprod_mut
-           (fun T safeT => type T )
-           (fun T prodT => type T )
-        );  eauto.
-Qed.
-
-Hint Immediate capsafe_regular caprod_regular.
-
-Lemma capsafe_subst_tt: forall T,
-  capsafe T -> forall Z P, capsafe P -> capsafe (subst_tt Z P T).
-  apply (capsafe_mut
-           (fun T safeT => forall Z P, capsafe P -> capsafe (subst_tt Z P T) )
-           (fun T prodT => forall Z P, capsafe P -> caprod (subst_tt Z P T) )
-        ); intros; simpls; eauto.
-  case_if*.
-  let L' := gather_vars in apply capsafe_A with L'; auto.
-    unsimpl (subst_tt Z P (typ_all_closed T)). auto.
-    intros. rewrite* subst_tt_open_tt_var.
-  let L' := gather_vars in apply caprod_A with L'; auto.
-    unsimpl (subst_tt Z P (typ_all_closed T)). auto.
-    intros. rewrite* subst_tt_open_tt_var.
-Qed.
-
-Lemma caprod_subst_tt: forall T,
-  caprod T -> forall Z P, capsafe P -> caprod (subst_tt Z P T).
-  apply (caprod_mut
-           (fun T safeT => forall Z P, capsafe P -> capsafe (subst_tt Z P T) )
-           (fun T prodT => forall Z P, capsafe P -> caprod (subst_tt Z P T) )
-        ); intros; simpls; eauto.
-  case_if*.
-  let L' := gather_vars in apply capsafe_A with L'; auto.
-    unsimpl (subst_tt Z P (typ_all_closed T)). auto.
-    intros. rewrite* subst_tt_open_tt_var.
-  let L' := gather_vars in apply caprod_A with L'; auto.
-    unsimpl (subst_tt Z P (typ_all_closed T)). auto.
-    intros. rewrite* subst_tt_open_tt_var.
-Qed.
-
-Lemma capsafe_closed_typ: forall T, capsafe T -> closed_typ T = true.
-Proof. intros. inductions H; try reflexivity; try false; autos. Qed.
-
-Lemma capsafe_not_caprod : forall T, capsafe T -> ~ caprod T.
-  apply (capsafe_mut
-           (fun T safeT => ~ caprod T )
-           (fun T prodT => ~ capsafe T )
-        ); intros; intros Hc; inversions Hc; eauto.
-  pick_fresh X. forwards~ : H X.
-  pick_fresh X. forwards~ : H X.
-Qed.
-
-Lemma caprod_not_capsafe : forall T, caprod T -> ~ capsafe T.
-  apply (caprod_mut
-           (fun T safeT => ~ caprod T )
-           (fun T prodT => ~ capsafe T )
-        ); intros; intros Hc; inversions Hc; eauto.
-  pick_fresh X. forwards~ : H X.
-  pick_fresh X. forwards~ : H X.
-Qed.
-
-Lemma capsafe_caprod_classic: forall T, type T -> capsafe T \/ caprod T.
-Proof. intros T Ht. inductions Ht; iauto.
-  pick_fresh X. forwards~ : H0 X. destruct H1.
-  left. apply capsafe_A with (L \u fv_tt T2). apply* type_all_closed.
-    intros. forwards~ : capsafe_subst_tt H1 X (typ_fvar X0).
-    rewrite* <- (@subst_tt_intro X) in H3.
-  right. apply caprod_A with L. apply* type_all_closed.
-    intros. forwards~ : caprod_subst_tt H1 X (typ_fvar X0).
-    rewrite* <- (@subst_tt_intro X) in H3.
-Qed.
-
-Lemma capsafe_decidable: forall T, type T -> capsafe T \/ ~ capsafe T.
-Proof. intros. destruct (capsafe_caprod_classic H). left*.
-  right. intros Hc. lets*: capsafe_not_caprod Hc.
-Qed.
-
-Lemma not_capsafe_caprod : forall T, type T -> ~capsafe T -> caprod T.
-Proof. intros. destruct* (capsafe_caprod_classic H). Qed.
-
-Lemma healthy_env_closed: forall E, healthy E -> closed_env E = E.
-Proof. intros. inductions H.
-  rewrite empty_def. reflexivity.
-  rewrite <- cons_to_push. simpls. lets: capsafe_closed_typ H.
-    rewrite* H2. rewrite* IHhealthy.
-  rewrite <- cons_to_push. simpls. rewrite* IHhealthy.
-Qed.
-
-Lemma healthy_env_capsafe : forall E S x, healthy E ->
-   binds x (bind_x S) E ->  capsafe S.
-Proof. introv H Hb. inductions H.
-  false* binds_empty_inv.
-  destruct (binds_push_inv Hb).
-    destruct H2. inversions* H3.
-    destruct H2. autos.
-  destruct (binds_push_inv Hb).
-    destruct H1. inversions* H2.
-    destruct H1. autos.
-Qed.
-
-Hint Resolve capsafe_subst_tt capsafe_closed_typ.
 
 (************************************************************************ *)
 (** Preservation by Term Substitution (8) *)
@@ -1702,7 +1587,118 @@ Qed.
 (* ********************************************************************** *)
 (** * effect safety *)
 
-Hint Resolve capsafe_closed_typ healthy_env_capsafe.
+(* ********************************************************************** *)
+(** * Properties of Healthy Evnironment *)
+
+Hint Constructors capsafe caprod.
+
+Scheme capsafe_mut := Induction for capsafe Sort Prop
+with caprod_mut := Induction for caprod Sort Prop.
+
+Lemma capsafe_regular: forall T, capsafe T -> type T.
+  apply (capsafe_mut
+           (fun T safeT => type T )
+           (fun T prodT => type T )
+        );  eauto.
+Qed.
+
+Lemma caprod_regular: forall T, caprod T -> type T.
+  apply (caprod_mut
+           (fun T safeT => type T )
+           (fun T prodT => type T )
+        );  eauto.
+Qed.
+
+Hint Immediate capsafe_regular caprod_regular.
+
+Lemma capsafe_subst_tt: forall T,
+  capsafe T -> forall Z P, capsafe P -> capsafe (subst_tt Z P T).
+  apply (capsafe_mut
+           (fun T safeT => forall Z P, capsafe P -> capsafe (subst_tt Z P T) )
+           (fun T prodT => forall Z P, capsafe P -> caprod (subst_tt Z P T) )
+        ); intros; simpls; eauto.
+  case_if*.
+  apply capsafe_A. unsimpl (subst_tt Z P (typ_all_closed T)). auto.
+    admit.
+  apply caprod_A. unsimpl (subst_tt Z P (typ_all_closed T)). auto.
+    admit.
+Qed.
+
+Lemma caprod_subst_tt: forall T,
+  caprod T -> forall Z P, capsafe P -> caprod (subst_tt Z P T).
+  apply (caprod_mut
+           (fun T safeT => forall Z P, capsafe P -> capsafe (subst_tt Z P T) )
+           (fun T prodT => forall Z P, capsafe P -> caprod (subst_tt Z P T) )
+        ); intros; simpls; eauto.
+  case_if*.
+  apply capsafe_A. unsimpl (subst_tt Z P (typ_all_closed T)). auto.
+    admit.
+  apply caprod_A. unsimpl (subst_tt Z P (typ_all_closed T)). auto.
+    admit.
+Qed.
+
+Lemma capsafe_closed_typ: forall T, capsafe T -> closed_typ T = true.
+Proof. intros. inductions H; try reflexivity; try false; autos. Qed.
+
+Lemma capsafe_not_caprod : forall T, capsafe T -> ~ caprod T.
+  apply (capsafe_mut
+           (fun T safeT => ~ caprod T )
+           (fun T prodT => ~ capsafe T )
+        ); intros; intros Hc; inversions Hc; eauto.
+  destruct* H1. destruct* a.
+  pick_fresh X. forwards~ : H X.
+  pick_fresh X. forwards~ : H X.
+Qed.
+
+Lemma caprod_not_capsafe : forall T, caprod T -> ~ capsafe T.
+  apply (caprod_mut
+           (fun T safeT => ~ caprod T )
+           (fun T prodT => ~ capsafe T )
+        ); intros; intros Hc; inversions Hc; eauto.
+  pick_fresh X. forwards~ : H X.
+  pick_fresh X. forwards~ : H X.
+Qed.
+
+Lemma capsafe_caprod_classic: forall T, type T -> capsafe T \/ caprod T.
+Proof. intros T Ht. inductions Ht; iauto.
+  pick_fresh X. forwards~ : H0 X. destruct H1.
+  left. apply capsafe_A with (L \u fv_tt T2). apply* type_all_closed.
+    intros. forwards~ : capsafe_subst_tt H1 X (typ_fvar X0).
+    rewrite* <- (@subst_tt_intro X) in H3.
+  right. apply caprod_A with L. apply* type_all_closed.
+    intros. forwards~ : caprod_subst_tt H1 X (typ_fvar X0).
+    rewrite* <- (@subst_tt_intro X) in H3.
+Qed.
+
+Lemma capsafe_decidable: forall T, type T -> capsafe T \/ ~ capsafe T.
+Proof. intros. destruct (capsafe_caprod_classic H). left*.
+  right. intros Hc. lets*: capsafe_not_caprod Hc.
+Qed.
+
+Lemma not_capsafe_caprod : forall T, type T -> ~capsafe T -> caprod T.
+Proof. intros. destruct* (capsafe_caprod_classic H). Qed.
+
+Lemma healthy_env_closed: forall E, healthy E -> closed_env E = E.
+Proof. intros. inductions H.
+  rewrite empty_def. reflexivity.
+  rewrite <- cons_to_push. simpls. lets: capsafe_closed_typ H.
+    rewrite* H2. rewrite* IHhealthy.
+  rewrite <- cons_to_push. simpls. rewrite* IHhealthy.
+Qed.
+
+Lemma healthy_env_capsafe : forall E S x, healthy E ->
+   binds x (bind_x S) E ->  capsafe S.
+Proof. introv H Hb. inductions H.
+  false* binds_empty_inv.
+  destruct (binds_push_inv Hb).
+    destruct H2. inversions* H3.
+    destruct H2. autos.
+  destruct (binds_push_inv Hb).
+    destruct H1. inversions* H2.
+    destruct H1. autos.
+Qed.
+
+Hint Resolve capsafe_subst_tt capsafe_closed_typ healthy_env_capsafe.
 
 Lemma healthy_env_term_capsafe: forall E t T,
   healthy E ->
