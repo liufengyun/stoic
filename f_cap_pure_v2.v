@@ -1727,26 +1727,120 @@ Proof. introv H Hb. inductions H.
     destruct H1. autos.
 Qed.
 
-Hint Resolve capsafe_closed_typ healthy_env_capsafe not_capsafe_caprod.
+Lemma subst_tt_type_type_0: forall P Q T Z,
+  degree T = 0 -> type P -> type Q ->
+  type (subst_tt Z P T) -> type (subst_tt Z Q T).
+Proof. intros. inductions T; try solve [simpls; eauto]; simpl.
+  cases_if*.
+  inversions H2. lets*: degree_parent_zero H.
+  simpls. inversion H.
+Qed.
+
+Lemma subst_tt_type_type_k: forall P Q T Z k,
+  degree T <= k  -> type P -> type Q ->  type (subst_tt Z P T) -> type (subst_tt Z Q T).
+Proof. intros. gen T. inductions k; intros.
+  (* k = 0*)
+  lets: Le.le_n_0_eq H. forwards~ : subst_tt_type_type_0 H0 H1 H2.
+  (* K > 0 *)
+  inductions T; simpls; eauto.
+  cases_if*.
+  inversions H2.
+    forwards~ : IHT1 H5. apply (Max.max_lub_l _ _ _ H).
+    forwards~ : IHT2 H6. apply (Max.max_lub_r _ _ _ H).
+  lets: le_S_n H. inversions H2.
+    apply_fresh type_all_closed as X.
+    forwards~ : H5 X.
+    unfolds open_tt.
+    replace (typ_fvar X) with (subst_tt Z Q (typ_fvar X)) by
+       (rewrite* subst_tt_fresh; simpls; autos).
+    replace (typ_fvar X) with (subst_tt Z P (typ_fvar X)) in H2 by
+       (rewrite* subst_tt_fresh; simpls; autos).
+    rewrite <- subst_tt_open_tt_rec in *; auto.
+    apply* IHk. rewrite* <- degree_eq_open_tt_rec.
+Qed.
+
+Lemma subst_tt_type_type: forall P Q T Z,
+  type P -> type Q ->  type (subst_tt Z P T) -> type (subst_tt Z Q T).
+Proof. intros. remember (degree T) as k.
+   eapply subst_tt_type_type_k. symmetry in Heqk. apply* PeanoNat.Nat.eq_le_incl.
+   exact H. auto. auto.
+Qed.
+
+Hint Resolve capsafe_closed_typ healthy_env_capsafe not_capsafe_caprod subst_tt_type_type.
 
 Definition same_cap T1 T2 := (capsafe T1 /\ capsafe T2) \/ (caprod T1 /\ caprod T2).
 Definition same_as_cap T1 T2 := (capsafe T1 -> capsafe T2) /\ (caprod T1 -> caprod T2).
 
+Lemma same_cap_regular: forall T1 T2, same_cap T1 T2 -> type T1 /\ type T2.
+Proof. intros. destruct H; destruct H; split; autos* capsafe_regular caprod_regular. Qed.
+
+Lemma same_cap_subst_tt_0: forall T Z P Q,
+  degree T = 0 -> same_cap P Q -> same_as_cap (subst_tt Z P T) (subst_tt Z Q T).
+Proof. intros.  inductions T; unfolds; autos.
+  simpls; splits; cases_if*; unfolds same_cap; intros.
+    destruct* H0. false* (capsafe_not_caprod H1).
+    destruct* H0. destruct H0. false* (capsafe_not_caprod H0).
+  forwards~ : IHT1 Z H0. lets*: degree_parent_zero H.
+    forwards~ : IHT2 Z H0. lets*: degree_parent_zero H.
+    unfolds same_as_cap.
+    destruct H1. destruct H2.  destruct (same_cap_regular H0).
+    splits; intros. inversions H7; simpl.
+      apply capsafe_C_X; autos* subst_tt_type_type.
+      apply capsafe_X_S; autos* subst_tt_type_type.
+    inversions H7. apply* caprod_S_C.
+  simpls. inversions H.
+Qed.
+
+Lemma same_cap_subst_tt_k: forall T Z P Q k,
+  degree T <= k -> same_cap P Q -> same_as_cap (subst_tt Z P T) (subst_tt Z Q T).
+Proof. intros. gen T P Q Z. inductions k; intros.
+  lets: Le.le_n_0_eq H. apply* same_cap_subst_tt_0.
+
+  inductions T; simpls; unfolds; autos.
+  splits; cases_if*; unfolds same_cap; intros.
+    destruct* H0. false* (capsafe_not_caprod H1).
+    destruct* H0. destruct H0. false* (capsafe_not_caprod H0).
+  forwards~ : IHT1 H0 Z. apply (Max.max_lub_l _ _ _ H).
+    forwards~ : IHT2 H0 Z. apply (Max.max_lub_r _ _ _ H).
+    destruct H1. destruct H2. destruct (same_cap_regular H0).
+    splits; intros. inversions H7.
+      apply capsafe_C_X; autos* subst_tt_type_type.
+      apply capsafe_X_S; autos* subst_tt_type_type.
+    inversions H7. apply* caprod_S_C.
+
+  split; intros. inversions H1. destruct H4. destruct (same_cap_regular H0).
+    apply capsafe_A. unsimpl (subst_tt Z Q (typ_all_closed T)).  autos* subst_tt_type_type.
+    lets: le_S_n H. split.
+      replace (typ_arrow_closed typ_base typ_eff) with
+          (subst_tt Z Q (typ_arrow_closed typ_base typ_eff)) by reflexivity.
+        replace (typ_arrow_closed typ_base typ_eff) with
+          (subst_tt Z P (typ_arrow_closed typ_base typ_eff)) in H1 by reflexivity.
+        unfolds open_tt. rewrite <- subst_tt_open_tt_rec in *; auto.
+        apply* IHk. rewrite* <- degree_eq_open_tt_rec.
+      replace typ_base with (subst_tt Z Q typ_base) by reflexivity.
+        replace typ_base with (subst_tt Z P typ_base) in H2 by reflexivity.
+        unfolds open_tt. rewrite <- subst_tt_open_tt_rec in *; auto.
+        apply* IHk. rewrite* <- degree_eq_open_tt_rec.
+  inversions H1. destruct H4; destruct (same_cap_regular H0).
+    apply caprod_A. unsimpl (subst_tt Z Q (typ_all_closed T)).  autos* subst_tt_type_type.
+    lets: le_S_n H. left.
+      replace (typ_arrow_closed typ_base typ_eff) with
+          (subst_tt Z Q (typ_arrow_closed typ_base typ_eff)) by reflexivity.
+        replace (typ_arrow_closed typ_base typ_eff) with
+          (subst_tt Z P (typ_arrow_closed typ_base typ_eff)) in H1 by reflexivity.
+        unfolds open_tt. rewrite <- subst_tt_open_tt_rec in *; auto.
+        apply* IHk. rewrite* <- degree_eq_open_tt_rec.
+    apply caprod_A. unsimpl (subst_tt Z Q (typ_all_closed T)).  autos* subst_tt_type_type.
+    lets: le_S_n H. right.
+      replace typ_base with (subst_tt Z Q typ_base) by reflexivity.
+        replace typ_base with (subst_tt Z P typ_base) in H1 by reflexivity.
+        unfolds open_tt. rewrite <- subst_tt_open_tt_rec in *; auto.
+        apply* IHk. rewrite* <- degree_eq_open_tt_rec.
+Qed.
+
 Lemma same_cap_subst_tt: forall T Z P Q,
   same_cap P Q -> same_as_cap (subst_tt Z P T) (subst_tt Z Q T).
-Proof. intros. inductions T; simpls; unfolds; autos.
-  splits; cases_if*; unfolds same_cap; intros.
-    destruct* H. false* (capsafe_not_caprod H0).
-    destruct* H. destruct H. false* (capsafe_not_caprod H).
-  forwards~ : IHT1 Z H. forwards~ : IHT2 Z H. unfolds same_as_cap.
-    destruct H0. destruct H1.
-    splits; intros. inversions H4.
-      apply capsafe_C_X.  admit. auto.
-      apply capsafe_X_S.  admit. auto.
-    inversions H4. apply* caprod_S_C.
-  split; intros. inversions H0. destruct H3. apply capsafe_A.
-    admit. admit. admit.
-Qed.
+Proof. intros. apply* same_cap_subst_tt_k. Qed.
 
 Lemma capsafe_subst_tt_caprod: forall T Z P Q,
   caprod P -> caprod Q -> capsafe (subst_tt Z P T) -> capsafe (subst_tt Z Q T).
