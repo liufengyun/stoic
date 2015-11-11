@@ -137,6 +137,8 @@ Definition env := LibEnv.env bind.
   implies that T is a type *)
 
 Inductive wft : env -> typ -> Prop :=
+  | wft_base: forall E, wft E typ_base
+  | wft_eff: forall E, wft E typ_eff
   | wft_var : forall E X,
       binds X bind_X E ->
       wft E (typ_fvar X)
@@ -260,14 +262,16 @@ Inductive capsafe: typ -> Prop :=
  | capsafe_C_X: forall S T, type T -> caprod S -> capsafe (typ_arrow_closed S T)
  | capsafe_X_S: forall S T, type S -> capsafe T -> capsafe (typ_arrow_closed S T)
  | capsafe_A: forall T, type (typ_all_closed T) ->
-                        capsafe (open_tt T typ_eff) /\ capsafe (open_tt T typ_base) ->
+                        capsafe (open_tt T (typ_arrow_closed typ_base typ_eff)) /\
+                        capsafe (open_tt T typ_base) ->
                         capsafe (typ_all_closed T)
 
 with caprod: typ -> Prop :=
  | caprod_E: caprod typ_eff
  | caprod_S_C: forall S T, capsafe S -> caprod T -> caprod (typ_arrow_closed S T)
  | caprod_A: forall T, type (typ_all_closed T) ->
-                       caprod (open_tt T typ_eff) \/ caprod (open_tt T typ_base) ->
+                       caprod (open_tt T (typ_arrow_closed typ_base typ_eff)) \/
+                       caprod (open_tt T typ_base) ->
                        caprod (typ_all_closed T).
 
 Inductive healthy: env -> Prop :=
@@ -979,11 +983,9 @@ Qed.
 Lemma notin_fv_wf : forall E X T,
   wft E T -> X # E -> X \notin fv_tt T.
 Proof.
-  induction 1; intros Fr; simpl.
-  eauto.
+  induction 1; intros Fr; simpl; autos* notin_empty.
   rewrite notin_singleton. intro. subst. applys binds_fresh_inv H Fr.
-  notin_simpl; auto.
-  notin_simpl; auto. pick_fresh Y. apply* (@notin_fv_tt_open Y).
+  pick_fresh Y. apply* (@notin_fv_tt_open Y).
 Qed.
 
 Lemma map_subst_tb_id : forall G Z P,
@@ -1127,22 +1129,20 @@ Proof. intros. induction E.
 Qed.
 
 Lemma closed_env_wft: forall E V, ok E -> wft (closed_env E) V -> wft E V.
-Proof. intros. remember (closed_env E) as G. gen E. induction H0; intros; subst.
+Proof. intros. remember (closed_env E) as G. gen E. induction H0; intros; substs; autos.
   apply wft_var. apply* closed_env_binds.
-  apply* wft_arrow_closed.
   apply_fresh* wft_all_closed as Y. apply* H0. repeat(rewrite <- cons_to_push). autos.
 Qed.
 
 Lemma closed_env_wft_weaken: forall E F G V,
   ok (E & F & G) -> wft (E & (closed_env F) & G) V -> wft (E & F & G) V.
-Proof. intros. inductions H0; intros; subst.
+Proof. intros. inductions H0; intros; subst; autos.
   apply wft_var. binds_cases H0.
     apply binds_concat_left; autos. apply* binds_concat_left_ok.
     apply binds_concat_left; autos. apply* binds_concat_right. apply* closed_env_binds.
       lets*: ok_concat_inv_r (ok_concat_inv_l H).
     apply binds_concat_right. auto.
-  apply* wft_arrow_closed.
-  apply_fresh* wft_all_closed as Y.
+  apply_fresh wft_all_closed as Y.
     assert (HI: ok (E & F & (G & [: Y :]))).
       rewrite concat_assoc. apply* ok_push.
     forwards~ HII: (H0 Y). apply HI.  rewrite* concat_assoc.
@@ -1150,9 +1150,8 @@ Proof. intros. inductions H0; intros; subst.
 Qed.
 
 Lemma closed_env_wft_reverse: forall E V, wft E V -> wft (closed_env E) V.
-Proof. intros. induction H.
+Proof. intros. inductions H; autos.
   apply wft_var. apply* closed_env_binds_reverse.
-  apply* wft_arrow_closed.
   apply_fresh* wft_all_closed as Y. forwards~ HI: (H0 Y).
     rewrite closed_env_dist in HI. rewrite single_def in *. autos.
 Qed.
@@ -1372,9 +1371,9 @@ Qed.
 Lemma wft_fv_tt: forall E T,
   wft E T -> fv_tt T \c dom E.
 Proof.
-  intros. induction H; simpls.
+  intros. induction H; simpls; autos* subset_empty_l.
   lets: get_some_inv (binds_get H). unfolds. intros.
-    rewrite in_singleton in H1. rewrite* H1.
+    rewrite in_singleton in H2. rewrite* H2.
   replace (dom E) with (dom E \u dom E) by (autos* union_same). apply* subset_union_2.
   pick_fresh X. forwards~ HI: (H0 X). rewrite dom_concat in HI. rewrite dom_single in HI.
     assert (HII: fv_tt T \c dom E \u \{X}).
@@ -1632,32 +1631,6 @@ Qed.
 
 Hint Immediate capsafe_regular caprod_regular.
 
-Lemma capsafe_subst_tt: forall T,
-  capsafe T -> forall Z P, capsafe P -> capsafe (subst_tt Z P T).
-  apply (capsafe_mut
-           (fun T safeT => forall Z P, capsafe P -> capsafe (subst_tt Z P T) )
-           (fun T prodT => forall Z P, capsafe P -> caprod (subst_tt Z P T) )
-        ); intros; simpls; eauto.
-  case_if*.
-  apply capsafe_A. unsimpl (subst_tt Z P (typ_all_closed T)). auto.
-    admit.
-  apply caprod_A. unsimpl (subst_tt Z P (typ_all_closed T)). auto.
-    admit.
-Qed.
-
-Lemma caprod_subst_tt: forall T,
-  caprod T -> forall Z P, capsafe P -> caprod (subst_tt Z P T).
-  apply (caprod_mut
-           (fun T safeT => forall Z P, capsafe P -> capsafe (subst_tt Z P T) )
-           (fun T prodT => forall Z P, capsafe P -> caprod (subst_tt Z P T) )
-        ); intros; simpls; eauto.
-  case_if*.
-  apply capsafe_A. unsimpl (subst_tt Z P (typ_all_closed T)). auto.
-    admit.
-  apply caprod_A. unsimpl (subst_tt Z P (typ_all_closed T)). auto.
-    admit.
-Qed.
-
 Lemma capsafe_closed_typ: forall T, capsafe T -> closed_typ T = true.
 Proof. intros. inductions H; try reflexivity; try false; autos. Qed.
 
@@ -1692,7 +1665,8 @@ Proof. intros. gen T. inductions k; intros.
           autos* PeanoNat.Nat.le_neq PeanoNat.Nat.lt_succ_r.
     inversions H0. destruct H3. intros Hc. simpl in H. lets: le_S_n H.
       inversions Hc. destruct H6.
-        forwards~ : IHk (open_tt T typ_eff). rewrite* <- degree_eq_open_tt.
+        forwards~ : IHk (open_tt T (typ_arrow_closed typ_base typ_eff)).
+          rewrite* <- degree_eq_open_tt.
         forwards~ : IHk (open_tt T typ_base). rewrite* <- degree_eq_open_tt.
 Qed.
 
@@ -1716,7 +1690,8 @@ Proof. intros. gen T. inductions k; intros.
       forwards~ : IHT2. apply (Max.max_lub_r _ _ _ H0).
       destruct* H; destruct* H1.
     simpls. lets: le_S_n H0.
-      forwards~ : IHk (open_tt T typ_eff). rewrite* <- degree_eq_open_tt.
+      forwards~ : IHk (open_tt T (typ_arrow_closed typ_base typ_eff)).
+        rewrite* <- degree_eq_open_tt.
       forwards~ : IHk (open_tt T typ_base). rewrite* <- degree_eq_open_tt.
       destruct H2; destruct H3; eauto.
 Qed.
@@ -1752,28 +1727,56 @@ Proof. introv H Hb. inductions H.
     destruct H1. autos.
 Qed.
 
-Hint Resolve capsafe_subst_tt capsafe_closed_typ healthy_env_capsafe.
+Hint Resolve capsafe_closed_typ healthy_env_capsafe not_capsafe_caprod.
+
+Lemma capsafe_subst_tt_caprod: forall T Z P Q,
+  caprod P -> caprod Q -> capsafe (subst_tt Z P T) -> capsafe (subst_tt Z Q T).
+Proof. admit. Qed.
+
+Lemma capsafe_subst_tt_capsafe: forall T Z P Q,
+  capsafe P -> capsafe Q -> capsafe (subst_tt Z P T) -> capsafe (subst_tt Z Q T).
+Proof. admit. Qed.
+
+Lemma capsafe_all_open_tt: forall T U, type U ->
+  capsafe (typ_all_closed T) -> capsafe (open_tt T U).
+Proof. intros. inversions H0. destruct H3. destruct (capsafe_decidable H).
+  pick_fresh X. rewrite* (@subst_tt_intro X). eapply capsafe_subst_tt_capsafe.
+    apply capsafe_B. auto. rewrite* <- subst_tt_intro.
+  pick_fresh X.  rewrite* (@subst_tt_intro X). eapply capsafe_subst_tt_caprod.
+    apply caprod_S_C. apply capsafe_B. apply caprod_E. auto.
+    rewrite* <- subst_tt_intro.
+Qed.
 
 Lemma healthy_env_term_capsafe: forall E t T,
   healthy E ->
   typing E t T ->
   capsafe T.
-Proof. intros. inductions H0.
-  apply* healthy_env_capsafe.
-  pick_fresh x. forwards~ : H1 x.
-    assert (HI: type V) by destruct* (typing_regular H3).
-    destruct (capsafe_decidable HI).
-      apply* capsafe_X_S. apply* (H2 x). rewrite* (healthy_env_closed H).
-      apply* healthy_push_x. lets*: not_capsafe_caprod H4.
-      apply* capsafe_C_X. autos* wft_type typing_wft.
-  forwards~ : IHtyping1 H. forwards~ : IHtyping2 H. inversions* H0.
-    lets*: capsafe_not_caprod T1.
-  assert (typing E (trm_tabs e1) (typ_all_closed T1)) by apply* typing_tabs_closed.
-    let L' := gather_vars in apply capsafe_A with L'; autos* wft_type typing_wft.
-    intros. apply* H2. rewrite* (healthy_env_closed H). apply* healthy_push_X.
-  lets: IHtyping H. inversions H3. pick_fresh X. forwards~ : H6 X.
-    forwards~ : capsafe_subst_tt H3 X T.
-    rewrite* <- (@subst_tt_intro X) in H4.
+Proof. intros. destruct (typing_regular H0). clear H1. gen E T. inductions H2; intros.
+  inversions H0. apply* healthy_env_capsafe.
+  inversions H3. pick_fresh x. forwards~ : H9 x. rewrite (healthy_env_closed H2) in *.
+    destruct (capsafe_decidable H).
+      apply* capsafe_X_S. apply (H1 x) with (E & x ~: V); autos. apply* healthy_push_x.
+      apply capsafe_C_X. autos* wft_type typing_wft. apply* not_capsafe_caprod.
+  inversions H0. forwards~ : IHterm1 H4. forwards~ : IHterm2 H6.
+    inversions* H0. lets*: capsafe_not_caprod T1.
+  inversions H2. pick_fresh X. forwards~ : H6 X. rewrite (healthy_env_closed H1) in *.
+    assert (HI: typing E (open_te e1 typ_base) (open_tt T1 typ_base)).
+      rewrite <- (@concat_empty_r bind E). rewrite* (@subst_te_intro X).
+      rewrite* (@subst_tt_intro X).
+      replace empty with (map (subst_tb X typ_base) empty) by rewrite* map_empty.
+      apply* typing_through_subst_te. rewrite* concat_empty_r.
+    assert (HII: typing E (open_te e1 (typ_arrow_closed typ_base typ_eff))
+                        (open_tt T1 (typ_arrow_closed typ_base typ_eff))).
+      rewrite <- (@concat_empty_r bind E). rewrite* (@subst_te_intro X).
+      rewrite* (@subst_tt_intro X).
+      replace empty with (map (subst_tb X (typ_arrow_closed typ_base typ_eff)) empty) by
+          rewrite* map_empty.
+      apply* typing_through_subst_te. rewrite* concat_empty_r.
+    assert (typing E (trm_tabs e1) (typ_all_closed T1)).
+      apply* (@typing_tabs_closed L0). rewrite* (healthy_env_closed H1).
+    apply capsafe_A. autos* wft_type typing_wft. splits.
+      admit. admit. (* need to redefine the induction principle *)
+  inversions H1. apply* capsafe_all_open_tt.
 Qed.
 
 Lemma effect_safety_result : effect_safety.
