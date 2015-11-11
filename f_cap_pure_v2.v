@@ -1729,13 +1729,32 @@ Qed.
 
 Hint Resolve capsafe_closed_typ healthy_env_capsafe not_capsafe_caprod.
 
+Definition same_cap T1 T2 := (capsafe T1 /\ capsafe T2) \/ (caprod T1 /\ caprod T2).
+Definition same_as_cap T1 T2 := (capsafe T1 -> capsafe T2) /\ (caprod T1 -> caprod T2).
+
+Lemma same_cap_subst_tt: forall T Z P Q,
+  same_cap P Q -> same_as_cap (subst_tt Z P T) (subst_tt Z Q T).
+Proof. intros. inductions T; simpls; unfolds; autos.
+  splits; cases_if*; unfolds same_cap; intros.
+    destruct* H. false* (capsafe_not_caprod H0).
+    destruct* H. destruct H. false* (capsafe_not_caprod H).
+  forwards~ : IHT1 Z H. forwards~ : IHT2 Z H. unfolds same_as_cap.
+    destruct H0. destruct H1.
+    splits; intros. inversions H4.
+      apply capsafe_C_X.  admit. auto.
+      apply capsafe_X_S.  admit. auto.
+    inversions H4. apply* caprod_S_C.
+  split; intros. inversions H0. destruct H3. apply capsafe_A.
+    admit. admit. admit.
+Qed.
+
 Lemma capsafe_subst_tt_caprod: forall T Z P Q,
   caprod P -> caprod Q -> capsafe (subst_tt Z P T) -> capsafe (subst_tt Z Q T).
-Proof. admit. Qed.
+Proof. intros. forwards~ : same_cap_subst_tt T Z P Q. unfolds*. destruct* H2. Qed.
 
 Lemma capsafe_subst_tt_capsafe: forall T Z P Q,
   capsafe P -> capsafe Q -> capsafe (subst_tt Z P T) -> capsafe (subst_tt Z Q T).
-Proof. admit. Qed.
+Proof.  intros. forwards~ : same_cap_subst_tt T Z P Q. unfolds*. destruct* H2. Qed.
 
 Lemma capsafe_all_open_tt: forall T U, type U ->
   capsafe (typ_all_closed T) -> capsafe (open_tt T U).
