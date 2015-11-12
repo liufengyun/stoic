@@ -1793,15 +1793,15 @@ Qed.
 
 Lemma same_cap_subst_tt_k: forall T Z P Q k,
   degree T <= k -> same_cap P Q -> same_as_cap (subst_tt Z P T) (subst_tt Z Q T).
-Proof. intros. gen T P Q Z. inductions k; intros.
+Proof. intros. gen T. inductions k; intros.
   lets: Le.le_n_0_eq H. apply* same_cap_subst_tt_0.
 
   inductions T; simpls; unfolds; autos.
   splits; cases_if*; unfolds same_cap; intros.
     destruct* H0. false* (capsafe_not_caprod H1).
     destruct* H0. destruct H0. false* (capsafe_not_caprod H0).
-  forwards~ : IHT1 H0 Z. apply (Max.max_lub_l _ _ _ H).
-    forwards~ : IHT2 H0 Z. apply (Max.max_lub_r _ _ _ H).
+  forwards~ : IHT1. apply (Max.max_lub_l _ _ _ H).
+    forwards~ : IHT2. apply (Max.max_lub_r _ _ _ H).
     destruct H1. destruct H2. destruct (same_cap_regular H0).
     splits; intros. inversions H7.
       apply capsafe_C_X; autos* subst_tt_type_type.
