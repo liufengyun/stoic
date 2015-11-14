@@ -32,7 +32,8 @@ FILES=\
 	fsub_cfuns_ln \
 	fsub_cfuns_ln_v2 \
 	stlc_cap_pure \
-	f_cap_pure
+	f_cap_pure \
+	f_cap_pure_v2
 
 ALL=$(FILES)
 

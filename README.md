@@ -69,8 +69,8 @@ A **capability** is a term of type *E*. The *base type* is represented as `B`.
 An **effect-closed environment** is a typing environment from which
 (1) it’s impossible to construct a term whose type is E; (2) it's
 impossible to construct an application where the first term is not
-effect-closed; (3) any constructed term which is a universal type is
-effect-closed.
+effect-closed; (3) it's impossible to construct a type application
+where the first term is not effect-closed.
 
 An **effect-closed typing environment** is a subset of the ordinary
 typing environment, which particularly excludes variables of ordinary
@@ -110,18 +110,24 @@ environment*.
 
 ## Steps
 
-| Milestones                   |          Description                                   |         status      |
-| ---------------------------- | ------------------------------------------------------ | --------------------|
-|  Milestone 1                 |    STLC + closed functions                             |      Finished       |
-|  Milestone 2                 |    F + closed functions                                |      Finished       |
-|  Milestone 3                 |    F + closed functions + type variable capture        |      Finished       |
-|  Milestone 4                 |    F<: + closed functions                              |      Finished       |
-|  Milestone 5                 |    F<: + closed functions + type variable capture      |      Finished       |
-|  Milestone 6                 |    STLC + capabilities (pure)                          |      Finished       |
-|  Milestone 7                 |    F + capabilities (pure)                             |      working        |
-|  Milestone 8                 |    STLC + capabilities + => (impure)                   |      -              |
-|  Milestone 9                 |    F + capabilities + => (impure)                      |      -              |
-|  ...                         |                                                        |                     |
+| Milestones                                |          Description                                   |         status      |
+| ----------------------------------------- | ------------------------------------------------------ | --------------------|
+|  **Phase 1: Warm Up**                     |                                                        |                     |
+|  [stlc_cfun.v](stlc_cfun.v)               |    STLC + closed functions                             |      Finished       |
+|  [stlc_cfun_ln.v](stlc_cfun_ln.v)         |    STLC + closed functions(locally-nameless)           |      Finished       |
+|  [f_cfun_ln.v](f_cfun_ln.v)               |    F + closed functions                                |      Finished       |
+|  [f_cfun_ln_v2.v](f_cfun_ln_v2.v)         |    F + closed functions + type variable capture        |      Finished       |
+|  [fsub_cfuns_ln.v](fsub_cfuns_ln.v)       |    F<: + closed functions                              |      Finished       |
+|  [fsub_cfuns_ln_v2.v](fsub_cfuns_ln_v2.v) |    F<: + closed functions + type variable capture      |      Finished       |
+|  **Phase 2: Pure Capability Systems**     |                                                        |                     |
+|  [stlc_cap_pure.v](stlc_cap_pure.v)       |    STLC + capabilities (pure)                          |      Finished       |
+|  [f_cap_pure.v](f_cap_pure.v)             |    F + capabilities (pure)                             |      Finished       |
+|  [f_cap_pure_v2.v](f_cap_pure_v2.v)       |    F + capabilities v2 (pure)                          |      Finished       |
+|  ...                                      |                                                        |                     |
+|  **Phase 3: Impure Capability Systems**   |                                                        |                     |
+|                                           |    STLC + capabilities + => (impure)                   |      Working        |
+|                                           |    F + capabilities + => (impure)                      |      -              |
+|  ...                                      |                                                        |                     |
 
 ## Development
 
