@@ -112,21 +112,20 @@ environment*.
 
 | Milestones                                |          Description                                   |         status      |
 | ----------------------------------------- | ------------------------------------------------------ | --------------------|
-|  **Phase 1: Warm Up**                     |                                                        |                     |
-|  [stlc_cfun.v](stlc_cfun.v)               |    STLC + closed functions                             |      Finished       |
-|  [stlc_cfun_ln.v](stlc_cfun_ln.v)         |    STLC + closed functions(locally-nameless)           |      Finished       |
+|  **Phase 1**                              |    **Warm Up**                                         |                     |
+|  [stlc_cfun_ln.v](stlc_cfun_ln.v)         |    STLC + closed functions                             |      Finished       |
 |  [f_cfun_ln.v](f_cfun_ln.v)               |    F + closed functions                                |      Finished       |
-|  [f_cfun_ln_v2.v](f_cfun_ln_v2.v)         |    F + closed functions + type variable capture        |      Finished       |
+|  [f_cfun_ln_v2.v](f_cfun_ln_v2.v)         |    F + closed functions(type variable capture)         |      Finished       |
 |  [fsub_cfuns_ln.v](fsub_cfuns_ln.v)       |    F<: + closed functions                              |      Finished       |
-|  [fsub_cfuns_ln_v2.v](fsub_cfuns_ln_v2.v) |    F<: + closed functions + type variable capture      |      Finished       |
-|  **Phase 2: Pure Capability Systems**     |                                                        |                     |
-|  [stlc_cap_pure.v](stlc_cap_pure.v)       |    STLC + capabilities (pure)                          |      Finished       |
-|  [f_cap_pure.v](f_cap_pure.v)             |    F + capabilities (pure)                             |      Finished       |
-|  [f_cap_pure_v2.v](f_cap_pure_v2.v)       |    F + capabilities v2 (pure)                          |      Finished       |
+|  [fsub_cfuns_ln_v2.v](fsub_cfuns_ln_v2.v) |    F<: + closed functions(type variable capture)       |      Finished       |
+|  **Phase 2**                              |    **Pure Capability Systems**                         |                     |
+|  [stlc_cap_pure.v](stlc_cap_pure.v)       |    STLC + capabilities                                 |      Finished       |
+|  [f_cap_pure.v](f_cap_pure.v)             |    F + capabilities                                    |      Finished       |
+|  [f_cap_pure_v2.v](f_cap_pure_v2.v)       |    F + capabilities(allow B->E to type app)            |      Finished       |
 |  ...                                      |                                                        |                     |
-|  **Phase 3: Impure Capability Systems**   |                                                        |                     |
-|                                           |    STLC + capabilities + => (impure)                   |      Working        |
-|                                           |    F + capabilities + => (impure)                      |      -              |
+|  **Phase 3**                              |    **Impure Capability Systems**                       |                     |
+|  stlc_cap_impure.v                        |    STLC + capabilities + =>                            |      Working        |
+|  f_cap_impure.v                           |    F + capabilities + =>                               |      -              |
 |  ...                                      |                                                        |                     |
 
 ## Development
