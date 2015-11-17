@@ -124,7 +124,7 @@ environment*.
 |  [f_cap_pure_v2.v](f_cap_pure_v2.v)       |    F + capabilities(allow B->E to type app)            |      Finished       |
 |  ...                                      |                                                        |                     |
 |  **Phase 3**                              |    **Impure Capability Systems**                       |                     |
-|  stlc_cap_impure.v                        |    STLC + capabilities + =>                            |      Working        |
+|  [stlc_cap_impure.v](stlc_cap_impure.v)   |    STLC + capabilities + =>                            |      Working        |
 |  f_cap_impure.v                           |    F + capabilities + =>                               |      -              |
 |  ...                                      |                                                        |                     |
 
