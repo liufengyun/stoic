@@ -17,6 +17,7 @@ Require Import LibLN.
 Inductive typ : Set :=
   | typ_base         : typ
   | typ_eff          : typ
+  | typ_top          : typ
   | typ_arrow        : typ -> typ -> typ
   | typ_arrow_closed : typ -> typ -> typ.
 
@@ -93,6 +94,7 @@ Definition ctx := env typ.
 
 Fixpoint closed_typ(t: typ) := match t with
   | typ_base            => true
+  | typ_top             => true
   | typ_eff             => false
   | typ_arrow U V       => false
   | typ_arrow_closed U V => true   (* effect-closed lambda abstraction *)
@@ -110,6 +112,9 @@ Fixpoint closed_env(E: ctx) := match E with
 (** ** Typing *)
 
 Inductive sub: typ -> typ -> Prop :=
+  | sub_refl: forall T, sub T T
+  | sub_top: forall T, sub T typ_top
+  | sub_trans: forall S T U, sub S T -> sub T U -> sub S U
   | sub_closed_open: forall S T, sub (typ_arrow_closed S T) (typ_arrow S T)
   | sub_arrow : forall S1 S2 T1 T2,
       sub T1 S1 ->
@@ -487,6 +492,65 @@ Proof. intros. induction* H; subst.
 Qed.
 
 (* ********************************************************************** *)
+(** ** subtyping properties *)
+
+Lemma sub_arrow_closed_inv: forall T U1 U2,
+  sub T (typ_arrow_closed U1 U2) ->
+  exists S1 S2, T = typ_arrow_closed S1 S2.
+Proof. intros. gen_eq S: (typ_arrow_closed U1 U2). gen U1 U2.
+  inductions H; intros; substs; tryfalse; jauto.
+  forwards~ : IHsub2 U1 U2. destruct* H1 as [M1 [M2 H1]].
+Qed.
+
+Lemma sub_arrow_inv: forall T U1 U2,
+  sub T (typ_arrow U1 U2) ->
+  exists S1 S2, T = typ_arrow S1 S2 \/ T = typ_arrow_closed S1 S2.
+Proof. intros.
+  gen_eq S: (typ_arrow U1 U2).  gen U1 U2.
+  inductions H; intros; substs; tryfalse; jauto.
+  forwards~ : IHsub2 U1 U2. destruct* H1 as [M1 [M2 H1]]. destruct* H1.
+    substs. lets*: sub_arrow_closed_inv H. jauto.
+Qed.
+
+Lemma sub_arrow_inv_sub: forall S1 S2 U1 U2,
+  sub (typ_arrow S1 S2) (typ_arrow U1 U2) ->
+  sub U1 S1 /\ sub S2 U2.
+Proof. intros. gen_eq T1: (typ_arrow S1 S2). gen_eq T2: (typ_arrow U1 U2).
+  gen S1 S2 U1 U2. inductions H; intros; substs; tryfalse; auto.
+  inversions* H1.
+  lets: sub_arrow_inv H0. destruct H1 as [M1 [M2 H1]]. destruct H1.
+    forwards~ : IHsub2 M1 M2. forwards~ : IHsub1 S1 S2 M1 M2. split; jauto.
+    substs. false* (sub_arrow_closed_inv H).
+  inversions H1. inversions H2. jauto.
+Qed.
+
+Lemma sub_arrow_closed_inv_sub: forall S1 S2 U1 U2,
+  sub (typ_arrow_closed S1 S2) (typ_arrow_closed U1 U2) ->
+  sub U1 S1 /\ sub S2 U2.
+Proof. intros. gen_eq T1: (typ_arrow_closed S1 S2). gen_eq T2: (typ_arrow_closed U1 U2).
+  gen S1 S2 U1 U2. inductions H; intros; substs; tryfalse; auto.
+  inversions* H1.
+  lets: sub_arrow_closed_inv H0. destruct H1 as [M1 [M2 H1]]. substs.
+    forwards~ : IHsub2. forwards~ : IHsub1. jauto.
+  inversions H1. inversions H2. jauto.
+Qed.
+
+Lemma sub_arrow_mixed_inv_sub: forall S1 S2 U1 U2,
+  sub (typ_arrow_closed S1 S2) (typ_arrow U1 U2) ->
+  sub U1 S1 /\ sub S2 U2.
+Proof. intros. gen_eq T1: (typ_arrow_closed S1 S2). gen_eq T2: (typ_arrow U1 U2).
+  gen S1 S2 U1 U2. inductions H; intros; substs; tryfalse; auto.
+  lets: sub_arrow_inv H0. destruct H1 as [M1 [M2 H1]]. destruct H1; substs.
+    forwards~ : IHsub1 S1 S2 M1 M2. lets: sub_arrow_inv_sub H0. jauto.
+    forwards~ : IHsub2. lets: sub_arrow_closed_inv_sub H. jauto.
+  inversions H1. inversions H0. jauto.
+Qed.
+
+Lemma sub_arrow_mixed_inv_false: forall S1 S2 U1 U2,
+  sub (typ_arrow S1 S2) (typ_arrow_closed U1 U2) -> False.
+Proof. intros. lets: sub_arrow_closed_inv H. false* H0. Qed.
+
+(* ********************************************************************** *)
 (** ** Checking that the main proofs still type-check *)
 
 Lemma typing_weaken : forall G E F t T,
@@ -528,6 +592,24 @@ Proof. intros. inductions H.
     apply_ih_bind* H1. rewrite* closed_env_eq. forwards~ : H0 x.
   apply* typing_app.
   apply* typing_sub.
+Qed.
+
+Lemma typing_inv_abs : forall E S1 e1 T,
+  typing E (trm_abs S1 e1) T ->
+  forall U1 U2, sub T (typ_arrow U1 U2) ->
+     sub U1 S1
+  /\ exists S2, exists L, forall x, x \notin L ->
+     typing (E & x ~ S1) (e1 ^^ x) S2 /\ sub S2 U2.
+Proof.
+  introv Typ. gen_eq e: (trm_abs S1 e1). gen S1 e1.
+  induction Typ; intros S1 b1 EQ U1 U2 Sub; inversions EQ.
+  destruct* (sub_arrow_inv_sub Sub).
+  destruct (sub_arrow_mixed_inv_sub Sub). split*.
+    let L' := gather_vars in exists T1 L'. intros.
+    forwards~ : H0 x. split*.
+    rewrite <- (@concat_empty_l typ E). apply typing_weakening_env;
+    rewrite* concat_empty_l.
+  forwards~ : IHTyp S1 b1. apply sub_trans with T; eauto. jauto.
 Qed.
 
 Lemma typing_strengthen_env: forall E u U, value u -> typing E u U ->
@@ -574,15 +656,16 @@ Proof.
   apply* typing_sub.
 Qed.
 
+
 Lemma typing_app_sub: forall E T t1 t2 S,  value t2 ->
   E |= trm_abs T t1 ~: (typ_arrow S T) ->
   E |= t2 ~: S -> E |= t1 ^^ t2 ~: T.
-Proof. intros. inductions H0.
+Proof. intros. inductions H0; intros.
   pick_fresh x. rewrite* (@subst_intro x). apply_empty* typing_subst.
-  inductions H1. intros.
-    inversions H2. pick_fresh x. rewrite* (@subst_intro x). apply_empty* typing_subst.
+  inductions S0; try solve [inversions H1].
+    inversions H0. pick_fresh x. rewrite* (@subst_intro x). apply_empty* typing_subst.
       rewrite <- (@concat_empty_l typ E). apply* typing_weakening_env; rewrite* concat_empty_l.
-      inversions H3.
+      inversions H3. inversions H1. pick_fresh x. rewrite* (@subst_intro x).
 
 
 Lemma preservation_result : preservation_statement.
