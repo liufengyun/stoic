@@ -118,15 +118,17 @@ environment*.
 |  [f_cfun_ln_v2.v](f_cfun_ln_v2.v)         |    F + closed functions(type variable capture)         |      Finished       |
 |  [fsub_cfuns_ln.v](fsub_cfuns_ln.v)       |    F<: + closed functions                              |      Finished       |
 |  [fsub_cfuns_ln_v2.v](fsub_cfuns_ln_v2.v) |    F<: + closed functions(type variable capture)       |      Finished       |
-|  **Phase 2**                              |    **Pure Capability Systems**                         |                     |
+|  **Phase 2**                              |    **Pure Capability**                                 |                     |
 |  [stlc_cap_pure.v](stlc_cap_pure.v)       |    STLC + capabilities                                 |      Finished       |
 |  [f_cap_pure.v](f_cap_pure.v)             |    F + capabilities                                    |      Finished       |
 |  [f_cap_pure_v2.v](f_cap_pure_v2.v)       |    F + capabilities(allow B->E to type app)            |      Finished       |
-|  ...                                      |                                                        |                     |
-|  **Phase 3**                              |    **Impure Capability Systems**                       |                     |
+|  **Phase 3**                              |    **Pure Capability + Subtyping**                     |                     |
+|  [stlc_cap_sub_pure.v](stlc_cap_sub_pure.v) |    STLC + capabilities + Subtyping                   |      Finished       |
+|  fsub_cap_pure.v                          |    F<: + capabilities                                  |      -              |
+|  **Phase 4**                              |    **Impure Capability + Subtyping**                   |                     |
 |  [stlc_cap_impure.v](stlc_cap_impure.v)   |    STLC + capabilities + =>                            |      Working        |
-|  f_cap_impure.v                           |    F + capabilities + =>                               |      -              |
-|  ...                                      |                                                        |                     |
+|  fsub_cap_impure.v                        |    F<: + capabilities + =>                             |      -              |
+
 
 ## Development
 
