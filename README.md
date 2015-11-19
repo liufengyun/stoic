@@ -123,7 +123,7 @@ environment*.
 |  [f_cap_pure.v](f_cap_pure.v)             |    F + capabilities                                    |      Finished       |
 |  [f_cap_pure_v2.v](f_cap_pure_v2.v)       |    F + capabilities(allow B->E to type app)            |      Finished       |
 |  **Phase 3**                              |    **Pure Capability + Subtyping**                     |                     |
-|  [stlc_cap_sub_pure.v](stlc_cap_sub_pure.v) |    STLC + capabilities + Subtyping                   |      Finished       |
+|  [stlc_cap_sub_pure.v](stlc_cap_sub_pure.v) |    STLC + capabilities + subtyping                   |      Finished       |
 |  fsub_cap_pure.v                          |    F<: + capabilities                                  |      -              |
 |  **Phase 4**                              |    **Impure Capability + Subtyping**                   |                     |
 |  [stlc_cap_impure.v](stlc_cap_impure.v)   |    STLC + capabilities + =>                            |      Working        |
