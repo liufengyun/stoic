@@ -392,6 +392,16 @@ Hint Extern 1 (term ?t) =>
 
 (* ********************************************************************** *)
 (** * Properties of environment *)
+
+Lemma closed_env_closed: forall E x T, binds x T (closed_env E) -> closed_typ T = true.
+Proof. intros. inductions E.
+  simpls. rewrite <- empty_def in H. false* binds_empty_inv.
+  destruct a. simpls. cases* (closed_typ t).
+    rewrite cons_to_push in H. destruct (classic (x = v)).
+    substs. lets: binds_push_eq_inv H. subst*.
+    lets*: binds_push_neq_inv H H0.
+Qed.
+
 Lemma closed_env_dist: forall E F, closed_env (E & F) = closed_env E & closed_env F.
 Proof. rewrite concat_def. intros. gen E. induction F; intros E; autos.
   rewrite LibList.app_cons. destruct a.
@@ -552,8 +562,77 @@ Lemma sub_arrow_mixed_inv_false: forall S1 S2 U1 U2,
   sub (typ_arrow S1 S2) (typ_arrow_closed U1 U2) -> False.
 Proof. intros. lets: sub_arrow_closed_inv H. false* H0. Qed.
 
+Lemma sub_base_eq: forall S, sub S typ_base -> S = typ_base.
+Proof. intros. inductions H; auto. Qed.
+
+Hint Resolve sub_arrow_mixed_inv_false sub_base_eq.
+
+
 (* ********************************************************************** *)
-(** ** Checking that the main proofs still type-check *)
+(** * capsafe/caprod properties *)
+
+Hint Constructors capsafe caprod.
+
+Lemma capsafe_not_caprod : forall T, capsafe T -> ~ caprod T.
+Proof. intros T H Hc. inductions T; inversions Hc. inversions H.
+  inversions H; auto.
+  inversions H; auto.
+Qed.
+
+Lemma capsafe_caprod_classic: forall T, capsafe T \/ caprod T.
+Proof. intros T. inductions T; jauto. destruct* IHT2. Qed.
+
+Lemma capsafe_decidable: forall T, capsafe T \/ ~ capsafe T.
+Proof. intros. destruct (capsafe_caprod_classic T). left*.
+  right. intros Hc. lets*: capsafe_not_caprod Hc.
+Qed.
+
+Lemma not_capsafe_caprod : forall T, ~capsafe T -> caprod T.
+Proof. intros T H. inductions T; auto; try solve [false; jauto].
+  destruct* (capsafe_decidable T1).
+  destruct* (capsafe_decidable T2).
+    false. apply* H.
+    false. apply* H.
+Qed.
+
+Lemma capsafe_closed_typ: forall T, capsafe T -> closed_typ T = true.
+Proof. intros. inductions H; try reflexivity; try false; autos. Qed.
+
+Lemma healthy_env_closed: forall E, healthy E -> closed_env E = E.
+Proof. intros. inductions H.
+  rewrite empty_def. reflexivity.
+  rewrite <- cons_to_push. simpls. lets: capsafe_closed_typ H.
+    rewrite* H2. rewrite* IHhealthy.
+Qed.
+
+Lemma healthy_env_capsafe : forall E S x, healthy E ->
+   binds x S E ->  capsafe S.
+Proof. introv H Hb. inductions H.
+  false. apply* binds_empty_inv.
+  destruct (binds_push_inv Hb).
+    destruct H2. subst. autos.
+    destruct H2. autos.
+Qed.
+
+Hint Resolve capsafe_closed_typ healthy_env_capsafe.
+
+(* ********************************************************************** *)
+(** ** typing properties *)
+
+Definition closed_trm (E: ctx) (t: trm) := exists T, closed_env E |= t ~: T.
+
+Lemma closed_trm_closed: forall E t, closed_trm E t ->
+  exists S, closed_env E |= t ~: S /\ closed_typ S = true.
+Proof. intros. unfolds closed_trm; destruct H. inductions H; jauto.
+  exists T. split*. apply* closed_env_closed.
+  forwards~ : IHtyping E.
+Qed.
+
+Lemma closed_trm_sub: forall E t T, closed_trm E t -> E |= t ~: T ->
+  exists S, closed_env E |= t ~: S /\ sub S T.
+Proof. intros. inductions H0; unfolds closed_trm; destruct H.
+  inversions H. admit.
+
 
 Lemma typing_weaken : forall G E F t T,
    (E & G) |= t ~: T ->
@@ -706,48 +785,6 @@ Qed.
 
 (* ********************************************************************** *)
 (** * effect safety *)
-
-Hint Constructors capsafe caprod.
-
-Lemma capsafe_not_caprod : forall T, capsafe T -> ~ caprod T.
-Proof. intros T H Hc. inductions T; inversions Hc. inversions H.
-  inversions H; auto.
-Qed.
-
-Lemma capsafe_caprod_classic: forall T, capsafe T \/ caprod T.
-Proof. intros T. inductions T. left*. right*. destruct* IHT2. Qed.
-
-Lemma capsafe_decidable: forall T, capsafe T \/ ~ capsafe T.
-Proof. intros. destruct (capsafe_caprod_classic T). left*.
-  right. intros Hc. lets*: capsafe_not_caprod Hc.
-Qed.
-
-Lemma not_capsafe_caprod : forall T, ~capsafe T -> caprod T.
-Proof. intros T H. inductions T; auto.
-  false. apply* H. destruct* (capsafe_decidable T1).
-  destruct* (capsafe_decidable T2).
-    false. apply* H.
-    false. apply* H.
-Qed.
-
-Lemma capsafe_closed_typ: forall T, capsafe T -> closed_typ T = true.
-Proof. intros. inductions H; try reflexivity; try false; autos. Qed.
-
-Lemma healthy_env_closed: forall E, healthy E -> closed_env E = E.
-Proof. intros. inductions H.
-  rewrite empty_def. reflexivity.
-  rewrite <- cons_to_push. simpls. lets: capsafe_closed_typ H.
-    rewrite* H2. rewrite* IHhealthy.
-Qed.
-
-Lemma healthy_env_capsafe : forall E S x, healthy E ->
-   binds x S E ->  capsafe S.
-Proof. introv H Hb. inductions H.
-  false. apply* binds_empty_inv.
-  destruct (binds_push_inv Hb).
-    destruct H2. subst. autos.
-    destruct H2. autos.
-Qed.
 
 Lemma healthy_env_term_capsafe: forall E t T,
   healthy E ->
