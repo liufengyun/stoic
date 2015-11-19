@@ -172,6 +172,7 @@ Definition progress_statement := forall t T,
 
 Inductive capsafe: typ -> Prop :=
 | capsafe_B: capsafe typ_base
+| capsafe_T: capsafe typ_top
 | capsafe_C_X: forall S T, caprod S -> capsafe (typ_arrow_closed S T)
 | capsafe_X_S: forall S T, capsafe T -> capsafe (typ_arrow_closed S T)
 
@@ -188,8 +189,9 @@ Inductive healthy: ctx -> Prop :=
 Definition effect_safety_no_capability := forall E, healthy E ->
   ~exists e, typing E e typ_eff.
 
-Definition effect_safety_arrow_closed := forall E, healthy E ->
-  ~exists e, typing E e typ_eff.
+Definition effect_safety_arrow_closed := forall E S1 S2 e, healthy E ->
+  typing E e (typ_arrow S1 S2) ->
+  exists T1 T2, typing E e (typ_arrow_closed T1 T2).
 
 (* ********************************************************************** *)
 (* ********************************************************************** *)
