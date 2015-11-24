@@ -174,7 +174,6 @@ Inductive capsafe: typ -> Prop :=
 
 with caprod: typ -> Prop :=
  | caprod_E: caprod typ_eff
- | caprod_arrow: forall S T, caprod (typ_arrow S T)
  | caprod_S_C: forall S T, capsafe S -> caprod T -> caprod (typ_arrow_closed S T).
 
 Inductive healthy: ctx -> Prop :=
@@ -563,24 +562,34 @@ Hint Constructors capsafe caprod.
 Lemma capsafe_not_caprod : forall T, capsafe T -> ~ caprod T.
 Proof. intros T H Hc. inductions T; inversions Hc. inversions H.
   inversions H; auto.
+Qed.
+
+Lemma type_arrow_nothing: forall S T, ~ capsafe (typ_arrow S T) /\ ~ caprod (typ_arrow S T).
+Proof. intros. splits; intros Hc; inversion Hc. Qed.
+
+Lemma caprod_not_capsafe : forall T, caprod T -> ~capsafe T.
+Proof. intros T H Hc. inductions T; inversions Hc. inversions H.
+  inversions H; auto.
   inversions H; auto.
 Qed.
 
-Lemma capsafe_caprod_classic: forall T, capsafe T \/ caprod T.
-Proof. intros T. inductions T; jauto. destruct* IHT2. Qed.
+Lemma cap_decidable: forall T, (caprod T \/ ~ caprod T) /\ (capsafe T \/ ~capsafe T).
+Proof. intros. inductions T.
+  splits; auto. right; intros Hc; inversion Hc.
+  splits; auto. right; intros Hc; inversion Hc.
+  splits; right; intros Hc; inversion Hc.
+  splits;
+    destruct IHT1; destruct IHT2;
+    destruct H; destruct H0; destruct H1; destruct H2;
+          try solve [left*];
+          try solve [right; intros Hc; inversions* Hc].
+Qed.
+
+Lemma caprod_decidable: forall T, caprod T \/ ~ caprod T.
+Proof. intros. lets*: cap_decidable T. Qed.
 
 Lemma capsafe_decidable: forall T, capsafe T \/ ~ capsafe T.
-Proof. intros. destruct (capsafe_caprod_classic T). left*.
-  right. intros Hc. lets*: capsafe_not_caprod Hc.
-Qed.
-
-Lemma not_capsafe_caprod : forall T, ~capsafe T -> caprod T.
-Proof. intros T H. inductions T; auto; try solve [false; jauto].
-  destruct* (capsafe_decidable T1).
-  destruct* (capsafe_decidable T2).
-    false. apply* H.
-    false. apply* H.
-Qed.
+Proof. intros. lets*: cap_decidable T.  Qed.
 
 Lemma capsafe_closed_typ: forall T, capsafe T -> closed_typ T = true.
 Proof. intros. inductions H; try reflexivity; try false; autos. Qed.
