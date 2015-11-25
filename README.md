@@ -67,23 +67,20 @@ a passed in function can have.
 A **capability** is a term of type `E`. The **base type** is
 represented as `B`.
 
-An **effect-closed typing environment** is a subset of the ordinary
-typing environment, which particularly excludes variables of ordinary
-function types, variables of capability types and so on. Different
-systems may differ in details about what types can be kept in the
-*effect-closed typing environment*, though they must all be
-*effect-safe*. Note that the effect-closed typing environment may
-contain variables of ill types (un-inhabitable), such as `All X.X`, `B
--> E` and so on. These ill types doesn't pose a problem, as from
-absurdity everything follows(ex falso quodlibet).
+A **pure environment** is a subset of the ordinary typing environment,
+which particularly excludes variables of ordinary function types,
+variables of capability types and so on. Different systems may differ
+in details about what types can be kept in the *pure environment*,
+though they must all be *effect-safe*. Note that the pure environment
+may contain variables of ill types (un-inhabitable), such as `All
+X.X`, `B -> E` and so on. These ill types doesn't pose a problem, as
+from absurdity everything follows (*ex falso quodlibet*).
 
 An **effect-closed term abstraction** is a term abstraction that can
-be typed in *effect-closed typing environment*. Its type is represented by `A
--> B`.
+be typed in *pure environment*. Its type is represented by `A -> B`.
 
 An **effect-closed type abstraction** is a term that can be typed in
-*effect-closed typing environment*. Its type is represented by `All_Closed
-X.T`.
+*pure environment*. Its type is represented by `All_Closed X.T`.
 
 An **ordinary term abstraction** is a term abstraction which can
 capture anything in the lexical scope.  Its type is represented by `A
@@ -93,15 +90,15 @@ An **ordinary type abstraction** is a type abstraction which can
 capture anything in the lexical scope. Its type is represented by `All
 X.T`.
 
-A **healthy environment** is an *effect-closed typing environment*
-where it does not contain variables of ill types (un-inhabitable),
-such as `All X.X`, `B -> E` and so on. As a meta-theory, it's
-important to prove that **the formulation of healthy environment
-should only reject ill types(un-inhabitable)**. It's incorrect to
-reject inhabitable types, but it's OK to keep ill types, as long as
-effect safety can be proved. For example, in our formulation the
-presence of the un-inhabitable type `E -> B -> E` in healthy
-environment does not endanger effect safety.
+A **healthy environment** is a *pure environment* where it does not
+contain variables of ill types (un-inhabitable), such as `All X.X`, `B
+-> E` and so on. As a meta-theory, it's important to prove that **the
+formulation of healthy environment should only reject ill
+types(un-inhabitable)** in addition to types excluded by *pure
+environment*. It's incorrect to reject inhabitable types, but it's OK
+to keep ill types, as long as effect safety can be proved. For
+example, in our formulation the presence of the un-inhabitable type `E
+-> B -> E` in healthy environment does not endanger effect safety.
 
 A capability-based type-and-effect system is **effect-safe** if from a
 **healthy environment** (1) it’s impossible to construct a term of
