@@ -91,11 +91,14 @@ capture anything in the lexical scope. Its type is represented by `All
 X.T`.
 
 A **healthy environment** is an *effect-closed typing environment*
-where it does not contain variables of ill types, such as `All X.X`,
-`B -> E` and so on. These ill types doesn't pose a problem in
-effect-closed typing, as from absurdity everything
+where it does not contain variables of ill types(inhabitable), such as
+`All X.X`, `B -> E` and so on. These ill types doesn't pose a problem
+in effect-closed typing, as from absurdity everything
 follows. Formulation of *healthy environment* should only reject ill
-types.
+types, but it's OK to have ill types in healthy environment, as long
+as effect safety can be proved. For example, in our formulation the
+inhabitable type `E -> B -> E` is regarded as healthy, its presence in
+healthy environment does not endanger effect safety.
 
 A capability-based type-and-effect system is **effect-safe** if from a
 **healthy environment** (1) it’s impossible to construct a term of
