@@ -66,24 +66,12 @@ a passed in function can have.
 
 A **capability** is a term of type *E*. The *base type* is represented as `B`.
 
-An **effect-closed environment** is a typing environment from which
-(1) it’s impossible to construct a term whose type is E; (2) it's
-impossible to construct an application where the first term is not
-effect-closed; (3) it's impossible to construct a type application
-where the first term is not effect-closed.
-
 An **effect-closed typing environment** is a subset of the ordinary
 typing environment, which particularly excludes variables of ordinary
 function types, variables of capability types and so on. Different
 systems may differ in details about what types can be kept in the
 *effect-closed typing environment*, though they must all be
 *effect-safe*.
-
-Note that an *effect-closed typing environment* is not an
-*effect-closed environment*, as `B -> E` and `All_Closed X.X` might
-appear in the *effect-closed typing environment*, thus makes it
-possible to create a term of type `E`. This doesn't pose a problem, as
-from absurdity it's possible to infer anything.
 
 An **effect-closed term abstraction** is a term abstraction that can
 be typed in *effect-closed typing environment*. Its type is represented by `A
@@ -101,12 +89,18 @@ An **ordinary type abstraction** is a type abstraction which can
 capture anything in the lexical scope. Its type is represented by `All
 X.T`.
 
-An *effect-closed typing environment* is **healthy** if it contains no
-variables of ill types, such as `All X.X`, `B -> E` and so on.
+An **healthy environment** is an *effect-closed typing environment* if
+it does not contain variables of ill types, such as `All X.X`, `B ->
+E` and so on. These ill types doesn't pose a problem in effect-closed
+typing, as from absurdity everything follows. Formulation of *healthy
+environment* should only reject ill types.
 
-A capability-based type-and-effect system is **effect-safe** if a
-*healthy effect-closed typing environment* is also an *effect-closed
-environment*.
+A capability-based type-and-effect system is **effect-safe** if from a
+**healthy environment** (1) it’s impossible to construct a term of
+type `E`; (2) it's impossible to construct an application where the
+first term is not effect-closed; (3) it's impossible to construct a
+type application where the first term is not effect-closed.
+
 
 ## Steps
 
