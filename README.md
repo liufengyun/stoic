@@ -64,7 +64,7 @@ a passed in function can have.
 
 ## Concepts
 
-A **capability** is a term of type *E*. The **base type** is
+A **capability** is a term of type `E`. The **base type** is
 represented as `B`.
 
 An **effect-closed typing environment** is a subset of the ordinary
