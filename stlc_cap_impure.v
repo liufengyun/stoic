@@ -169,17 +169,20 @@ Definition progress_statement := forall t T,
 
 Inductive capsafe: typ -> Prop :=
 | capsafe_B: capsafe typ_base
-| capsafe_C_X: forall S T, caprod S -> capsafe (typ_arrow_closed S T)
-| capsafe_X_S: forall S T, capsafe T -> capsafe (typ_arrow_closed S T)
+| capsafe_C_X_closed: forall S T, caprod S -> capsafe (typ_arrow_closed S T)
+| capsafe_X_S_closed: forall S T, capsafe T -> capsafe (typ_arrow_closed S T)
+| capsafe_C_X: forall S T, caprod S -> capsafe (typ_arrow S T)
+| capsafe_X_S: forall S T, capsafe T -> capsafe (typ_arrow S T)
 
 with caprod: typ -> Prop :=
  | caprod_E: caprod typ_eff
- | caprod_S_C: forall S T, capsafe S -> caprod T -> caprod (typ_arrow_closed S T).
+ | caprod_S_C_closed: forall S T, capsafe S -> caprod T -> caprod (typ_arrow_closed S T)
+ | caprod_S_C: forall S T, capsafe S -> caprod T -> caprod (typ_arrow S T).
 
 Inductive healthy: ctx -> Prop :=
   | healthy_empty: healthy empty
   | healthy_push: forall x E T, capsafe T -> healthy E ->
-                               x # E -> healthy (E & x ~ T).
+                                healthy (E & x ~ T).
 
 Definition effect_safety_no_capability := forall E, healthy E ->
   ~exists e, typing E e typ_eff.
@@ -560,65 +563,43 @@ Hint Resolve sub_arrow_mixed_inv_false sub_base_eq.
 Hint Constructors capsafe caprod.
 
 Lemma capsafe_not_caprod : forall T, capsafe T -> ~ caprod T.
-Proof. intros T H Hc. inductions T; inversions Hc. inversions H.
-  inversions H; auto.
+Proof. intros T H Hc. inductions T; inversions Hc;
+  try solve [inversions H | inversions H; auto].
 Qed.
-
-Lemma type_arrow_nothing: forall S T, ~ capsafe (typ_arrow S T) /\ ~ caprod (typ_arrow S T).
-Proof. intros. splits; intros Hc; inversion Hc. Qed.
 
 Lemma caprod_not_capsafe : forall T, caprod T -> ~capsafe T.
-Proof. intros T H Hc. inductions T; inversions Hc. inversions H.
-  inversions H; auto.
-  inversions H; auto.
+Proof. intros T H Hc. inductions T; inversions Hc;
+  try solve [inversions H | inversions H; auto].
 Qed.
 
-Lemma cap_decidable: forall T, (caprod T \/ ~ caprod T) /\ (capsafe T \/ ~capsafe T).
-Proof. intros. inductions T.
-  splits; auto. right; intros Hc; inversion Hc.
-  splits; auto. right; intros Hc; inversion Hc.
-  splits; right; intros Hc; inversion Hc.
-  splits;
-    destruct IHT1; destruct IHT2;
-    destruct H; destruct H0; destruct H1; destruct H2;
-          try solve [left*];
-          try solve [right; intros Hc; inversions* Hc].
-Qed.
-
-Lemma caprod_decidable: forall T, caprod T \/ ~ caprod T.
-Proof. intros. lets*: cap_decidable T. Qed.
+Lemma capsafe_caprod_classic : forall T, capsafe T \/ caprod T.
+Proof. intros T. inductions T; jauto; destruct* IHT2. Qed.
 
 Lemma capsafe_decidable: forall T, capsafe T \/ ~ capsafe T.
-Proof. intros. lets*: cap_decidable T.  Qed.
-
-Lemma capsafe_closed_typ: forall T, capsafe T -> closed_typ T = true.
-Proof. intros. inductions H; try reflexivity; try false; autos. Qed.
-
-Lemma healthy_env_closed: forall E, healthy E -> closed_env E = E.
-Proof. intros. inductions H.
-  rewrite empty_def. reflexivity.
-  rewrite <- cons_to_push. simpls. lets: capsafe_closed_typ H.
-    rewrite* H2. rewrite* IHhealthy.
+Proof. intros. destruct (capsafe_caprod_classic T); auto.
+  lets*: caprod_not_capsafe H.
 Qed.
+
+Lemma not_capsafe_caprod : forall T, ~capsafe T -> caprod T.
+Proof. intros. destruct* (capsafe_caprod_classic T). Qed.
+
+(* Lemma healthy_env_closed: forall E, healthy E -> closed_env E = E. *)
+(* Proof. intros. inductions H. *)
+(*   rewrite empty_def. reflexivity. *)
+(*   destruct H. rewrite <- cons_to_push. simpls. *)
+(*     rewrite* H2. rewrite* IHhealthy. *)
+(* Qed. *)
 
 Lemma healthy_env_capsafe : forall E S x, healthy E ->
    binds x S E ->  capsafe S.
 Proof. introv H Hb. inductions H.
   false. apply* binds_empty_inv.
   destruct (binds_push_inv Hb).
-    destruct H2. subst. autos.
-    destruct H2. autos.
+    destruct H1. subst. destruct* H.
+    destruct H1. autos.
 Qed.
 
-Lemma capsafe_sub : forall T S, capsafe T -> sub S T -> capsafe S.
-Proof. intros. inductions H0; auto; try solve [inversions H].
-  inversions H. destruct (capsafe_decidable S1).
-    lets*: IHsub1 H. lets*: capsafe_not_caprod H0.
-    apply capsafe_C_X. lets*: not_capsafe_caprod H.
-  auto.
-Qed.
-
-Hint Resolve capsafe_closed_typ healthy_env_capsafe.
+Hint Resolve healthy_env_capsafe.
 
 (* ********************************************************************** *)
 (** ** typing properties *)
@@ -765,38 +746,43 @@ Qed.
 (* ********************************************************************** *)
 (** * effect safety *)
 
+Lemma capsafe_sub: forall S T, capsafe S -> sub S T -> capsafe T.
+Proof.  intros. inductions H0; auto.
+  inversions* H.
+  inversions* H. destruct* (capsafe_decidable T1).
+    lets*: caprod_not_capsafe H1.
+    lets*: not_capsafe_caprod H.
+  inversions* H. destruct* (capsafe_decidable T1).
+    lets*: caprod_not_capsafe H1.
+    lets*: not_capsafe_caprod H.
+Qed.
+
+Lemma healthy_closed: forall E, healthy E -> healthy (closed_env E).
+Proof. intros. inductions E; simpls*.
+  inversions H. rewrite empty_def in H1. inversion H1.
+    rewrite <- cons_to_push in H0. inversions H0.
+    cases* (closed_typ T). rewrite cons_to_push. apply* healthy_push.
+Qed.
+
 Lemma healthy_env_term_capsafe: forall E t T,
   healthy E ->
   E |= t ~: T ->
-  exists S, E |= t ~: S /\ sub S T /\ capsafe S.
-Proof. intros. inductions H0.
-  exists* T.
-  destruct* (capsafe_decidable V).
-    pick_fresh x. forwards~ : H2 x. apply* healthy_push. destruct H4 as [S [H4 [H5 H6]]].
-      exists (typ_arrow_closed V S). splits; jauto.
-      apply typing_abs_closed with ((L \u dom E) \u fv e1); auto.
-      intros. rewrite* (healthy_env_closed H). admit.
-    exists (typ_arrow_closed V T1). splits*.
-      rewrite <- (healthy_env_closed H) in H1. apply* typing_abs_closed.
+  capsafe T.
+Proof. intros. inductions H0; jauto.
+  pick_fresh x. forwards~ : H1 x. destruct* (capsafe_decidable V).
+    apply capsafe_X_S. apply* (H2 x).
+      apply* healthy_push.
       apply capsafe_C_X. apply* not_capsafe_caprod.
-  destruct* (capsafe_decidable V).
-    pick_fresh x. forwards~ : H2 x. rewrite (healthy_env_closed H).
-      apply* healthy_push. destruct H4 as [S [H4 [H5 H6]]].
-      exists (typ_arrow_closed V S). splits; jauto.
-      apply typing_abs_closed with ((L \u dom E) \u fv e1); auto.
-      intros. admit.
-    exists (typ_arrow_closed V T1). splits*.
-      apply capsafe_C_X. apply* not_capsafe_caprod.
-  forwards~ : IHtyping1 H. forwards~ : IHtyping2 H.
-    destruct H0 as [S1 [H0 [H2 H3]]]. destruct H1 as [S2 [H1 [H4 H5]]].
-    lets: sub_arrow_inv H2. destruct H6 as [S3 [S4 [H6 [H7 H8]]]]. destruct H6; substs.
-    inversions H3. inversions H3. lets: sub_trans H4 H7. destruct (capsafe_decidable S3).
-      lets*: capsafe_not_caprod H6.
-    capsafe_sub
-  lets*: capsafe_not_caprod S.
+  pick_fresh x. forwards~ : H1 x. destruct* (capsafe_decidable V).
+    apply capsafe_X_S_closed. apply* (H2 x).
+      applys~ healthy_push. apply* healthy_closed.
+      apply capsafe_C_X_closed. apply* not_capsafe_caprod.
+  forwards~ : IHtyping1 H. forwards~ : IHtyping2 H. inversions* H0.
+    lets*: capsafe_not_caprod S.
+  forwards~ : capsafe_sub H1.
 Qed.
 
-Lemma effect_safety_result : effect_safety_statement.
+Lemma effect_safety_result : effect_safety_no_capability.
 Proof. intros E H He. destruct He.
   lets*: healthy_env_term_capsafe H0. inversions H1.
 Qed.
