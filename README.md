@@ -64,7 +64,8 @@ a passed in function can have.
 
 ## Concepts
 
-A **capability** is a term of type *E*. The *base type* is represented as `B`.
+A **capability** is a term of type *E*. The **base type** is
+represented as `B`.
 
 An **effect-closed typing environment** is a subset of the ordinary
 typing environment, which particularly excludes variables of ordinary
@@ -89,11 +90,12 @@ An **ordinary type abstraction** is a type abstraction which can
 capture anything in the lexical scope. Its type is represented by `All
 X.T`.
 
-An **healthy environment** is an *effect-closed typing environment* if
-it does not contain variables of ill types, such as `All X.X`, `B ->
-E` and so on. These ill types doesn't pose a problem in effect-closed
-typing, as from absurdity everything follows. Formulation of *healthy
-environment* should only reject ill types.
+A **healthy environment** is an *effect-closed typing environment*
+where it does not contain variables of ill types, such as `All X.X`,
+`B -> E` and so on. These ill types doesn't pose a problem in
+effect-closed typing, as from absurdity everything
+follows. Formulation of *healthy environment* should only reject ill
+types.
 
 A capability-based type-and-effect system is **effect-safe** if from a
 **healthy environment** (1) it’s impossible to construct a term of
