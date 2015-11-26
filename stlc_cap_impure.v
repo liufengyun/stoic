@@ -151,6 +151,19 @@ Inductive typing : ctx -> trm -> typ -> Prop :=
 where "E |= t ~: T" := (typing E t T).
 
 
+Axiom typing_equiv_base : forall E S T t,
+  E |= t ~: typ_arrow_closed typ_base (typ_arrow S T) ->
+  E |= t ~: typ_arrow_closed typ_base (typ_arrow_closed S T).
+
+Axiom typing_equiv_stoic : forall E U V S T t,
+  E |= t ~: typ_arrow_closed (typ_arrow_closed U V) (typ_arrow S T) ->
+  E |= t ~: typ_arrow_closed (typ_arrow_closed U V) (typ_arrow_closed S T).
+
+Axiom typing_poly : forall E U V S T t1 t2,
+  E |= t1 ~: typ_arrow_closed (typ_arrow U V) (typ_arrow S T) ->
+  E |= t2 ~: typ_arrow_closed U V ->
+  E |= trm_app t1 t2 ~: typ_arrow_closed S T.
+
 (* ********************************************************************** *)
 (** ** Statement of theorems *)
 
@@ -499,7 +512,7 @@ Proof. intros. induction* H; subst.
   eapply subset_trans. apply H2. apply closed_env_dom_subset.
   (* app closed *)
   simpl. replace (dom E) with (dom E \u dom E) by (autos* union_same).
-  apply subset_union_2; autos.
+    apply subset_union_2; autos.
 Qed.
 
 (* ********************************************************************** *)
@@ -604,7 +617,7 @@ Lemma typing_weaken : forall G E F t T,
    (E & F & G) |= t ~: T.
 Proof.
   introv Typ. gen_eq H: (E & G). gen E F G.
-  induction Typ; intros; subst.
+  inductions Typ; intros; subst; autos.
   apply* typing_var. apply* binds_weaken.
   apply_fresh* typing_abs as y. apply_ih_bind* H1.
   apply_fresh* typing_abs_closed as y.
@@ -626,7 +639,7 @@ Lemma typing_weakening_env : forall E F G e T,
   typing (E & (closed_env F) & G) e T ->
   ok (E & F & G) ->
   typing (E & F & G) e T.
-Proof. intros. inductions H.
+Proof. intros. inductions H; autos.
   apply* typing_var. binds_cases H0; autos.
     apply* binds_weaken. apply* binds_concat_left.
     apply binds_concat_right. apply* closed_env_binds.
@@ -781,10 +794,26 @@ Proof. intros E H He. destruct He.
   lets*: healthy_env_term_capsafe H0. inversions H1.
 Qed.
 
-Axiom effect_polymorphism: forall E t T1 T2,
+Lemma effect_polymorphism: forall E t T1 T2,
   healthy E -> closed_env E = E ->
   E |= t ~: typ_arrow T1 T2 ->
   E |= t ~: typ_arrow_closed T1 T2.
+Proof. intros E t T1 T2 H Hc Ha. inductions Ha.
+  rewrite <- Hc in H0. lets: closed_env_closed H0. false.
+  rewrite <- Hc in H0. apply* typing_abs_closed.
+
+  (* t = t1 t2 *)
+  forwards~ : IHHa1. destruct S.
+  forwards~ : typing_equiv_base H0. apply* typing_app.
+  lets: healthy_env_term_capsafe H Ha2. inversion H1.
+  forwards~ : IHHa2. apply* typing_poly.
+  forwards~ : typing_equiv_stoic H0. apply* typing_app.
+
+  lets: sub_arrow_inv H0. destruct H1 as [S1 [S2 [H3 [H4 H5]]]].
+    destruct H3. substs. eapply typing_sub; auto.
+    assert (sub S (typ_arrow_closed T1 T2)) by (substs; auto).
+    apply typing_sub with S; auto.
+Qed.
 
 Lemma effect_safety_result_2 : effect_safety_arrow_closed.
 Proof. intros E t1 t2 T H1 H2 H3.
