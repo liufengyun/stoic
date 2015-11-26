@@ -95,7 +95,7 @@ Fixpoint closed_typ(t: typ) := match t with
   | typ_base            => true
   | typ_eff             => false
   | typ_arrow U V       => false
-  | typ_arrow_closed U V => true   (* effect-closed lambda abstraction *)
+  | typ_arrow_closed U V => true
   end.
 
 Fixpoint closed_env(E: ctx) := match E with
@@ -187,9 +187,10 @@ Inductive healthy: ctx -> Prop :=
 Definition effect_safety_no_capability := forall E, healthy E ->
   ~exists e, typing E e typ_eff.
 
-Definition effect_safety_arrow_closed := forall E S1 S2 e, healthy E ->
-  typing E e (typ_arrow S1 S2) ->
-  exists T1 T2, typing E e (typ_arrow_closed T1 T2).
+Definition effect_safety_arrow_closed := forall E t1 t2 T, healthy E ->
+  closed_env E = E ->
+  typing E (trm_app t1 t2) T  ->
+  exists S1 S2, typing E t1 (typ_arrow_closed S1 S2).
 
 (* ********************************************************************** *)
 (* ********************************************************************** *)
@@ -511,7 +512,7 @@ Proof. intros. gen_eq S: (typ_arrow_closed U1 U2). gen U1 U2.
   inductions H; intros; substs; tryfalse; jauto.
   forwards~ : IHsub2 U1 U2. destruct H1 as [M1 [M2 H1]].
     forwards~ : IHsub1 M1 M2; jauto.
-  exists S1 S2. inversions H1. splits*.
+  inversions* H1.
 Qed.
 
 Lemma sub_arrow_inv: forall T U1 U2,
@@ -582,13 +583,6 @@ Qed.
 
 Lemma not_capsafe_caprod : forall T, ~capsafe T -> caprod T.
 Proof. intros. destruct* (capsafe_caprod_classic T). Qed.
-
-(* Lemma healthy_env_closed: forall E, healthy E -> closed_env E = E. *)
-(* Proof. intros. inductions H. *)
-(*   rewrite empty_def. reflexivity. *)
-(*   destruct H. rewrite <- cons_to_push. simpls. *)
-(*     rewrite* H2. rewrite* IHhealthy. *)
-(* Qed. *)
 
 Lemma healthy_env_capsafe : forall E S x, healthy E ->
    binds x S E ->  capsafe S.
@@ -719,13 +713,13 @@ Proof.
     pick_fresh x. forwards~ : H6 x. rewrite* (@subst_intro x). apply_empty* typing_subst.
 Qed.
 
-Lemma canonical_form_abs : forall t U1 U2,
-  value t -> typing empty t (typ_arrow U1 U2) ->
+Lemma canonical_form_abs : forall E t U1 U2,
+  value t -> typing E t (typ_arrow U1 U2) ->
   exists V e1, t = trm_abs V e1.
 Proof. introv Val Typ. inductions Typ; inversions Val; jauto. Qed.
 
-Lemma canonical_form_abs_closed : forall t U1 U2,
-  value t -> typing empty t (typ_arrow_closed U1 U2) ->
+Lemma canonical_form_abs_closed : forall E t U1 U2,
+  value t -> typing E t (typ_arrow_closed U1 U2) ->
   exists V e1, t = trm_abs V e1.
 Proof. introv Val Typ. inductions Typ; inversions Val; jauto. Qed.
 
@@ -782,7 +776,18 @@ Proof. intros. inductions H0; jauto.
   forwards~ : capsafe_sub H1.
 Qed.
 
-Lemma effect_safety_result : effect_safety_no_capability.
+Lemma effect_safety_result_1 : effect_safety_no_capability.
 Proof. intros E H He. destruct He.
   lets*: healthy_env_term_capsafe H0. inversions H1.
+Qed.
+
+Axiom effect_polymorphism: forall E t T1 T2,
+  healthy E -> closed_env E = E ->
+  E |= t ~: typ_arrow T1 T2 ->
+  E |= t ~: typ_arrow_closed T1 T2.
+
+Lemma effect_safety_result_2 : effect_safety_arrow_closed.
+Proof. intros E t1 t2 T H1 H2 H3.
+  inductions H3; try solve [forwards~ : IHtyping t1 t2].
+  forwards~ : effect_polymorphism E t1 S T. iauto.
 Qed.
