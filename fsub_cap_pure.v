@@ -337,8 +337,10 @@ Definition effect_safety := forall E, healthy E ->
 Fixpoint fv_tt (T : typ) {struct T} : vars :=
   match T with
   | typ_top         => \{}
+  | typ_base        => \{}
+  | typ_eff         => \{}
   | typ_bvar J      => \{}
-  | typ_fvar X      => \{X}
+  | typ_fvar X R    => \{X} \u (fv_tt R)
   | typ_arrow T1 T2 => (fv_tt T1) \u (fv_tt T2)
   | typ_all T1 T2   => (fv_tt T1) \u (fv_tt T2)
   end.
@@ -350,7 +352,6 @@ Fixpoint fv_te (e : trm) {struct e} : vars :=
   | trm_bvar i    => \{}
   | trm_fvar x    => \{}
   | trm_abs V e1  => (fv_tt V) \u (fv_te e1)
-  | trm_cap V e1  => (fv_tt V) \u (fv_te e1)
   | trm_app e1 e2 => (fv_te e1) \u (fv_te e2)
   | trm_tabs V e1 => (fv_tt V) \u (fv_te e1)
   | trm_tapp e1 V => (fv_tt V) \u (fv_te e1)
@@ -363,7 +364,6 @@ Fixpoint fv_ee (e : trm) {struct e} : vars :=
   | trm_bvar i    => \{}
   | trm_fvar x    => \{x}
   | trm_abs V e1  => (fv_ee e1)
-  | trm_cap V e1  => (fv_ee e1)
   | trm_app e1 e2 => (fv_ee e1) \u (fv_ee e2)
   | trm_tabs V e1 => (fv_ee e1)
   | trm_tapp e1 V => (fv_ee e1)
@@ -374,8 +374,10 @@ Fixpoint fv_ee (e : trm) {struct e} : vars :=
 Fixpoint subst_tt (Z : var) (U : typ) (T : typ) {struct T} : typ :=
   match T with
   | typ_top         => typ_top
+  | typ_base        => typ_base
+  | typ_eff         => typ_eff
   | typ_bvar J      => typ_bvar J
-  | typ_fvar X      => If X = Z then U else (typ_fvar X)
+  | typ_fvar X R    => If X = Z then U else (typ_fvar X (subst_tt Z U R))
   | typ_arrow T1 T2 => typ_arrow (subst_tt Z U T1) (subst_tt Z U T2)
   | typ_all T1 T2   => typ_all (subst_tt Z U T1) (subst_tt Z U T2)
   end.
@@ -387,7 +389,6 @@ Fixpoint subst_te (Z : var) (U : typ) (e : trm) {struct e} : trm :=
   | trm_bvar i    => trm_bvar i
   | trm_fvar x    => trm_fvar x
   | trm_abs V e1  => trm_abs  (subst_tt Z U V)  (subst_te Z U e1)
-  | trm_cap V e1  => trm_cap  (subst_tt Z U V)  (subst_te Z U e1)
   | trm_app e1 e2 => trm_app  (subst_te Z U e1) (subst_te Z U e2)
   | trm_tabs V e1 => trm_tabs (subst_tt Z U V)  (subst_te Z U e1)
   | trm_tapp e1 V => trm_tapp (subst_te Z U e1) (subst_tt Z U V)
@@ -400,7 +401,6 @@ Fixpoint subst_ee (z : var) (u : trm) (e : trm) {struct e} : trm :=
   | trm_bvar i    => trm_bvar i
   | trm_fvar x    => If x = z then u else (trm_fvar x)
   | trm_abs V e1  => trm_abs V (subst_ee z u e1)
-  | trm_cap V e1  => trm_cap V (subst_ee z u e1)
   | trm_app e1 e2 => trm_app (subst_ee z u e1) (subst_ee z u e2)
   | trm_tabs V e1 => trm_tabs V (subst_ee z u e1)
   | trm_tapp e1 V => trm_tapp (subst_ee z u e1) V
@@ -500,7 +500,7 @@ Lemma open_tt_rec_type : forall T U,
   type T -> forall k, T = open_tt_rec k U T.
 Proof.
   induction 1; intros; simpl; f_equal*. unfolds open_tt.
-  pick_fresh X. apply* (@open_tt_rec_type_core T2 0 (typ_fvar X)).
+  pick_fresh X. apply* (@open_tt_rec_type_core T2 0 (typ_fvar X T1)).
 Qed.
 
 (** Substitution for a fresh name is identity. *)
@@ -509,7 +509,7 @@ Lemma subst_tt_fresh : forall Z U T,
   Z \notin fv_tt T -> subst_tt Z U T = T.
 Proof.
   induction T; simpl; intros; f_equal*.
-  case_var*.
+  case_var*. forwards~ : IHT. rewrite* H0.
 Qed.
 
 (** Substitution distributes on the open operation. *)
@@ -533,24 +533,23 @@ Qed.
 
 (** Substitution and open_var for distinct names commute. *)
 
-Lemma subst_tt_open_tt_var : forall X Y U T, Y <> X -> type U ->
-  (subst_tt X U T) open_tt_var Y = subst_tt X U (T open_tt_var Y).
+Lemma subst_tt_open_tt_var : forall X Y U R T, Y <> X -> type U -> type R ->
+  open_tt (subst_tt X U T) (typ_fvar Y (subst_tt X U R)) = subst_tt X U (open_tt T (typ_fvar Y R)).
 Proof.
-  introv Neq Wu. rewrite* subst_tt_open_tt.
+  introv Neq Wu Wr. rewrite* subst_tt_open_tt.
   simpl. case_var*.
 Qed.
 
 (** Opening up a body t with a type u is the same as opening
   up the abstraction with a fresh name x and then substituting u for x. *)
 
-Lemma subst_tt_intro : forall X T2 U,
-  X \notin fv_tt T2 -> type U ->
-  open_tt T2 U = subst_tt X U (T2 open_tt_var X).
+Lemma subst_tt_intro : forall X T2 U R,
+  X \notin fv_tt T2 -> type U -> type R ->
+  open_tt T2 U = subst_tt X U (open_tt T2 (typ_fvar X R)).
 Proof.
-  introv Fr Wu. rewrite* subst_tt_open_tt.
+  introv Fr Wu Wr. rewrite* subst_tt_open_tt.
   rewrite* subst_tt_fresh. simpl. case_var*.
 Qed.
-
 
 (* ********************************************************************** *)
 (** ** Properties of type substitution in terms *)
@@ -578,10 +577,8 @@ Proof.
     f_equal*; try solve [ apply* open_tt_rec_type ].
   unfolds open_ee. pick_fresh x.
    apply* (@open_te_rec_term_core e1 0 (trm_fvar x)).
-  unfolds open_ee. pick_fresh x.
-   apply* (@open_te_rec_term_core e1 0 (trm_fvar x)).
   unfolds open_te. pick_fresh X.
-   apply* (@open_te_rec_type_core e1 0 (typ_fvar X)).
+   apply* (@open_te_rec_type_core e1 0 (typ_fvar X V)).
 Qed.
 
 (** Substitution for a fresh name is identity. *)
@@ -605,24 +602,23 @@ Qed.
 
 (** Substitution and open_var for distinct names commute. *)
 
-Lemma subst_te_open_te_var : forall X Y U e, Y <> X -> type U ->
-  (subst_te X U e) open_te_var Y = subst_te X U (e open_te_var Y).
+Lemma subst_te_open_te_var : forall X Y U R e, Y <> X -> type U -> type R ->
+  open_te (subst_te X U e) (typ_fvar Y (subst_tt X U R)) = subst_te X U (open_te e (typ_fvar Y R)).
 Proof.
-  introv Neq Wu. rewrite* subst_te_open_te.
+  introv Neq Wu Wr. rewrite* subst_te_open_te.
   simpl. case_var*.
 Qed.
 
 (** Opening up a body t with a type u is the same as opening
   up the abstraction with a fresh name x and then substituting u for x. *)
 
-Lemma subst_te_intro : forall X U e,
-  X \notin fv_te e -> type U ->
-  open_te e U = subst_te X U (e open_te_var X).
+Lemma subst_te_intro : forall X U R e,
+  X \notin fv_te e \u fv_tt R -> type U -> type R ->
+  open_te e U = subst_te X U (open_te e (typ_fvar X R)).
 Proof.
-  introv Fr Wu. rewrite* subst_te_open_te.
+  introv Fr Wu Wr. rewrite* subst_te_open_te.
   rewrite* subst_te_fresh. simpl. case_var*.
 Qed.
-
 
 (* ********************************************************************** *)
 (** ** Properties of term substitution in terms *)
@@ -648,10 +644,8 @@ Proof.
   induction 1; intros; simpl; f_equal*.
   unfolds open_ee. pick_fresh x.
    apply* (@open_ee_rec_term_core e1 0 (trm_fvar x)).
-  unfolds open_ee. pick_fresh x.
-   apply* (@open_ee_rec_term_core e1 0 (trm_fvar x)).
   unfolds open_te. pick_fresh X.
-   apply* (@open_ee_rec_type_core e1 0 (typ_fvar X)).
+   apply* (@open_ee_rec_type_core e1 0 (typ_fvar X V)).
 Qed.
 
 (** Substitution for a fresh name is identity. *)
@@ -708,8 +702,8 @@ Qed.
 (** Interactions between term substitutions in terms and opening
   with type variables in terms. *)
 
-Lemma subst_ee_open_te_var : forall z u e X, term u ->
-  (subst_ee z u e) open_te_var X = subst_ee z u (e open_te_var X).
+Lemma subst_ee_open_te_var : forall z u e X R, term u -> type R ->
+  open_te (subst_ee z u e) (typ_fvar X R) = subst_ee z u (open_te e (typ_fvar X R)).
 Proof.
   introv. unfold open_te. generalize 0.
   induction e; intros; simpl; f_equal*.
@@ -731,7 +725,6 @@ Lemma subst_te_term : forall e Z P,
 Proof.
   lets: subst_tt_type. induction 1; intros; simpl; auto.
   apply_fresh* term_abs as x. rewrite* subst_te_open_ee_var.
-  apply_fresh* term_cap as x. rewrite* subst_te_open_ee_var.
   apply_fresh* term_tabs as x. rewrite* subst_te_open_te_var.
 Qed.
 
@@ -741,7 +734,6 @@ Proof.
   induction 1; intros; simpl; auto.
   case_var*.
   apply_fresh* term_abs as y. rewrite* subst_ee_open_ee_var.
-  apply_fresh* term_cap as y. rewrite* subst_ee_open_ee_var.
   apply_fresh* term_tabs as Y. rewrite* subst_ee_open_te_var.
 Qed.
 
