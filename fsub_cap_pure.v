@@ -87,7 +87,7 @@ Notation "t 'open_ee_var' x" := (open_ee t (trm_fvar x)) (at level 67).
 Inductive type : typ -> Prop :=
   | type_top :
       type typ_top
-  | type_var : forall X T, type T ->
+  | type_var : forall X T,
       type (typ_fvar X T)
   | type_base: type typ_base
   | type_eff: type typ_eff
@@ -148,7 +148,6 @@ Inductive wft : env -> typ -> Prop :=
   | wft_top : forall E,
       wft E typ_top
   | wft_var : forall U E X,
-      wft E U ->
       binds X (bind_sub U) E ->
       wft E (typ_fvar X U)
   | wft_arrow : forall E T1 T2,
@@ -748,6 +747,55 @@ Qed.
 
 Hint Resolve subst_tt_type subst_te_term subst_ee_term.
 
+(* ********************************************************************** *)
+(** * Properties of rebounds of a type var in an environment *)
+Lemma rebound_binds: forall E X Y U V, binds X (bind_sub U) E ->
+  binds X (bind_sub (rebound Y V U)) (rebounds Y V E).
+Proof. intros. gen X Y U V. inductions E; intros.
+  rewrite <- empty_def in H. false* binds_empty_inv.
+  destruct a. rewrite cons_to_push in *. unfold rebounds. rewrite map_push.
+  destruct (binds_push_inv H). destruct H0; substs; auto. iauto.
+Qed.
+
+Lemma rebound_push_x: forall E X U x T, rebounds X U (E & x ~: T) =
+  (rebounds X U E) & x ~: (rebound X U T).
+Proof. intros. unfolds rebounds. repeat(rewrite map_push). reflexivity. Qed.
+
+Lemma rebound_push_X: forall E X U Y T, rebounds X U (E & Y ~<: T) =
+  (rebounds X U E) & Y ~<: (rebound X U T).
+Proof. intros. unfolds rebounds. repeat(rewrite map_push). reflexivity. Qed.
+
+Lemma rebound_notin: forall E X Y U, X # E -> X # (rebounds Y U E).
+Proof. intros. intros H1. apply H. clear H. rename H1 into H.
+  gen X Y U. inductions E; intros.
+  unfolds rebounds. rewrite <- empty_def in *. rewrite map_empty in *. auto.
+  destruct a. rewrite cons_to_push in *. unfolds rebounds. rewrite map_push in H.
+    rewrite dom_concat in *. rewrite dom_single in *. rewrite in_union in *.
+    iauto.
+Qed.
+
+Lemma rebound_same: forall X U V, rebound X U (typ_fvar X V) = typ_fvar X U.
+Proof. intros. unfold rebound. simpl. cases_if*. Qed.
+
+Lemma rebound_arrow: forall X U T1 T2,
+  rebound X U (typ_arrow T1 T2) = typ_arrow (rebound X U T1) (rebound X U T2).
+Proof. intros. unfold rebound. reflexivity. Qed.
+
+Lemma rebound_all: forall X U T1 T2,
+  rebound X U (typ_all T1 T2) = typ_all (rebound X U T1) (rebound X U T2).
+Proof. intros. unfold rebound. reflexivity. Qed.
+
+Lemma binds_subst_tt: forall E X Z P U,
+  binds X (bind_sub U) E ->
+  binds X (bind_sub (subst_tt Z P U)) (map (subst_tb Z P) E).
+Proof. intros. inductions E.
+  rewrite <- empty_def in H. false* binds_empty_inv.
+  destruct a. rewrite cons_to_push in *. destruct b.
+  destruct (binds_push_inv H); destruct H0; rewrite* map_push. inversions* H1.
+  destruct (binds_push_inv H); destruct H0; rewrite* map_push. inversions* H1.
+Qed.
+
+Hint Resolve rebound_binds rebound_notin binds_subst_tt.
 
 (* ********************************************************************** *)
 (** * Properties of well-formedness of a type in an environment *)
@@ -770,7 +818,7 @@ Proof.
   intros. gen_eq K: (E & G). gen E F G.
   induction H; intros; subst; eauto.
   (* case: var *)
-  apply (@wft_var U). apply* IHwft. apply* binds_weaken.
+  apply (@wft_var U). apply* binds_weaken.
   (* case: all *)
   apply_fresh* wft_all as Y. apply_ih_bind* H1.
 Qed.
@@ -780,16 +828,22 @@ Qed.
 Lemma wft_narrow : forall V F U T E X,
   wft (E & X ~<: V & F) T ->
   ok (E & X ~<: U & F) ->
-  wft (E & X ~<: U & F) T.
+  wft (rebounds X U E & X ~<: U & rebounds X U F) (rebound X U T).
 Proof.
   intros. gen_eq K: (E & X ~<: V & F). gen E F.
   induction H; intros; subst; eauto.
   destruct (binds_middle_inv H) as [K|[K|K]]; try destructs K.
-    applys wft_var. apply* binds_concat_right.
-    subst. applys wft_var. apply~ binds_middle_eq.
-    applys wft_var. apply~ binds_concat_left.
-     apply* binds_concat_left.
-  apply_fresh* wft_all as Y. apply_ih_bind* H1.
+    unfolds rebound. simpl. case_var*.
+      destruct (ok_middle_inv H0). false* (binds_fresh_inv K).
+      applys~ wft_var. apply binds_concat_right. apply* rebound_binds.
+    inversions H3. rewrite rebound_same. applys~ wft_var.
+    unfolds rebound. simpl. case_var*. applys wft_var.
+      apply* binds_concat_left. apply* binds_concat_left. apply* rebound_binds.
+  rewrite rebound_arrow. apply* wft_arrow.
+  rewrite rebound_all.
+  apply_fresh* wft_all as Y. rewrite <- concat_assoc. rewrite <- rebound_push_X.
+    unfold rebound. rewrite* subst_tt_open_tt_var. unfold rebound in H1.
+    apply* H1; rewrite* concat_assoc. apply* wft_type.
 Qed.
 
 (** Through strengthening *)
@@ -813,18 +867,16 @@ Qed.
 
 Lemma wft_subst_tb : forall F Q E Z P T,
   wft (E & Z ~<: Q & F) T ->
-  wft E P ->
-  ok (E & map (subst_tb Z P) F) ->
-  wft (E & map (subst_tb Z P) F) (subst_tt Z P T).
+  wft (map (subst_tb Z P) E) P ->
+  ok (map (subst_tb Z P) E & map (subst_tb Z P) F) ->
+  wft (map (subst_tb Z P) E & map (subst_tb Z P) F) (subst_tt Z P T).
 Proof.
   introv WT WP. gen_eq G: (E & Z ~<: Q & F). gen F.
   induction WT; intros F EQ Ok; subst; simpl subst_tt; auto.
   case_var*.
     apply_empty* wft_weaken.
     destruct (binds_concat_inv H) as [?|[? ?]].
-      apply (@wft_var (subst_tt Z P U)).
-       apply~ binds_concat_right.
-       unsimpl_map_bind. apply~ binds_map.
+      apply* (@wft_var (subst_tt Z P U)).
       destruct (binds_push_inv H1) as [[? ?]|[? ?]].
         subst. false~.
         applys wft_var. apply* binds_concat_left.
