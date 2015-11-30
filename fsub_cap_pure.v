@@ -148,6 +148,7 @@ Inductive wft : env -> typ -> Prop :=
   | wft_top : forall E,
       wft E typ_top
   | wft_var : forall U E X,
+      wft E U ->
       binds X (bind_sub U) E ->
       wft E (typ_fvar X U)
   | wft_arrow : forall E T1 T2,
@@ -157,7 +158,7 @@ Inductive wft : env -> typ -> Prop :=
   | wft_all : forall L E T1 T2,
       wft E T1 ->
       (forall X, X \notin L ->
-        wft (E & X ~<: T1) (open_tt T1 (typ_fvar X T1))) ->
+        wft (E & X ~<: T1) (open_tt T2 (typ_fvar X T1))) ->
       wft E (typ_all T1 T2).
 
 (** A environment E is well-formed if it contains no duplicate bindings
@@ -179,13 +180,17 @@ Inductive sub : env -> typ -> typ -> Prop :=
       okt E ->
       wft E S ->
       sub E S typ_top
-  | sub_refl_tvar : forall E X T,
+  | sub_tvar : forall E X T,
       okt E ->
       wft E (typ_fvar X T) ->
-      sub E (typ_fvar X T) (typ_fvar X T)
-  | sub_trans_tvar : forall U E T X,
-      sub E U T ->
-      sub E (typ_fvar X U) T
+      sub E (typ_fvar X T) T
+  | sub_refl : forall E T,
+      okt E ->
+      wft E T ->
+      sub E T T
+  | sub_trans : forall E S U T,
+      sub E S U -> sub E U T ->
+      sub E S T
   | sub_arrow : forall E S1 S2 T1 T2,
       sub E T1 S1 ->
       sub E S2 T2 ->
@@ -302,7 +307,7 @@ Definition progress := forall e T,
 Inductive capsafe: env -> typ -> Prop :=
  | capsafe_B: forall E, capsafe E typ_base
  | capsafe_T: forall E, capsafe E typ_top
- | capsafe_X: forall E X T, wft E T -> ~sub E typ_eff T -> capsafe E (typ_fvar X T)
+ | capsafe_X: forall E X T, wft E (typ_fvar X T) -> ~sub E typ_eff T -> capsafe E (typ_fvar X T)
  | capsafe_C_X: forall E S T, wft E T -> caprod E S -> capsafe E (typ_arrow S T)
  | capsafe_X_S: forall E S T, wft E S -> capsafe E T -> capsafe E (typ_arrow S T)
  | capsafe_A: forall E U T, wft E (typ_all U T) ->
@@ -311,7 +316,7 @@ Inductive capsafe: env -> typ -> Prop :=
 
 with caprod: env -> typ -> Prop :=
  | caprod_E: forall E, caprod E typ_eff
- | caprod_X: forall E X T, wft E T -> sub E typ_eff T -> caprod E (typ_fvar X T)
+ | caprod_X: forall E X T, wft E (typ_fvar X T) -> sub E typ_eff T -> caprod E (typ_fvar X T)
  | caprod_S_C: forall E S T, capsafe E S -> caprod E T -> caprod E (typ_arrow S T)
  | caprod_A: forall E U T, wft E (typ_all U T) ->
                            (exists R, sub E R U /\ caprod E (open_tt T R)) ->
@@ -414,6 +419,10 @@ Definition subst_tb (Z : var) (P : typ) (b : bind) : bind :=
   | bind_typ T => bind_typ (subst_tt Z P T)
   end.
 
+(* Update bound for variables *)
+Definition rebound (X: var) (U: typ) := subst_tt X (typ_fvar X U).
+Definition rebounds (X: var) (U: typ) := map (subst_tb X (typ_fvar X U)).
+
 (* ********************************************************************** *)
 (** * Tactics *)
 
@@ -422,7 +431,7 @@ Definition subst_tb (Z : var) (P : typ) (b : bind) : bind :=
 Hint Constructors type term wft ok okt value red.
 
 Hint Resolve
-  sub_top sub_refl_tvar sub_arrow
+  sub_top sub_refl sub_arrow
   typing_var typing_app typing_tapp typing_sub.
 
 (** Gathering free names already used in the proofs *)
@@ -761,7 +770,7 @@ Proof.
   intros. gen_eq K: (E & G). gen E F G.
   induction H; intros; subst; eauto.
   (* case: var *)
-  apply (@wft_var U). apply* binds_weaken.
+  apply (@wft_var U). apply* IHwft. apply* binds_weaken.
   (* case: all *)
   apply_fresh* wft_all as Y. apply_ih_bind* H1.
 Qed.
