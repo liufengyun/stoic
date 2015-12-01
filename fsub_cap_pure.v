@@ -219,15 +219,17 @@ Fixpoint exposure (E: env)(T: typ) :=
     | _ => T         (* other type are safe to be in pure environment *)
   end.
 
+(*T is exposure type -- without type var *)
 Fixpoint safe_bound(T: typ) := match T with
                                  | typ_top      => false
                                  | typ_eff      => false
+                                 | typ_fvar _   => false (* impossible, after exposure in well-formed env *)
                                  | _ => true
                                end.
 
-Fixpoint closed_typ(T: typ) := match T with
+Definition  closed_typ(E: env)(T: typ)  := match T with
   | typ_bvar _          => false  (* impossible, ill-formed *)
-  | typ_fvar _          => false  (* impossible, after exposure in well-formed env *)
+  | typ_fvar _          => safe_bound (exposure E T)
   | typ_base            => true
   | typ_top             => true
   | typ_eff             => false
@@ -239,7 +241,7 @@ Fixpoint closed_typ(T: typ) := match T with
 Fixpoint pure (E: env) := match E with
   | nil => nil
   | cons (X, bind_sub U) E' => cons (X, bind_sub U) (pure E')
-  | cons (x, bind_typ T) E' => if closed_typ (exposure E T) then
+  | cons (x, bind_typ T) E' => if closed_typ E T then
                                  cons (x, bind_typ T) (pure E')
                                else
                                  pure E'
@@ -1123,14 +1125,17 @@ Definition non_tvar t := match t with typ_fvar _ => false | _ => true end.
 Lemma exposure_nontvar: forall E X T, non_tvar T = true ->  exposure E T = T.
 Proof. intros. inductions E; destruct* T. simpl in H. inversion H. Qed.
 
-Lemma exposure_tvar_inv: forall E X, ok E ->
-  closed_typ (exposure E (typ_fvar X)) = true ->
+Lemma closed_push_typ: forall E x U T, closed_typ (E & x ~: U) T = closed_typ E T.
+Proof. intros. inductions E; rewrite <- cons_to_push; destruct* T. Qed.
+
+Lemma closed_tvar_inv: forall E X, ok E ->
+  closed_typ E (typ_fvar X) = true ->
   exists U, binds X (bind_sub U) E.
 Proof. intros. inductions E. simpls. inversion H0.
   destruct a. destruct b. destruct (classic (v = X)); rewrite cons_to_push.
     substs. iauto.
     rewrite cons_to_push in H. simpl in H0. cases_if*.
-      forwards~ : IHE X. destruct H3 as [U H3].
+      forwards~ : IHE X. unfold closed_typ. destruct H3 as [U H3].
       exists U. apply* binds_concat_left.
     rewrite cons_to_push in H. simpl in H0. forwards~ : IHE X. destruct H1 as [U H1].
       rewrite cons_to_push. exists U. apply binds_concat_left. auto.
@@ -1138,24 +1143,36 @@ Proof. intros. inductions E. simpls. inversion H0.
       substs. destruct (ok_push_inv H). false (binds_fresh_inv H1 H3).
 Qed.
 
-Lemma exposure_closed_typ: forall E F T, ok (E & F) ->
-  closed_typ (exposure E T) = true ->
-  closed_typ (exposure (E & F) T) = true.
+Lemma closed_typ_concat: forall E F T, ok (E & F) ->
+  closed_typ E T = true ->
+  closed_typ (E & F) T = true.
 Proof. intros. inductions F.
   rewrite <- empty_def. rewrite* concat_empty_r.
   destruct a. destruct b; rewrite cons_to_push in *; rewrite concat_assoc in *.
-    destruct (ok_push_inv H). destruct T; try solve [rewrite exposure_nontvar in *; autos].
-      destruct (classic (v = v0)). substs. forwards~ : exposure_tvar_inv H0.
+    destruct (ok_push_inv H). destruct T; try solve [unfold closed_typ; autos].
+      destruct (classic (v = v0)). substs. forwards~ : closed_tvar_inv H0.
         destruct H3. assert (binds v0 (bind_sub x) (E & F)) by apply* binds_concat_left.
           false (binds_fresh_inv H4 H2).
-        rewrite <- cons_to_push. simpl. cases_if*.
-    destruct (ok_push_inv H). rewrite* exposure_push_typ.
+        rewrite <- cons_to_push. simpl. cases_if*. forwards~ : IHF H0.
+    destruct (ok_push_inv H). rewrite* closed_push_typ.
 Qed.
+
+Lemma pure_push_sub: forall E X U, pure (E & X ~<: U) = pure E & X ~<: U.
+Proof. intros. rewrite <- cons_to_push. simpls. rewrite* cons_to_push. Qed.
+
+Lemma pure_push_typ: forall E x U, pure (E & x ~: U) = pure E & x ~: U \/
+                                   pure (E & x ~: U) = pure E.
+Proof. intros. rewrite <- cons_to_push. simpls. cases_if*. rewrite* cons_to_push. Qed.
+
+Lemma pure_push_inv: forall E x b, pure (E & x ~ b) = pure E & x ~ b \/
+                                   pure (E & x ~ b) = pure E.
+Proof. intros. destruct b. lets*: pure_push_sub. lets*: pure_push_typ. Qed.
 
 Lemma pure_dist: forall E F, pure (E & F) = pure E & pure F.
 Proof. rewrite concat_def. intros. gen E. induction F; intros E; autos.
   rewrite LibList.app_cons. destruct a. destruct* b.
   simpl. rewrite LibList.app_cons. rewrite* <- IHF.
+  (* this is no longer valid *) admit.
 Qed.
 
 Lemma pure_dom_subset : forall E, dom (pure E) \c dom E.
@@ -1164,7 +1181,8 @@ Proof. intros. induction E.
   destruct a. destruct b.
   simpls. repeat(rewrite cons_to_push). repeat(rewrite dom_push).
     eapply subset_union_2. eapply subset_refl. eauto.
-  simpls. rewrite cons_to_push. rewrite dom_push.
+  simpls. cases_if*; repeat (rewrite cons_to_push); repeat (rewrite dom_push).
+    eapply subset_union_2. eapply subset_refl. eauto.
     eapply subset_trans. eauto. apply subset_union_weak_r.
 Qed.
 
@@ -1177,11 +1195,15 @@ Proof. intros. induction E.
     simpls. rewrite cons_to_push in *. destruct (binds_push_inv H0).
       destructs H1. inversions H2. apply binds_push_eq.
       destructs H1. apply* binds_push_neq.
-    simpls. rewrite cons_to_push in *. apply binds_push_neq.
-      autos* ok_concat_inv_l.
-      intros Ha. subst. lets: IHE (ok_concat_inv_l H) H0.
-      rewrite <- concat_empty_r in H. lets: ok_middle_inv_l H.
-      apply (binds_fresh_inv H1 H2).
+    rewrite cons_to_push. rewrite cons_to_push in H. apply binds_push_neq.
+      simpls. cases_if*. rewrite cons_to_push in H0.
+        destruct (binds_push_inv H0); destruct H2. false.
+        repeat (apply* IHE; autos* ok_concat_inv_l).
+      intros Ha. subst. simpls. cases_if*. rewrite cons_to_push in H0.
+        destruct (binds_push_inv H0); destruct H2. inversion H3.
+        forwards~ : IHE H3.
+        forwards~ : IHE H0. rewrite <- concat_empty_r in H. lets: ok_middle_inv_l H.
+        false (binds_fresh_inv H2 H3).
 Qed.
 
 Lemma pure_binds_reverse: forall E U x,
@@ -1192,18 +1214,8 @@ Proof. intros. induction E.
     simpls. rewrite cons_to_push in *. destruct (binds_push_inv H).
       destructs H0. inversions H1. apply binds_push_eq.
       destructs H0. apply* binds_push_neq.
-    simpls. rewrite cons_to_push in *. apply IHE.
-      eapply binds_push_neq_inv. exact H.
-      intros HI. subst. lets: binds_push_eq_inv H. inversion H0.
-Qed.
-
-Lemma pure_no_var : forall x T E, ~binds x (bind_typ T) (pure E).
-Proof. intros. intros H. induction E.
-  simpl in H. rewrite <- empty_def in H. destruct (binds_empty_inv H).
-  destruct a. destruct b; autos.
-    simpl in H. apply IHE. rewrite cons_to_push in H. destruct (binds_push_inv H).
-      destruct H0. subst. inversion H1.
-      destruct* H0.
+    rewrite cons_to_push in H. destruct (binds_push_inv H); destruct H0. inversion H1.
+      simpls. cases_if*. rewrite cons_to_push. apply* binds_concat_left.
 Qed.
 
 Lemma pure_wft: forall E V, ok E -> wft (pure E) V -> wft E V.
