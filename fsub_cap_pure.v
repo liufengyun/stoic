@@ -264,6 +264,7 @@ Inductive typing : env -> trm -> typ -> Prop :=
       typing E e2 T1 ->
       typing E (trm_app e1 e2) T2
   | typing_tabs : forall L E V e1 T1,
+      okt E ->
       (forall X, X \notin L ->
         typing (pure E & X ~<: V) (e1 open_te_var X) (T1 open_tt_var X)) ->
       typing E (trm_tabs V e1) (typ_all V T1)
@@ -450,11 +451,7 @@ Definition subst_tb (Z : var) (P : typ) (b : bind) : bind :=
 
 (** Constructors as hints. *)
 
-Hint Constructors type term wft ok okt value red.
-
-Hint Resolve
-  sub_top sub_refl_tvar sub_arrow
-  typing_var typing_app typing_tapp typing_sub.
+Hint Constructors type term wft ok okt value red sub typing.
 
 (** Gathering free names already used in the proofs *)
 
@@ -1350,7 +1347,7 @@ Qed.
 Lemma sub_regular : forall E S T,
   sub E S T -> okt E /\ wft E S /\ wft E T.
 Proof.
-  induction 1. autos*. autos*. autos*. jauto_set; auto. (* autos* too slow *)
+  induction 1; autos*.
   split. autos*. split;
    apply_fresh* wft_all as Y;
     forwards~: (H1 Y); apply_empty* (@wft_narrow T1).
@@ -1361,43 +1358,29 @@ Qed.
 Lemma typing_regular : forall E e T,
   typing E e T -> okt E /\ term e /\ wft E T.
 Proof.
-  induction 1.
+  induction 1; try solve [splits*].
   splits*.
-  splits.
-   pick_fresh y. specializes H0 y. destructs~ H0.
-    forwards*: okt_push_typ_inv.
-   apply_fresh* term_abs as y.
-     pick_fresh y. specializes H0 y. destructs~ H0.
-      forwards*: okt_push_typ_inv.
-     specializes H0 y. destructs~ H0.
-   pick_fresh y. specializes H0 y. destructs~ H0.
-    apply* wft_arrow.
-      forwards*: okt_push_typ_inv.
-      apply_empty* wft_strengthen.
-  splits*.
-   apply_fresh* term_cap as y.
-     pick_fresh y. specializes H1 y. destructs~ H1.
-       forwards*: (okt_push_typ_inv H1).
-     specializes H1 y. destructs~ H1.
-   pick_fresh y. specializes H1 y. destructs~ H1.
-     apply* wft_arrow.
-       apply* pure_wft.
-       apply* pure_wft.
-       rewrite <- (@concat_empty_r bind (pure E)).
-       eapply wft_strengthen. rewrite* concat_empty_r.
+    apply_fresh* term_abs as y.
+    pick_fresh y. specializes H1 y. destructs~ H1.
+      forwards*: (okt_push_typ_inv H1).
+    specializes H1 y. destructs~ H1.
+    pick_fresh y. specializes H1 y. destructs~ H1.
+      apply* wft_arrow.
+      apply* pure_wft.
+      apply* pure_wft.
+      rewrite <- (@concat_empty_r bind (pure E)).
+      eapply wft_strengthen. rewrite* concat_empty_r.
   splits*. destructs IHtyping1. inversion* H3.
-  splits.
-   pick_fresh y. specializes H0 y. destructs~ H0.
-    forwards*: okt_push_sub_inv.
-   apply_fresh* term_tabs as y.
-     pick_fresh y. forwards~ K: (H0 y). destructs K.
-       forwards*: okt_push_sub_inv.
-     forwards~ K: (H0 y). destructs K. auto.
-   apply_fresh* wft_all as Y.
-     pick_fresh y. forwards~ K: (H0 y). destructs K.
+  splits*.
+    apply_fresh* term_tabs as y.
+      pick_fresh y. forwards~ K: (H1 y). destructs K.
       forwards*: okt_push_sub_inv.
-     forwards~ K: (H0 Y). destructs K.
-      forwards*: okt_push_sub_inv.
+      forwards~ K: (H1 y). destructs K. auto.
+    apply_fresh* wft_all as Y.
+      pick_fresh y. forwards~ K: (H1 y). destructs K.
+        forwards*: okt_push_sub_inv. destructs H5. apply* pure_wft.
+      forwards~ K: (H1 Y). destructs K. apply* pure_wft.
+        rewrite* pure_push_sub.
   splits*; destructs (sub_regular H0).
    apply* term_tapp. applys* wft_type.
    applys* wft_open T1.
@@ -1418,7 +1401,6 @@ Lemma red_regular : forall t t',
   red t t' -> term t /\ term t'.
 Proof.
   induction 1; split; autos* value_regular.
-  inversions H. pick_fresh y. rewrite* (@subst_ee_intro y).
   inversions H. pick_fresh y. rewrite* (@subst_ee_intro y).
   inversions H. pick_fresh Y. rewrite* (@subst_te_intro Y).
 Qed.
@@ -1527,6 +1509,8 @@ Proof.
   introv TransQ SsubT PsubQ.
   inductions SsubT; introv.
   apply* sub_top.
+  apply* sub_refl_base.
+  apply* sub_refl_eff.
   apply* sub_refl_tvar.
   tests EQ: (X = Z).
     lets M: (@okt_narrow Q).
@@ -1585,6 +1569,8 @@ Proof.
   introv SsubT PsubQ.
   inductions SsubT; introv; simpl subst_tt.
   apply* sub_top.
+  apply* sub_refl_base.
+  apply* sub_refl_eff.
   case_var.
     apply* sub_reflexivity.
     apply* sub_reflexivity.
