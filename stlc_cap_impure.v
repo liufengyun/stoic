@@ -15,12 +15,14 @@ Require Import LibLN.
 (** ** Grammars *)
 
 Inductive typ : Set :=
+  | typ_top          : typ
   | typ_base         : typ
   | typ_eff          : typ
   | typ_arrow        : typ -> typ -> typ
   | typ_arrow_closed : typ -> typ -> typ.
 
 Inductive trm : Set :=
+  | trm_top  : trm
   | trm_bvar : nat -> trm
   | trm_fvar : var -> trm
   | trm_abs  : typ -> trm -> trm
@@ -36,6 +38,7 @@ Fixpoint open_rec (k : nat) (u : trm) (t : trm) {struct t} : trm :=
   match t with
   | trm_bvar i    => If k = i then u else (trm_bvar i)
   | trm_fvar x    => trm_fvar x
+  | trm_top       => trm_top
   | trm_abs T t1    => trm_abs T (open_rec (S k) u t1)
   | trm_app t1 t2 => trm_app (open_rec k u t1) (open_rec k u t2)
   end.
@@ -50,6 +53,7 @@ Notation "t ^ x" := (open t (trm_fvar x)).
 (** ** Local closure *)
 
 Inductive term : trm -> Prop :=
+  | term_top : term trm_top
   | term_var : forall x,
       term (trm_fvar x)
   | term_abs : forall L T t1,
@@ -64,6 +68,7 @@ Inductive term : trm -> Prop :=
 (** ** Semantics *)
 
 Inductive value : trm -> Prop :=
+  | value_top : value trm_top
   | value_abs : forall t1 T,
       term (trm_abs T t1) -> value (trm_abs T t1).
 
@@ -71,9 +76,13 @@ Reserved Notation "t --> t'" (at level 68).
 
 Inductive red : trm -> trm -> Prop :=
   | red_beta_abs : forall t1 t2 T,
-      term (trm_abs T t1) ->
+      term (trm_abs T t1) -> T <> typ_top ->
       value t2 ->
       (trm_app (trm_abs T t1) t2) --> (t1 ^^ t2)
+  | red_beta_top : forall t1 t2 T,
+      term (trm_abs T t1) -> T = typ_top ->
+      value t2 ->
+      (trm_app (trm_abs T t1) t2) --> (t1 ^^ trm_top)
   | red_app_1 : forall t1 t1' t2,
       term t2 ->
       t1 --> t1' ->
@@ -92,6 +101,7 @@ where "t --> t'" := (red t t').
 Definition ctx := env typ.
 
 Fixpoint closed_typ(t: typ) := match t with
+  | typ_top             => true
   | typ_base            => true
   | typ_eff             => false
   | typ_arrow U V       => false
@@ -110,6 +120,7 @@ Fixpoint pure(E: ctx) := match E with
 (** ** Typing *)
 
 Inductive sub: typ -> typ -> Prop :=
+  | sub_top : forall T, sub T typ_top
   | sub_refl: forall T, sub T T
   | sub_trans: forall S T U, sub S T -> sub T U -> sub S U
   | sub_closed_open: forall S T, sub (typ_arrow_closed S T) (typ_arrow S T)
@@ -125,6 +136,7 @@ Inductive sub: typ -> typ -> Prop :=
 Reserved Notation "E |= t ~: T" (at level 69).
 
 Inductive typing : ctx -> trm -> typ -> Prop :=
+  | typing_top : forall E, ok E -> E |= trm_top ~: typ_top
   | typing_var : forall E x T,
       ok E ->
       binds x T E ->
@@ -150,6 +162,10 @@ Inductive typing : ctx -> trm -> typ -> Prop :=
 
 where "E |= t ~: T" := (typing E t T).
 
+
+Axiom typing_equiv_top : forall E S T t,
+  E |= t ~: typ_arrow_closed typ_top (typ_arrow S T) ->
+  E |= t ~: typ_arrow_closed typ_top (typ_arrow_closed S T).
 
 Axiom typing_equiv_base : forall E S T t,
   E |= t ~: typ_arrow_closed typ_base (typ_arrow S T) ->
@@ -181,6 +197,7 @@ Definition progress_statement := forall t T,
    creating an instance of E *)
 
 Inductive capsafe: typ -> Prop :=
+| capsafe_T: capsafe typ_top
 | capsafe_B: capsafe typ_base
 | capsafe_C_X_closed: forall S T, caprod S -> capsafe (typ_arrow_closed S T)
 | capsafe_X_S_closed: forall S T, capsafe T -> capsafe (typ_arrow_closed S T)
@@ -215,8 +232,9 @@ Definition effect_safety_arrow_closed := forall E t1 t2 T, healthy E ->
 Fixpoint fv (t : trm) {struct t} : vars :=
   match t with
   | trm_bvar i    => \{}
+  | trm_top       => \{}
   | trm_fvar x    => \{x}
-  | trm_abs T t1    => (fv t1)
+  | trm_abs T t1  => (fv t1)
   | trm_app t1 t2 => (fv t1) \u (fv t2)
   end.
 
@@ -228,6 +246,7 @@ Reserved Notation "[ z ~> u ] t" (at level 69).
 Fixpoint subst (z : var) (u : trm) (t : trm) {struct t} : trm :=
   match t with
   | trm_bvar i    => trm_bvar i
+  | trm_top       => trm_top
   | trm_fvar x    => If x = z then u else (trm_fvar x)
   | trm_abs T t1    => trm_abs T ([ z ~> u ] t1)
   | trm_app t1 t2 => trm_app ([ z ~> u ] t1) ([ z ~> u ] t2)
@@ -361,12 +380,8 @@ Qed.
 
 Lemma open_fv_subset: forall e x k,
   fv e \c fv ({k ~> x}e).
-Proof. intros. gen k. induction e; intros; simpl.
-  apply subset_empty_l.
-  apply subset_refl.
-  autos.
-  autos.
-  apply* subset_union_2.
+Proof. intros. gen k. induction e; intros; simpl;
+                      autos* subset_empty_l subset_refl  subset_union_2.
 Qed.
 
 Lemma subset_trans: forall (T: Type) (a b c: fset T),
@@ -497,21 +512,21 @@ Qed.
 
 Lemma typing_env_fv : forall E e T,
   typing E e T -> fv e \c dom E.
-Proof. intros. induction* H; subst.
+Proof. intros. induction* H; subst; simpl; try solve [apply subset_empty_l].
   (* var *)
-  simpl. forwards~ K:  get_some_inv (binds_get H0).
+  forwards~ K:  get_some_inv (binds_get H0).
   unfolds. intros. rewrite in_singleton in H1. subst*.
   (* abs *)
-  simpl. pick_fresh x. forwards~ K: H1 x.
+  pick_fresh x. forwards~ K: H1 x.
   rewrite dom_concat in K. rewrite dom_single in K.
   forwards~ : subset_strengthen (subset_trans (@open_fv_subset e1 x 0) K).
   (* abs closed *)
-  simpl. pick_fresh x. forwards~ K: H1 x.
+  pick_fresh x. forwards~ K: H1 x.
   rewrite dom_concat in K. rewrite dom_single in K.
   forwards~ : subset_strengthen (subset_trans (@open_fv_subset e1 x 0) K).
   eapply subset_trans. apply H2. apply pure_dom_subset.
   (* app closed *)
-  simpl. replace (dom E) with (dom E \u dom E) by (autos* union_same).
+  replace (dom E) with (dom E \u dom E) by (autos* union_same).
     apply subset_union_2; autos.
 Qed.
 
@@ -568,6 +583,19 @@ Proof. intros. lets: sub_arrow_closed_inv H. false* H0. Qed.
 
 Lemma sub_base_eq: forall S, sub S typ_base -> S = typ_base.
 Proof. intros. inductions H; auto. Qed.
+
+Lemma sub_top_eq: forall S, sub typ_top S -> S = typ_top.
+Proof. intros. inductions H; auto. Qed.
+
+Lemma sub_top_neq: forall S T, sub S T -> T <> typ_top -> S <> typ_top.
+Proof. intros. inductions H; try solve [intros Hc; false]; auto. Qed.
+
+Lemma sub_closed: forall S T, sub S T -> T <> typ_top ->
+  closed_typ T = true -> closed_typ S = true.
+Proof. intros. destruct T; auto.
+  lets: sub_base_eq H. substs*.
+  lets: sub_arrow_closed_inv H. destruct H2 as [S1 [S2 [H2 _]]]. substs*.
+Qed.
 
 Hint Resolve sub_arrow_mixed_inv_false sub_base_eq.
 
@@ -670,26 +698,28 @@ Proof.
   forwards~ : IHTyp S1 b1. apply sub_trans with T; eauto. jauto.
 Qed.
 
-Lemma typing_strengthen_env: forall E u U, value u -> typing E u U ->
+Lemma typing_inv_top : forall E T, E |= trm_top ~: T -> T = typ_top.
+Proof. intros. inductions H; auto. substs. lets*: sub_top_eq H0. Qed.
+
+Lemma typing_strengthen_env: forall E u U, value u -> typing E u U -> U <> typ_top ->
   closed_typ U = true -> typing (pure E) u U.
 Proof. intros. induction H0; simpls; tryfalse.
   apply typing_var. apply* pure_ok. apply* pure_binds_in.
   apply_fresh* typing_abs_closed as y. apply* pure_ok. rewrite* pure_eq.
   inversion H.
-  destruct T; tryfalse. forwards~ : sub_base_eq H2. substs*.
-    lets* : sub_arrow_closed_inv H2. destruct H3 as [S1 [S2 [H3 [H4 H5]]]].
-    subst. forwards~ : IHtyping.
-    eapply typing_sub; eauto.
+  apply typing_sub with S; auto. apply IHtyping; auto.
+    forwards~ : sub_top_neq H3 H1. forwards~ : sub_closed H3 H1 H2.
 Qed.
 
 Lemma typing_subst : forall F E t T z u U,
-  value u ->
+  value u -> U <> typ_top ->
   (E & z ~ U & F) |= t ~: T ->
   E |= u ~: U ->
   (E & F) |= [z ~> u]t ~: T.
 Proof.
-  introv Hv Typt Typu. gen_eq G: (E & z ~ U & F). gen E F.
+  introv Htop Hv Typt Typu. gen_eq G: (E & z ~ U & F). gen E F.
   induction Typt; intros; subst; simpl subst.
+  apply* typing_top.
   case_var.
     binds_get H0. apply_empty* typing_weaken.
     binds_cases H0; apply* typing_var.
@@ -717,6 +747,23 @@ Proof.
   apply* typing_sub.
 Qed.
 
+Lemma typing_subst_top : forall F E t z T,
+  (E & z ~ typ_top & F) |= t ~: T ->
+  (E & F) |= [z ~> trm_top]t ~: T.
+Proof. introv Ht. inductions Ht; simpl; auto.
+  case_var.
+    binds_get H0. apply* typing_top.
+    binds_cases H0; apply* typing_var.
+  apply_fresh typing_abs as y. auto. rewrite* subst_open_var. apply_ih_bind* H1.
+  apply_fresh typing_abs_closed as y. autos.
+    rewrite* subst_open_var.
+    repeat(rewrite pure_dist in *).
+    rewrite* pure_single_true in H1. rewrite <- concat_assoc.
+    apply* H1. rewrite* concat_assoc.
+  apply* typing_app.
+  apply* typing_sub.
+Qed.
+
 Lemma preservation_result : preservation_statement.
 Proof.
   introv Typ. gen t'.
@@ -724,17 +771,26 @@ Proof.
 
   lets: typing_inv_abs Typ1. forwards~ : H S T. destruct H0 as [H5 [T1 [L H6]]].
     pick_fresh x. forwards~ : H6 x. rewrite* (@subst_intro x). apply_empty* typing_subst.
+
+  lets: typing_inv_abs Typ1.  forwards~ : H S T. destruct H0 as [H5 [T1 [L H6]]].
+    pick_fresh x. forwards~ : H6 x. rewrite* (@subst_intro x). apply_empty* typing_subst_top.
 Qed.
 
 Lemma canonical_form_abs : forall E t U1 U2,
   value t -> typing E t (typ_arrow U1 U2) ->
   exists V e1, t = trm_abs V e1.
-Proof. introv Val Typ. inductions Typ; inversions Val; jauto. Qed.
+Proof. introv Val Typ. inductions Typ; inversions Val; jauto.
+  lets*: sub_arrow_inv H. destruct H0 as [S1 [S2 [H1 _]]].
+  lets*: typing_inv_top Typ. destruct H1; false.
+Qed.
 
 Lemma canonical_form_abs_closed : forall E t U1 U2,
   value t -> typing E t (typ_arrow_closed U1 U2) ->
   exists V e1, t = trm_abs V e1.
-Proof. introv Val Typ. inductions Typ; inversions Val; jauto. Qed.
+Proof. introv Val Typ. inductions Typ; inversions Val; jauto.
+  lets*: sub_arrow_closed_inv H. destruct H0 as [S1 [S2 [H1 _]]].
+  lets*: typing_inv_top Typ.
+Qed.
 
 Lemma progress_result : progress_statement.
 Proof.
@@ -745,7 +801,9 @@ Proof.
     destruct~ IHTyp1 as [Val1 | [t1' Red1]].
     destruct~ IHTyp2 as [Val2 | [t2' Red2]].
       forwards~ : canonical_form_abs Typ1. destruct H as [V [e H]].
-        inversions H. exists* (e ^^ t2).
+        inversions H. destruct (classic (V = typ_top)).
+          exists* (e ^^ trm_top).
+          exists* (e ^^ t2).
       exists* (trm_app t1 t2').
       exists* (trm_app t1' t2).
 Qed.
@@ -804,6 +862,7 @@ Proof. intros E t T1 T2 H Hc Ha. inductions Ha.
 
   (* t = t1 t2 *)
   forwards~ : IHHa1. destruct S.
+  forwards~ : typing_equiv_top H0. apply* typing_app.
   forwards~ : typing_equiv_base H0. apply* typing_app.
   lets: healthy_env_term_capsafe H Ha2. inversion H1.
   forwards~ : IHHa2. apply* typing_poly.
