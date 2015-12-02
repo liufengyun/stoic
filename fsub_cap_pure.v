@@ -1108,10 +1108,19 @@ Qed.
 
 
 (* ********************************************************************** *)
-(** * Properties of environment *)
+(** * Properties of pure environment *)
 
 Lemma exposure_push_typ: forall E x U T, exposure (E & x ~: U) T = exposure E T.
 Proof. intros. inductions E; rewrite <- cons_to_push; destruct* T. Qed.
+
+Lemma exposure_pure: forall E T, exposure E T = exposure (pure E) T.
+Proof. intros. inductions E; try solve [destruct* T].
+  destruct a. destruct b. destruct T; auto.
+    simpl. cases_if*.
+    rewrite cons_to_push. rewrite exposure_push_typ.
+    rewrite <- cons_to_push. simpl. cases_if*.
+    rewrite cons_to_push. rewrite* exposure_push_typ.
+Qed.
 
 Lemma exposure_push_sub_eq: forall E X U,
  exposure (E & X ~<: U) (typ_fvar X)  = exposure E U.
@@ -1121,12 +1130,20 @@ Lemma exposure_push_sub_neq: forall E X Y U, X <> Y ->
  exposure (E & X ~<: U) (typ_fvar Y)  = exposure E (typ_fvar Y).
 Proof. intros. inductions E; rewrite <- cons_to_push; simpl; cases_if*. Qed.
 
-Definition non_tvar t := match t with typ_fvar _ => false | _ => true end.
-Lemma exposure_nontvar: forall E X T, non_tvar T = true ->  exposure E T = T.
+Definition is_tvar t := match t with typ_fvar _ => true | _ => false end.
+Lemma exposure_nontvar: forall E X T, is_tvar T = false ->  exposure E T = T.
 Proof. intros. inductions E; destruct* T. simpl in H. inversion H. Qed.
 
 Lemma closed_push_typ: forall E x U T, closed_typ (E & x ~: U) T = closed_typ E T.
 Proof. intros. inductions E; rewrite <- cons_to_push; destruct* T. Qed.
+
+Lemma closed_pure: forall E  T, closed_typ E T = closed_typ (pure E) T.
+Proof. intros. inductions E. simpls. reflexivity.
+  destruct a. destruct b.
+  simpl. destruct T; auto. simpl. cases_if; rewrite* exposure_pure.
+  rewrite cons_to_push. rewrite closed_push_typ.
+    rewrite <- cons_to_push. simpl. cases_if*. rewrite cons_to_push. rewrite* closed_push_typ.
+Qed.
 
 Lemma closed_tvar_inv: forall E X, ok E ->
   closed_typ E (typ_fvar X) = true ->
@@ -1143,7 +1160,7 @@ Proof. intros. inductions E. simpls. inversion H0.
       substs. destruct (ok_push_inv H). false (binds_fresh_inv H1 H3).
 Qed.
 
-Lemma closed_typ_concat: forall E F T, ok (E & F) ->
+Lemma closed_typ_weaken: forall E F T, ok (E & F) ->
   closed_typ E T = true ->
   closed_typ (E & F) T = true.
 Proof. intros. inductions F.
@@ -1157,12 +1174,23 @@ Proof. intros. inductions F.
     destruct (ok_push_inv H). rewrite* closed_push_typ.
 Qed.
 
+Lemma closed_typ_nontvar_invariance: forall E G T,
+  is_tvar T = false ->
+  closed_typ E T = closed_typ G T.
+Proof. intros. destruct* T. false. Qed.
+
 Lemma pure_push_sub: forall E X U, pure (E & X ~<: U) = pure E & X ~<: U.
 Proof. intros. rewrite <- cons_to_push. simpls. rewrite* cons_to_push. Qed.
 
 Lemma pure_push_typ: forall E x U, pure (E & x ~: U) = pure E & x ~: U \/
                                    pure (E & x ~: U) = pure E.
 Proof. intros. rewrite <- cons_to_push. simpls. cases_if*. rewrite* cons_to_push. Qed.
+
+Lemma pure_push_typ_closed: forall E x U, closed_typ E U = true ->
+  pure (E & x ~: U) = pure E & x ~: U.
+Proof. intros. rewrite <- cons_to_push. simpls. cases_if*. rewrite* cons_to_push.
+  rewrite cons_to_push in H0. rewrite closed_push_typ in H0. false.
+Qed.
 
 Lemma pure_push_inv: forall E x b, pure (E & x ~ b) = pure E & x ~ b \/
                                    pure (E & x ~ b) = pure E.
@@ -1257,23 +1285,61 @@ Proof. intros. induction* E.
     lets: pure_dom_subset E. unfolds subset.
     intros Ha. apply HI. autos.
 
-  apply IHE. lets*: okt_push_typ_inv H.
+  lets(H1 & H2 & H3): okt_push_typ_inv H. cases_if*. rewrite cons_to_push.
+  apply okt_typ. auto. apply* pure_wft_reverse.
+    lets: pure_dom_subset E. unfolds subset. lets: H4 v.
+    intros Hc. apply* H3.
 Qed.
 
-Lemma pure_map : forall E Z P, pure (map (subst_tb Z P) E) = map (subst_tb Z P) (pure E).
+Lemma closed_subst_tt: forall T E,
+  closed_typ E T = true ->
+  forall Z P, closed_typ E P = true ->
+              closed_typ E (subst_tt Z P T) = true.
+Proof. intros. inductions T; inversions H; simpls; auto. case_if*.
+  rewrite H0. rewrite H2. reflexivity.
+Qed.
+
+Lemma closed_var_map: forall E X Z P, closed_typ E P = true ->
+  closed_typ E (typ_fvar X) = true ->
+  closed_typ (map (subst_tb Z P) E) (typ_fvar X) = true.
+Proof. admit. Qed.
+
+(* this lemma doesn't work *)
+Lemma pure_map : forall E Z P, closed_typ E P = true -> is_tvar P = false ->
+  pure (map (subst_tb Z P) E) = map (subst_tb Z P) (pure E).
 Proof. intros. induction E.
   simpl. rewrite <- empty_def. rewrite map_empty. rewrite empty_def. reflexivity.
   destruct a. destruct b; simpl.
+    (* x <: T *)
     repeat(rewrite cons_to_push). repeat(rewrite map_push). simpl.
       rewrite <- cons_to_push. simpl. rewrite cons_to_push. rewrite* IHE.
-    repeat(rewrite cons_to_push). repeat(rewrite map_push). simpl.
-      rewrite <- cons_to_push. simpl. rewrite* IHE.
+      erewrite closed_typ_nontvar_invariance. exact H. auto.
+    (* x: T *)
+    rewrite cons_to_push in H. rewrite* closed_push_typ in H.
+    repeat(rewrite cons_to_push). repeat(rewrite map_push). simpl. cases_if*.
+      (* closed t = true *)
+      cases (is_tvar t). destruct t; inversion Eq.
+        (* t = X *)
+        rewrite <- cons_to_push. rewrite map_push. unfold subst_tt. cases_if*.
+        simpl. erewrite* closed_typ_nontvar_invariance. rewrite H. cases_if*.
+          rewrite cons_to_push. rewrite* IHE.
+        rewrite closed_push_typ in H1. rewrite cons_to_push. rewrite pure_push_typ_closed.
+          simpl. cases_if*. rewrite* IHE. apply* closed_var_map.
+        (* t <> X *)
+        rewrite <- cons_to_push. destruct t; simpls; tryfalse;
+          try solve [rewrite cons_to_push; rewrite map_push; simpl; rewrite* IHE].
+      (* closde t = false *)
+      admit.
 Qed.
 
 Lemma pure_eq : forall E, pure (pure E) = pure E.
 Proof. intros. induction E; autos.
   destruct a. destruct b; autos.
   simpl. rewrite* IHE.
+  simpl. cases_if*. simpl. cases_if*. rewrite* IHE.
+    rewrite cons_to_push in H0. rewrite closed_push_typ in H0.
+    rewrite cons_to_push in H. rewrite closed_push_typ in H.
+    rewrite closed_pure in H. false.
 Qed.
 
 (* ********************************************************************** *)
