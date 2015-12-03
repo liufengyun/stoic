@@ -1211,6 +1211,30 @@ Lemma pure_push_inv: forall E x b, pure (E & x ~ b) = pure E & x ~ b \/
                                    pure (E & x ~ b) = pure E.
 Proof. intros. destruct b. lets*: pure_push_sub. lets*: pure_push_typ. Qed.
 
+Lemma pure_dist: forall E x b F,
+  exists M N, pure (E & x ~ b & F) = M & x ~ b & N \/
+              pure (E & x ~ b & F) = M & N.
+Proof. intros. inductions F.
+  exists (pure E) (@empty bind). destruct b.
+    left. rewrite <- empty_def. repeat(rewrite concat_empty_r).
+    repeat(rewrite <- cons_to_push). simpl. auto.
+    rewrite <- empty_def. repeat(rewrite concat_empty_r).
+      repeat(rewrite <- cons_to_push). simpl. cases_if*.
+  destruct a. rewrite cons_to_push. rewrite concat_assoc.
+    destruct IHF as [M [N [H | H]]]. destruct b0.
+      exists M (N & v ~<: t). left. rewrite pure_push_sub.
+        rewrite H. rewrite* concat_assoc.
+      rewrite <- cons_to_push. simpl. cases_if*.
+      exists M (N & v ~: t). left. rewrite cons_to_push.
+        rewrite H. rewrite* concat_assoc.
+
+      destruct b0. exists M (N & v ~<: t). right. rewrite pure_push_sub.
+        rewrite H. rewrite* concat_assoc.
+      rewrite <- cons_to_push. simpl. cases_if*.
+      exists M (N & v ~: t). right. rewrite cons_to_push.
+        rewrite H. rewrite* concat_assoc.
+Qed.
+
 Lemma pure_dom_subset : forall E, dom (pure E) \c dom E.
 Proof. intros. induction E.
   simpls. apply subset_refl.
@@ -1574,10 +1598,69 @@ Qed.
 (* ********************************************************************** *)
 (** * Properties of subsequence *)
 
-Lemma pure_tvars : forall E, tvar_env E = tvar_env (pure E).
+Lemma tvar_pure : forall E, tvar_env E = tvar_env (pure E).
 Proof. intros. inductions E; auto. destruct a. destruct b.
   simpl. rewrite* IHE.
   simpl. cases_if*.
+Qed.
+
+Lemma tvar_binds : forall X E U, binds X (bind_sub U) E ->
+  binds X (bind_sub U) (tvar_env E).
+Proof. introv HB. inductions E.
+  rewrite <- empty_def in HB. false* binds_empty_inv.
+  destruct a. destruct b.
+    simpls. rewrite cons_to_push in *. destruct (binds_push_inv HB) as [HC|HC]; destruct HC.
+      inversions* H0. apply* binds_concat_left.
+    simpl. rewrite cons_to_push in *. destruct (binds_push_inv HB) as [HC|HC]; destruct HC.
+      inversions H0. auto.
+Qed.
+
+Lemma tvar_binds_equiv : forall X E U, ok E -> binds X (bind_sub U) E <->
+  binds X (bind_sub U) (tvar_env E).
+Proof. introv OK. split. apply tvar_binds.
+
+  introv HB. inductions E.
+  simpls. rewrite <- empty_def in HB. false* binds_empty_inv.
+  destruct a. destruct b.
+    simpls. rewrite cons_to_push in *. destruct (binds_push_inv HB) as [HC|HC]; destruct HC.
+      inversions* H0. apply* binds_concat_left.
+    simpls. rewrite cons_to_push in *. destruct (ok_push_inv OK).
+      destruct (classic (X = v)). substs. forwards~ : IHE U. false (binds_fresh_inv H1 H0).
+      apply* binds_concat_left.
+Qed.
+
+Lemma tvar_exposure : forall E F T, tvar_env E = tvar_env F ->
+  exposure E T = exposure F T.
+Proof. introv Eq. gen F. inductions E; intros.
+  simpls. destruct T; try solve [rewrite* exposure_nontvar].
+    inductions F; auto. destruct a. destruct b.
+    simpls. inversion Eq. simpls. auto.
+  destruct a. destruct b. destruct T; try solve [repeat(rewrite* exposure_nontvar)].
+    inductions F. simpl in Eq. inversion Eq. destruct a. destruct b.
+      simpl in Eq. inversions Eq. simpl. cases_if*.
+      simpl in Eq. auto.
+    simpl in Eq. rewrite cons_to_push. rewrite* exposure_push_typ.
+Qed.
+
+Lemma tvar_wft : forall E F T, ok F -> tvar_env E = tvar_env F ->
+  wft E T -> wft F T.
+Proof. introv Ok Tv Wf. gen F. inductions Wf; intros; auto.
+  apply wft_var with U. rewrite* tvar_binds_equiv.
+    rewrite <- Tv. apply* tvar_binds.
+  apply_fresh wft_all as X. auto. apply* H0.
+    repeat(rewrite <- cons_to_push). simpl. rewrite* Tv.
+Qed.
+
+Lemma tvar_sub : forall E F T1 T2, okt E -> okt F ->
+  tvar_env E = tvar_env F ->
+  sub E T1 T2 -> sub F T1 T2.
+Proof. introv OkE OkF Tv Sub. gen F. inductions Sub; intros; autos.
+  apply* sub_top. forwards~ : tvar_wft Tv H0.
+  apply* sub_refl_tvar. forwards~ : tvar_wft Tv H0.
+  apply* sub_trans_tvar. rewrite tvar_binds_equiv in *; auto. rewrite* <- Tv.
+  apply_fresh sub_all as X. auto. apply* H0.
+    apply* okt_sub. forwards~ : IHSub F.
+    repeat(rewrite <- cons_to_push). simpl. rewrite* Tv.
 Qed.
 
 Lemma subseq_concat: forall E F G,
@@ -1600,9 +1683,9 @@ Lemma subseq_pure: forall E, subseq (pure E) E.
 Proof. intros. induction E; auto.
   destruct a. destruct b.
     simpl. repeat(rewrite cons_to_push). apply* subseq_cons.
-      rewrite* <- pure_tvars.
+      rewrite* <- tvar_pure.
     simpl. cases_if*; repeat(rewrite cons_to_push in *); auto.
-      apply* subseq_cons. rewrite* <- pure_tvars.
+      apply* subseq_cons. rewrite* <- tvar_pure.
 Qed.
 
 Lemma subseq_fresh: forall E F x, subseq E F ->
@@ -1624,89 +1707,81 @@ Proof. intros. inductions H0; auto.
     apply* binds_push_neq.
 Qed.
 
-Lemma subseq_exposure: forall E F T, okt E -> okt F -> subseq E F ->
-  wft E T -> exposure E T = exposure F T.
-Proof. introv He Hf Seq Wf. gen T. inductions Seq; intros; auto.
-  destruct b. destructs (okt_push_sub_inv Hf).
-    destruct T; try solve [repeat(rewrite* exposure_nontvar)].
-      rewrite <- cons_to_push. simpl. cases_if*. inversions Wf.
-      forwards~ : subseq_binds F H4.
-      false (binds_fresh_inv H2 H1).
-    destructs (okt_push_typ_inv Hf). rewrite* exposure_push_typ.
-  destruct b. destructs (okt_push_sub_inv Hf). destructs (okt_push_sub_inv He).
-    destruct T; try solve [repeat(rewrite* exposure_nontvar)].
-      repeat(rewrite <- cons_to_push). simpl. cases_if*. inversions Wf.
-        forwards~ : binds_push_neq_inv H9. lets*: wft_var H7.
-    destructs (okt_push_typ_inv Hf). destructs (okt_push_typ_inv He).
-      repeat (rewrite exposure_push_typ). apply* IHSeq. apply_empty* wft_strengthen.
+Lemma exposure_not_wft : forall E X, ok E -> ~ wft E (typ_fvar X) ->
+  exposure E (typ_fvar X) = typ_fvar X.
+Proof. introv OK NonWf. inductions E; auto.
+  destruct a. destruct b; rewrite cons_to_push in OK; destruct (ok_push_inv OK).
+    simpl. cases_if*.
+      false. apply NonWf. rewrite* cons_to_push.
+      apply* IHE. intros Wf. apply NonWf. inversions Wf.
+        rewrite cons_to_push. apply* wft_var.
+    simpl. apply* IHE. intros Wf. apply NonWf. inversions Wf.
+      rewrite cons_to_push. apply* wft_var. destruct (classic (X = v)).
+      subst*. false (binds_fresh_inv H3 H0).
+      apply* binds_concat_left.
 Qed.
 
-Lemma subseq_closed: forall E F T, ok F -> subseq E F ->
-  closed_typ E T = true ->  closed_typ F T = true.
-Proof. intros. gen T. inductions H0; intros.
-  destruct T; try solve [auto | simpls; inversion H1].
-  destruct b.
-    destruct T; try solve [auto | simpls; inversion H1].
-      rewrite <- cons_to_push. simpl. cases_if.
-      destruct (ok_push_inv H).
-      lets : IHsubseq H2 H1. forwards~ : closed_tvar_inv H4.
-      destruct H5. false (binds_fresh_inv H5 H3).
-      forwards~ : IHsubseq H1.
-    rewrite* closed_push_typ.
-  destruct b.
-    destruct T; try solve [auto | simpls; inversion H1].
-      rewrite <- cons_to_push. simpl. cases_if*.
-      destruct (ok_push_inv H). rewrite <- cons_to_push in H1. simpls. cases_if*.
-      forwards~ : IHsubseq H2. forwards~ : closed_tvar_inv H4.
-      destruct H5. false (binds_fresh_inv H5 H3).
-    rewrite* closed_push_typ.
+Lemma subseq_exposure: forall E F T, ok F -> subseq E F ->
+  wft E T -> exposure E T = exposure F T.
+Proof. introv Hf Seq Wf. gen T. inductions Seq; intros; auto.
+  destruct b; destructs (ok_push_inv Hf).
+    destruct T; try solve [repeat(rewrite* exposure_nontvar)].
+      rewrite <- cons_to_push. simpl. cases_if*. inversions Wf.
+      forwards~ : subseq_binds F H3.
+      false (binds_fresh_inv H1 H0).
+    rewrite* exposure_push_typ.
+  destruct b; destructs (ok_push_inv Hf).
+    destruct T; try solve [repeat(rewrite* exposure_nontvar)].
+      repeat(rewrite <- cons_to_push). simpl. cases_if*.
+        destruct t; try solve [repeat(rewrite* exposure_nontvar)].
+        forwards~ : subseq_ok Seq. destruct* (classic (wft E (typ_fvar v))).
+        assert (~ wft F (typ_fvar v)) as HWF.
+          intros Fwf. inversions Fwf. apply H3. apply* wft_var. rewrite* tvar_binds_equiv.
+          rewrite H. rewrite* <- tvar_binds_equiv.
+        repeat(rewrite* exposure_not_wft).
+        inversions Wf. forwards~ : binds_push_neq_inv H5. lets*: wft_var H3.
+    repeat (rewrite exposure_push_typ). apply* IHSeq. apply_empty* wft_strengthen.
+Qed.
 
 Lemma subseq_pure_dist: forall E F, subseq E F ->
   subseq (pure E) (pure F).
-Proof. intros. inductions H; simpl; auto.
+Proof. introv Seq. inductions Seq; simpl; auto.
   rewrite <- cons_to_push. destruct b.
     simpl. rewrite* cons_to_push.
     simpl. cases_if*. rewrite* cons_to_push.
   repeat(rewrite <- cons_to_push). destruct b.
-    simpl. repeat(rewrite* cons_to_push).
+    simpl. repeat(rewrite cons_to_push). apply* subseq_cons. repeat(rewrite* <- tvar_pure).
     simpl. cases_if*; cases_if*; repeat(rewrite* cons_to_push).
-    rewrite cons_to_push in *. rewrite closed_push_typ in H0.
-    rewrite closed_push_typ in H1.
+    apply* subseq_cons. repeat(rewrite* <- tvar_pure).
+
+    destruct t; tryfalse. simpls.
+    lets: tvar_exposure (typ_fvar v) H. false.
 Qed.
 
-
 Lemma subseq_wft : forall E F T, ok F -> subseq E F ->
-   wft E T -> wft F T.
-Proof. admit. Qed.
+  wft E T -> wft F T.
+Proof. introv Ok Seq Wf. gen T. inductions Seq; intros; auto.
+  eapply tvar_wft with (E & x ~ b); eauto.
+  repeat(rewrite <- cons_to_push). destruct b; auto. simpl; rewrite* H.
+Qed.
 
 Lemma subseq_okt : forall E F, okt F -> subseq E F -> okt E.
-Proof. admit. Qed.
+Proof. introv Ok Seq. inductions Seq; auto.
+  destruct b. destruct* (okt_push_sub_inv Ok). destruct* (okt_push_typ_inv Ok).
+  destruct b.
+    destructs (okt_push_sub_inv Ok). apply okt_sub. auto.
+      apply tvar_wft with F; auto. apply subseq_fresh with F; auto.
+    destructs (okt_push_typ_inv Ok). apply okt_typ. auto.
+      apply tvar_wft with F; auto. apply subseq_fresh with F; auto.
+Qed.
 
 Lemma subseq_sub : forall E F T1 T2, okt F ->
   subseq E F -> sub E T1 T2 -> sub F T1 T2.
-Proof. admit. Qed.
-
-Lemma typing_weaking_subseq : forall E F e T,
-  typing E e T -> okt F -> subseq E F -> typing F e T.
-Proof. intros. gen F. inductions H; intros.
-  apply* typing_var. apply subseq_binds with E; autos.
-  apply_fresh* typing_abs as x. forwards~ : H0 x. apply* H1.
-    apply okt_typ. apply subseq_okt with F. auto. apply subseq_pure.
-    destructs (typing_regular H4). destructs (okt_push_typ_inv H5).
-    apply subseq_wft with (pure E); auto. apply subseq_ok with F; autos.
-      apply subseq_pure. apply* subseq_pure_dist.
-    apply subseq_fresh with F. apply subseq_pure. auto.
-    apply subseq_cons. apply* subseq_pure_dist.
-  apply* typing_app.
-  apply_fresh* typing_tabs as X. forwards~ : H0 X. apply* H1.
-    apply okt_sub. apply subseq_okt with F. auto. apply subseq_pure.
-    destructs (typing_regular H4). destructs (okt_push_sub_inv H5).
-    apply subseq_wft with (pure E); auto. apply subseq_ok with F; autos.
-      apply subseq_pure. apply* subseq_pure_dist.
-    apply subseq_fresh with F. apply subseq_pure. auto.
-    apply subseq_cons. apply* subseq_pure_dist.
-  apply* typing_tapp. apply subseq_sub with E; auto.
-  apply* typing_sub. apply subseq_sub with E; auto.
+Proof. introv Ok Seq Sub. inductions Seq; auto.
+  destruct b; [destructs (okt_push_sub_inv Ok) | destructs (okt_push_typ_inv Ok)];
+    apply_empty* sub_weakening.
+  apply tvar_sub with (E & x ~ b); auto.
+    repeat (rewrite <- cons_to_push). destruct b; simpl; rewrite* H.
 Qed.
 
 
