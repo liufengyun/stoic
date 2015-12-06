@@ -123,9 +123,10 @@ type application where the first term is not effect-closed.
 |  [f_cap_pure_v2.v](f_cap_pure_v2.v)       |    F + capabilities(allow B->E to type app)            |      Finished       |
 |  **Phase 3**                              |    **Pure Capability + Subtyping**                     |                     |
 |  [stlc_cap_sub_pure.v](stlc_cap_sub_pure.v) |    STLC + capabilities + subtyping                   |      Finished       |
-|  fsub_cap_pure.v                          |    F<: + capabilities                                  |      Working        |
+|  [fsub_cap_pure.v](fsub_cap_pure.v)       |    F<: + capabilities                                  |      Working        |
 |  **Phase 4**                              |    **Impure Capability + Subtyping**                   |                     |
-|  [stlc_cap_impure.v](stlc_cap_impure.v)   |    STLC + capabilities + =>(w/o `Top`)                 |      Finished       |
+|  [stlc_cap_impure.v](stlc_cap_impure.v)   |    STLC + capabilities + =>                            |      Finished       |
+|  [stlc_cap_impure_top.v](stlc_cap_impure_top.v)   |    STLC + capabilities + =>(two `Top`)         |      Finished       |
 |  fsub_cap_impure.v                        |    F<: + capabilities + =>                             |      Working        |
 
 
