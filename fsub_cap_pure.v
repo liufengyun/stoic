@@ -1370,54 +1370,6 @@ Lemma pure_push_inv: forall E x b, pure (E & x ~ b) = pure E & x ~ b \/
  pure (E & x ~ b) = pure E.
 Proof. intros. destruct b. lets*: pure_push_sub. lets*: pure_push_typ. Qed.
 
-Lemma pure_dist: forall E x b F,
-  exists M N, pure (E & x ~ b & F) = M & x ~ b & N \/
-              pure (E & x ~ b & F) = M & N.
-Proof. intros. inductions F.
-  exists (pure E) (@empty bind). destruct b.
-    left. rewrite <- empty_def. repeat(rewrite concat_empty_r).
-    repeat(rewrite <- cons_to_push). simpl. auto.
-    rewrite <- empty_def. repeat(rewrite concat_empty_r).
-      repeat(rewrite <- cons_to_push). simpl. cases_if*.
-  destruct a. rewrite cons_to_push. rewrite concat_assoc.
-    destruct IHF as [M [N [H | H]]]. destruct b0.
-      exists M (N & v ~<: t). left. rewrite pure_push_sub.
-        rewrite H. rewrite* concat_assoc.
-      rewrite <- cons_to_push. simpl. cases_if*.
-      exists M (N & v ~: t). left. rewrite cons_to_push.
-        rewrite H. rewrite* concat_assoc.
-
-      destruct b0. exists M (N & v ~<: t). right. rewrite pure_push_sub.
-        rewrite H. rewrite* concat_assoc.
-      rewrite <- cons_to_push. simpl. cases_if*.
-      exists M (N & v ~: t). right. rewrite cons_to_push.
-        rewrite H. rewrite* concat_assoc.
-Qed.
-
-Lemma pure_dist_exact: forall E x b F,
-  pure (E & x ~ b & F) = pure (E & F) \/
-  exists M N, pure (E & x ~ b & F) = M & x ~ b & N.
-Proof. intros. inductions F.
-  rewrite <- empty_def. repeat(rewrite concat_empty_r).
-  destruct b.
-    right. rewrite pure_push_sub. exists (pure E) (@empty bind). rewrite* concat_empty_r.
-    rewrite <- cons_to_push. simpl. cases_if*. right.
-      exists (pure E) (@empty bind). rewrite cons_to_push. rewrite* concat_empty_r.
-
-  destruct a. destruct IHF.
-    left. destruct b0; rewrite cons_to_push; repeat(rewrite concat_assoc).
-      repeat(rewrite pure_push_sub). rewrite* H.
-      repeat(rewrite <- cons_to_push). destruct t; simpl;
-        repeat(rewrite cons_to_push); rewrite* H.
-        erewrite tvar_exposure. reflexivity.
-        rewrite tvar_pure. rewrite H. symmetry. apply tvar_pure.
-
-    destruct H as [M [N H]]. right. rewrite cons_to_push. rewrite concat_assoc.
-      destruct (@pure_push_inv (E & x ~ b & F) v b0).
-        exists M (N & v ~ b0). rewrite H0. rewrite H. rewrite* concat_assoc.
-        exists M N. rewrite H0. rewrite* H.
-Qed.
-
 Lemma pure_dom_subset : forall E, dom (pure E) \c dom E.
 Proof. intros. induction E.
   simpls. apply subset_refl.
@@ -1954,6 +1906,24 @@ Proof. introv Ok.
     rewrite H. rewrite* H3.
 Qed.
 
+Lemma pure_dist_middle_sub: forall E X T G, okt (E & X ~<: T & G) ->
+  exists N, pure (E & X ~<: T & G) = pure E & X ~<: T & N  /\
+            subseq N G /\ tvar_env N = tvar_env G.
+Proof. introv Ok.
+  forwards~ : pure_dist_three Ok. destruct H as [M [N H]]. destructs H.
+  exists N. splits; auto.
+
+  inversions H1. rewrite* H.
+  rewrite <- cons_to_push in H5. rewrite single_def in *. inversions H5.
+    rewrite <- empty_def in H7. forwards~ : subseq_empty_inv H7. substs.
+    rewrite empty_def in *. simpls. inversion H2.
+  rewrite <- cons_to_push in H5. rewrite single_def in *. inversions H5.
+    rewrite <- empty_def in *. repeat(rewrite cons_to_push in *).
+    repeat(rewrite concat_empty_l in *). rewrite H.
+    forwards~ : subseq_empty_inv H8. substs.
+    rewrite* concat_empty_l.
+Qed.
+
 Lemma pure_dist_weaken: forall E F G, okt (E & G) -> okt (E & F & G) ->
   exists M N, pure (E & F & G) = pure E & M & N /\
               pure (E & G) = pure E & N /\
@@ -2087,6 +2057,81 @@ Proof. introv Ok1 Ok2. inductions G.
       apply* tvar_closed_typ. repeat(rewrite tvar_dist). rewrite* <- tvar_pure.
 Qed.
 
+Lemma closed_typ_narrowing: forall E F X P Q T,
+  okt (E & X ~<: Q & F) ->
+  sub E P Q ->
+  wft (E & X ~<: Q & F) T ->
+  closed_typ (E & X ~<: Q & F) T = closed_typ (E & X ~<: P & F) T.
+Proof. admit. Qed.
+
+Lemma pure_dist_narrow: forall E F X P Q,
+  okt (E & X ~<: Q & F) ->
+  sub E P Q ->
+  exists M, pure (E & X ~<: Q & F) = pure E & X ~<: Q & M /\
+            pure (E & X ~<: P & F) = pure E & X ~<: P & M /\
+            subseq M F /\ tvar_env M = tvar_env F.
+Proof. introv Ok1 Sub.
+  forwards~ : pure_dist_middle_sub Ok1. destruct H as [M H]. destructs H.
+  exists M. splits; auto. clear H0 H1. inductions F.
+
+  rewrite <- empty_def in *. rewrite concat_empty_r in *. rewrite pure_push_sub in *.
+  destruct M. rewrite <- empty_def. rewrite* concat_empty_r.
+  destruct p. rewrite cons_to_push in *. rewrite concat_assoc in *.
+  rewrite <- concat_assoc in H. rewrite concat_def in H.
+  lets: LibList.app_eq_self_inv_r H. rewrite single_def in H0.
+    rewrite LibList.app_cons_one in H0. inversion H0.
+
+  destruct a. rewrite cons_to_push in *. rewrite concat_assoc in *.
+  destruct b.
+
+  rewrite pure_push_sub in *. rewrite <- cons_to_push in H.
+  replace (pure E & X ~<: Q & M) with
+    (LibList.append (LibList.append M ((X, bind_sub Q) :: nil)) (pure E)) in H.
+  forwards~ : LibList.cons_eq_last_val_app_inv H. destruct H0.
+  destructs H0. inversions H1. destructs (okt_push_sub_inv Ok1).
+    assert (binds X (bind_sub Q) (E & X ~<: Q & F)).
+      apply* binds_concat_left.
+    false. apply (binds_fresh_inv H4 H3).
+  destruct H0 as [M' H0]. substs.
+  replace (LibList.append (LibList.append ((v, bind_sub t) :: M')
+                                          ((X, bind_sub Q) :: nil))
+                          (pure E))%list
+    with (pure E & X ~<: Q & ((v, bind_sub t) :: M'))%list in H.
+  repeat(rewrite cons_to_push in H). rewrite concat_assoc in H.
+  repeat(rewrite <- cons_to_push in H). inversions H. repeat(rewrite cons_to_push in H1).
+  destructs (okt_push_sub_inv Ok1). forwards~ : IHF H Sub H1.
+  rewrite H3. rewrite cons_to_push. rewrite* concat_assoc.
+  rewrite single_def. rewrite <- concat_assoc. rewrite* concat_def.
+  rewrite single_def. rewrite <- concat_assoc. rewrite* concat_def.
+
+  destructs (okt_push_typ_inv Ok1).
+  rewrite <- cons_to_push. simpls. cases_if.
+  rewrite cons_to_push in H3. rewrite closed_typ_push_typ in H3.
+  forwards~ : closed_typ_narrowing H0 Sub H1. rewrite H3 in H4.
+  rewrite pure_push_typ_closed in H; auto.
+  rewrite <- cons_to_push in H.
+  replace (pure E & X ~<: Q & M) with
+    (LibList.append (LibList.append M ((X, bind_sub Q) :: nil)) (pure E)) in H.
+  forwards~ : LibList.cons_eq_last_val_app_inv H. destruct H5.
+  destructs H5. inversions H6. destruct H5 as [M' H5]. substs.
+  replace (LibList.append (LibList.append ((v, bind_typ t) :: M')
+                                          ((X, bind_sub Q) :: nil))
+                          (pure E))%list
+    with (pure E & X ~<: Q & ((v, bind_typ t) :: M'))%list in H.
+  repeat(rewrite cons_to_push in H). rewrite concat_assoc in H.
+  repeat(rewrite <- cons_to_push in H). inversions H. repeat(rewrite cons_to_push in H6).
+  forwards~ : IHF H0 Sub H6.
+  rewrite H. repeat(rewrite cons_to_push). rewrite* concat_assoc.
+  rewrite single_def. rewrite <- concat_assoc. rewrite* concat_def.
+  rewrite single_def. rewrite <- concat_assoc. rewrite* concat_def.
+
+  rewrite cons_to_push in H3. rewrite closed_typ_push_typ in H3.
+  forwards~ : closed_typ_narrowing H0 Sub H1. rewrite H3 in H4.
+  rewrite pure_push_typ_false in H; auto.
+  apply* IHF.
+Qed.
+
+
 (* ********************************************************************** *)
 (** * Properties of Typing *)
 
@@ -2179,14 +2224,9 @@ Qed.
 
 Lemma sub_strengthening_env : forall E S T,
   sub E S T -> sub (pure E) S T.
-Proof.  intros. inductions H; autos.
-  apply sub_top. apply* pure_okt. apply* pure_wft_reverse.
-  apply sub_refl_tvar. apply* pure_okt. apply* pure_wft_reverse.
-  eapply sub_trans_tvar. eapply pure_binds_reverse. eauto. auto.
-  apply sub_all with L. auto. intros. forwards~ : H1 X.
-  rewrite pure_dist in H3.
-  replace (pure (X ~<: T1)) with (X ~<: T1) in H3 by (rewrite* single_def).
-  auto.
+Proof. introv Sub. destructs (sub_regular Sub).
+  lets: pure_okt H.
+  apply tvar_sub with E; auto. apply tvar_pure.
 Qed.
 
 (************************************************************************ *)
@@ -2200,7 +2240,12 @@ Proof.
   introv PsubQ Typ. gen_eq E': (E & X ~<: Q & F). gen E F.
   inductions Typ; introv PsubQ EQ; subst; simpl.
   binds_cases H0; apply* typing_var.
-  apply_fresh* typing_abs as y. apply_ih_bind* H0.
+  apply_fresh* typing_abs as y.
+    forwards~ : okt_narrow P H.
+    forwards~ : pure_dist_middle_sub H2. destruct H3 as [N H3]. destructs H3.
+    rewrite H3. apply_ih_bind* H1.
+      apply tvar_sub with E0; auto. apply* pure_okt. apply tvar_pure.
+
   apply_fresh* typing_cap as y. repeat(rewrite pure_dist in *).
     rewrite <- concat_assoc. lets: H1 y. rewrite <- concat_assoc in H2.
     replace (pure (X ~<: P)) with (X ~<: P) by (rewrite* single_def).
