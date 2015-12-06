@@ -1189,6 +1189,26 @@ Proof. introv Ok1 Ok2 Wf. inductions G.
       inversion H4. apply* wft_var.
 Qed.
 
+Lemma exposure_wft : forall E T, okt E -> wft E T -> wft E (exposure E T).
+Proof. introv Ok Wf. inductions E; try destruct* T.
+  destruct a. destruct b; simpl; repeat(rewrite cons_to_push in *).
+  cases_if; destructs (okt_push_sub_inv Ok); apply_empty* wft_weaken.
+    apply* IHE. inversions Wf. forwards~ : binds_push_neq_inv H5. apply* wft_var.
+  apply_empty* wft_weaken. destructs (okt_push_typ_inv Ok). apply* IHE.
+    apply_empty* wft_strengthen.
+Qed.
+
+Lemma exposure_sub: forall E P Q,
+  okt E ->
+  sub E P Q ->
+  sub E (exposure E P) (exposure E Q).
+Proof. introv Ok Sub. inductions Sub; try solve [rewrite* exposure_nontvar; auto].
+  replace (exposure E typ_top) with typ_top by (rewrite* exposure_nontvar).
+    apply* sub_top. apply* exposure_wft.
+
+   admit. admit. admit. admit.
+Qed.
+
 Lemma tvar_push_typ: forall E x T, tvar_env (E & x ~: T) = tvar_env E.
 Proof. intros. rewrite <- cons_to_push. simpl. auto. Qed.
 
@@ -1696,6 +1716,7 @@ End NarrowTrans.
 (* ********************************************************************** *)
 (** Type substitution preserves subtyping (10) *)
 
+
 Lemma sub_through_subst_tt : forall Q E F Z S T P,
   sub (E & Z ~<: Q & F) S T ->
   sub E P Q ->
@@ -1730,6 +1751,27 @@ Qed.
 
 (* ********************************************************************** *)
 (** * Properties of subsequence *)
+
+Lemma closed_typ_narrowing: forall E F X P Q T,
+  okt (E & X ~<: Q & F) ->
+  sub E P Q ->
+  closed_typ (E & X ~<: P & F) T = false ->
+  closed_typ (E & X ~<: Q & F) T = false.
+Proof. introv Ok1 Sub Closed.
+  forwards~ Ok2: okt_narrow P Ok1. inductions F.
+
+  rewrite <- empty_def in *. repeat(rewrite concat_empty_r in *).
+  destruct T; try solve [unfold closed_typ; autos].
+  repeat(rewrite <- cons_to_push in *). simpls. cases_if*.
+
+  admit. admit.
+Qed.
+
+Lemma subseq_empty: forall E, subseq empty E.
+Proof. intros. inductions E.
+ rewrite* <- empty_def.
+ destruct a. rewrite cons_to_push. apply* subseq_ext.
+Qed.
 
 Lemma subseq_concat: forall E F G,
  subseq E F -> subseq E (F & G).
@@ -1778,6 +1820,28 @@ Proof. intros. inductions H0; auto.
     apply* binds_push_neq.
   destruct (binds_push_inv H2). destruct H3. substs*.
     apply* binds_push_neq.
+Qed.
+
+Lemma subseq_push_inv: forall E F x u,
+  ok F ->
+  subseq (E & x ~ u) F ->
+  binds x u F.
+Proof. introv Ok Seq. inductions Seq; auto.
+  destruct (ok_push_inv Ok).  forwards~ : IHSeq H.
+    destruct (classic (x = x0)). substs. false. autos* binds_fresh_inv.
+    apply* binds_concat_left.
+  repeat(rewrite <- cons_to_push in x). inversions x.  auto.
+Qed.
+
+Lemma subseq_push_eq_inv: forall E F x u v,
+  ok F ->
+  x # F ->
+  subseq (E & x ~ u) (F & x ~ v) ->
+  subseq E F /\ u = v.
+Proof. introv Ok Fresh Seq. inductions Seq; repeat(rewrite <- cons_to_push in x); inversions x.
+  split*.
+  forwards~ : subseq_push_inv Ok Seq. false. autos* binds_fresh_inv.
+  repeat(rewrite <- cons_to_push in x2); inversions x2. auto.
 Qed.
 
 Lemma exposure_not_wft : forall E X, ok E -> ~ wft E (typ_fvar X) ->
@@ -2057,57 +2121,73 @@ Proof. introv Ok1 Ok2. inductions G.
       apply* tvar_closed_typ. repeat(rewrite tvar_dist). rewrite* <- tvar_pure.
 Qed.
 
-Lemma closed_typ_narrowing: forall E F X P Q T,
-  okt (E & X ~<: Q & F) ->
-  sub E P Q ->
-  wft (E & X ~<: Q & F) T ->
-  closed_typ (E & X ~<: Q & F) T = closed_typ (E & X ~<: P & F) T.
-Proof. admit. Qed.
-
 Lemma pure_dist_narrow: forall E F X P Q,
   okt (E & X ~<: Q & F) ->
   sub E P Q ->
-  exists M, pure (E & X ~<: Q & F) = pure E & X ~<: Q & M /\
-            pure (E & X ~<: P & F) = pure E & X ~<: P & M /\
-            subseq M F /\ tvar_env M = tvar_env F.
-Proof. introv Ok1 Sub.
+  exists M N, pure (E & X ~<: Q & F) = pure E & X ~<: Q & M /\
+              pure (E & X ~<: P & F) = pure E & X ~<: P & N /\
+              subseq M N /\
+              subseq M F /\ tvar_env M = tvar_env F /\
+              subseq N F /\ tvar_env N = tvar_env F.
+Proof. introv Ok1 Sub. forwards~ Ok2: okt_narrow P Ok1.
   forwards~ : pure_dist_middle_sub Ok1. destruct H as [M H]. destructs H.
-  exists M. splits; auto. clear H0 H1. inductions F.
+  forwards~ : pure_dist_middle_sub Ok2. destruct H2 as [N H2]. destructs H2.
+  exists M N. splits; auto. inductions F.
 
   rewrite <- empty_def in *. rewrite concat_empty_r in *. rewrite pure_push_sub in *.
-  destruct M. rewrite <- empty_def. rewrite* concat_empty_r.
-  destruct p. rewrite cons_to_push in *. rewrite concat_assoc in *.
-  rewrite <- concat_assoc in H. rewrite concat_def in H.
-  lets: LibList.app_eq_self_inv_r H. rewrite single_def in H0.
-    rewrite LibList.app_cons_one in H0. inversion H0.
+  destruct M. rewrite <- empty_def.
+    destruct N. rewrite* <- empty_def. apply subseq_empty.
+    destruct p. lets: subseq_empty_inv H0. rewrite empty_def in H5. inversion H5.
 
   destruct a. rewrite cons_to_push in *. rewrite concat_assoc in *.
   destruct b.
 
-  rewrite pure_push_sub in *. rewrite <- cons_to_push in H.
+  rewrite pure_push_sub in *. rewrite <- cons_to_push in H, H2.
   replace (pure E & X ~<: Q & M) with
     (LibList.append (LibList.append M ((X, bind_sub Q) :: nil)) (pure E)) in H.
-  forwards~ : LibList.cons_eq_last_val_app_inv H. destruct H0.
-  destructs H0. inversions H1. destructs (okt_push_sub_inv Ok1).
+  forwards~ : LibList.cons_eq_last_val_app_inv H. destruct H5.
+  destructs H5. inversions H6. destructs (okt_push_sub_inv Ok1).
     assert (binds X (bind_sub Q) (E & X ~<: Q & F)).
       apply* binds_concat_left.
-    false. apply (binds_fresh_inv H4 H3).
-  destruct H0 as [M' H0]. substs.
+    false. autos* binds_fresh_inv.
+  destruct H5 as [M' H5]. substs.
   replace (LibList.append (LibList.append ((v, bind_sub t) :: M')
                                           ((X, bind_sub Q) :: nil))
                           (pure E))%list
     with (pure E & X ~<: Q & ((v, bind_sub t) :: M'))%list in H.
   repeat(rewrite cons_to_push in H). rewrite concat_assoc in H.
-  repeat(rewrite <- cons_to_push in H). inversions H. repeat(rewrite cons_to_push in H1).
-  destructs (okt_push_sub_inv Ok1). forwards~ : IHF H Sub H1.
-  rewrite H3. rewrite cons_to_push. rewrite* concat_assoc.
+  repeat(rewrite <- cons_to_push in H). inversions H. repeat(rewrite cons_to_push in H6).
+
+  replace (pure E & X ~<: P & N) with
+    (LibList.append (LibList.append N ((X, bind_sub P) :: nil)) (pure E)) in H2.
+  forwards~ : LibList.cons_eq_last_val_app_inv H2. destruct H.
+  destructs H. inversions H5. destructs (okt_push_sub_inv Ok2).
+    assert (binds X (bind_sub P) (E & X ~<: P & F)).
+      apply* binds_concat_left.
+    false. autos* binds_fresh_inv.
+  destruct H as [N' H]. substs.
+  replace (LibList.append (LibList.append ((v, bind_sub t) :: N')
+                                          ((X, bind_sub P) :: nil))
+                          (pure E))%list
+    with (pure E & X ~<: P & ((v, bind_sub t) :: N'))%list in H2.
+  repeat(rewrite cons_to_push in H2). rewrite concat_assoc in H2.
+  repeat(rewrite <- cons_to_push in H2). inversions H2. repeat(rewrite cons_to_push in *).
+  destructs (okt_push_sub_inv Ok1). destructs (okt_push_sub_inv Ok2).
+  repeat(rewrite tvar_push_sub in *). repeat(rewrite <- cons_to_push in H1, H4).
+  inversions H1. inversions H4.
+  forwards~ : subseq_push_eq_inv H0. destruct* (ok_concat_inv (ok_from_okt H)).
+  forwards~ : subseq_push_eq_inv H3. destruct* (ok_concat_inv (ok_from_okt H)).
+  destructs H1. destructs H4.
+  forwards~ : IHF H Sub H8 H6 H5. apply* subseq_cons. rewrite H12, H11. auto.
+  rewrite single_def. rewrite <- concat_assoc. rewrite* concat_def.
+  rewrite single_def. rewrite <- concat_assoc. rewrite* concat_def.
   rewrite single_def. rewrite <- concat_assoc. rewrite* concat_def.
   rewrite single_def. rewrite <- concat_assoc. rewrite* concat_def.
 
   destructs (okt_push_typ_inv Ok1).
   rewrite <- cons_to_push. simpls. cases_if.
   rewrite cons_to_push in H3. rewrite closed_typ_push_typ in H3.
-  forwards~ : closed_typ_narrowing H0 Sub H1. rewrite H3 in H4.
+  forwards~ : closed_typ_narrowing H0 Sub. rewrite H3 in H4.
   rewrite pure_push_typ_closed in H; auto.
   rewrite <- cons_to_push in H.
   replace (pure E & X ~<: Q & M) with
@@ -2126,7 +2206,7 @@ Proof. introv Ok1 Sub.
   rewrite single_def. rewrite <- concat_assoc. rewrite* concat_def.
 
   rewrite cons_to_push in H3. rewrite closed_typ_push_typ in H3.
-  forwards~ : closed_typ_narrowing H0 Sub H1. rewrite H3 in H4.
+  forwards~ : closed_typ_narrowing H0 Sub. rewrite H3 in H4.
   rewrite pure_push_typ_false in H; auto.
   apply* IHF.
 Qed.
