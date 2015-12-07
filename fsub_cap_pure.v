@@ -1398,6 +1398,14 @@ Proof. intros. gen E. induction H0; intros; auto.
     apply* subseq_cons. rewrite* H3.
 Qed.
 
+Lemma subseq_extend: forall E F G,
+  subseq F G -> subseq (E & F) (E & G).
+Proof. introv Sub. inductions Sub; auto.
+  rewrite concat_assoc. apply* subseq_ext.
+  rewrite ?concat_assoc. apply* subseq_cons.
+    rewrite ?tvar_dist, H. auto.
+Qed.
+
 Lemma subseq_empty_inv: forall L, subseq L empty -> L = empty.
 Proof. introv Seq. inductions Seq; auto;
   rewrite <- cons_to_push in x; rewrite empty_def in x; inversion x.
@@ -1442,6 +1450,32 @@ Proof. introv Ok Fresh Seq. inductions Seq; repeat(rewrite <- cons_to_push in x)
   forwards~ : subseq_push_inv Ok Seq. false. autos* binds_fresh_inv.
   repeat(rewrite <- cons_to_push in x2); inversions x2. auto.
 Qed.
+
+Lemma subseq_length: forall E F, subseq E F -> length E <= length F.
+Proof. introv Seq. inductions Seq; auto.
+  rewrite <- cons_to_push. simpl. apply* le_S.
+  rewrite <- ?cons_to_push. simpl. apply* le_n_S.
+Qed.
+
+Lemma subseq_false: forall F x v, subseq (F & x ~ v) F -> False.
+Proof. introv Seq.
+  lets : subseq_length Seq. rewrite <- cons_to_push in H. simpl in H.
+  applys~ PeanoNat.Nat.nle_succ_diag_l H.
+Qed.
+
+Lemma subseq_cons_inv: forall E F M x v,
+  subseq E F ->
+  F & x ~ v = E & M ->
+  exists M', M = M' & x ~ v.
+Proof. introv Seq Eq. destruct M.
+  rewrite <- empty_def, concat_empty_r in Eq.
+  rewrite <- Eq in Seq. false. apply* subseq_false.
+
+  destruct p. rewrite cons_to_push, concat_assoc, <- ?cons_to_push in Eq.
+  inversions Eq. rewrite* cons_to_push.
+Qed.
+
+
 
 (** binding properties *)
 
@@ -1521,10 +1555,17 @@ Proof. introv Ok Tv Wf. gen F. inductions Wf; intros; auto.
     repeat(rewrite <- cons_to_push). simpl. rewrite* Tv.
 Qed.
 
-Lemma wft_pure: forall E V, ok E -> wft (pure E) V -> wft E V.
-Proof. intros. remember (pure E) as G. gen E. inductions H0; intros; subst; autos.
+Lemma wft_pure: forall E V, ok E -> wft (pure E) V <-> wft E V.
+Proof. intros. split; intros.
+
+  remember (pure E) as G. gen E. inductions H0; intros; subst; autos.
   eapply wft_var. apply* binds_pure.
   apply_fresh* wft_all as Y. apply* H1. repeat(rewrite <- cons_to_push). autos.
+
+  inductions H0; autos.
+  eapply wft_var. apply* binds_pure_reverse.
+  apply_fresh* wft_all as Y. forwards~ : H2 Y.
+    rewrite pure_push_sub in H3. auto.
 Qed.
 
 Lemma wft_pure_weaken: forall E F G V,
@@ -1650,30 +1691,6 @@ Proof. introv Seq. inductions Seq; simpl; auto.
 
     destruct t; tryfalse. simpls.
     lets: exposure_tvar (typ_fvar v) H. false.
-Qed.
-
-Lemma subseq_length: forall E F, subseq E F -> length E <= length F.
-Proof. introv Seq. inductions Seq; auto.
-  rewrite <- cons_to_push. simpl. apply* le_S.
-  rewrite <- ?cons_to_push. simpl. apply* le_n_S.
-Qed.
-
-Lemma subseq_false: forall F x v, subseq (F & x ~ v) F -> False.
-Proof. introv Seq.
-  lets : subseq_length Seq. rewrite <- cons_to_push in H. simpl in H.
-  applys~ PeanoNat.Nat.nle_succ_diag_l H.
-Qed.
-
-Lemma subseq_cons_inv: forall E F M x v,
-  subseq E F ->
-  F & x ~ v = E & M ->
-  exists M', M = M' & x ~ v.
-Proof. introv Seq Eq. destruct M.
-  rewrite <- empty_def, concat_empty_r in Eq.
-  rewrite <- Eq in Seq. false. apply* subseq_false.
-
-  destruct p. rewrite cons_to_push, concat_assoc, <- ?cons_to_push in Eq.
-  inversions Eq. rewrite* cons_to_push.
 Qed.
 
 Lemma subseq_pure_concat: forall E F M,
@@ -2344,6 +2361,18 @@ Proof. introv Ok1 Sub. forwards~ Ok2: okt_narrow P Ok1.
   applys~ IHF X P Q.
 Qed.
 
+Lemma pure_dist_narrow_general: forall E F G X P Q,
+  okt (E & X ~<: Q & F) ->
+  okt (E & X ~<: P & G) ->
+  sub E P Q ->
+  subseq F G ->
+  exists M N, pure (E & X ~<: Q & F) = pure E & X ~<: Q & M /\
+              pure (E & X ~<: P & G) = pure E & X ~<: P & N /\
+              subseq M N /\
+              subseq M F /\ tvar_env M = tvar_env F /\
+              subseq N G /\ tvar_env N = tvar_env G.
+Proof. admit. Qed.
+
 
 (* ********************************************************************** *)
 (** * Properties of Typing *)
@@ -2445,29 +2474,66 @@ Qed.
 (************************************************************************ *)
 (** Preservation by Type Narrowing (7) *)
 
+Lemma typing_narrowing_general : forall Q E F G X P e T,
+  sub E P Q ->
+  subseq F G ->
+  tvar_env F = tvar_env G ->
+  okt (E & X ~<: P & G) ->
+  typing (E & X ~<: Q & F) e T ->
+  typing (E & X ~<: P & G) e T.
+Proof. introv Sub Seq Tvar Ok1 Typ. gen_eq E': (E & X ~<: Q & F). gen E F G.
+  inductions Typ; intros; subst; simpl.
+  binds_cases H0; apply* typing_var.
+    rewrite <- concat_assoc. rewrite <- concat_empty_r. apply* binds_weaken.
+      rewrite concat_empty_r, concat_assoc. auto.
+    apply binds_concat_right. apply binds_subseq with F; auto.
+      apply (ok_concat_inv_r (ok_from_okt Ok1)).
+  apply_fresh* typing_abs as y.
+    forwards~ : pure_dist_narrow_general H Ok1 Sub Seq.
+    destruct H2 as [M [N H2]]. destruct H2. destructs H3.
+    rewrite H3. forwards~ : H1 y (pure E0) (M & y ~: V) (N & y ~: V).
+      apply* sub_pure.
+      apply* subseq_cons. rewrite H6, H8. auto.
+      rewrite ?tvar_push_typ. rewrite H6, H8. auto.
+      rewrite concat_assoc. rewrite <- H3.
+        forwards~: (H0 y). destructs (typing_regular H9).
+        destructs (okt_push_typ_inv H10). apply okt_typ. apply* okt_pure.
+        apply wft_pure. apply* ok_from_okt. apply wft_narrow with Q; auto.
+        rewrite wft_pure in H14; auto. eapply wft_subseq. apply* ok_from_okt.
+        apply subseq_extend with (F := F) (G := G); auto. auto.
+      eapply subseq_fresh. apply subseq_pure. auto.
+      rewrite H2. rewrite concat_assoc. auto.
+    rewrite concat_assoc in H9. auto.
+  apply* typing_app.
+  apply_fresh* typing_tabs as Y.
+    forwards~ : pure_dist_narrow_general H Ok1 Sub Seq.
+    destruct H2 as [M [N H2]]. destruct H2. destructs H3.
+    rewrite H3. forwards~ : H1 Y (pure E0) (M & Y ~<: V) (N & Y ~<: V).
+      apply* sub_pure.
+      apply* subseq_cons. rewrite H6, H8. auto.
+      rewrite ?tvar_push_sub, H6, H8, Tvar. auto.
+      rewrite concat_assoc. rewrite <- H3.
+        forwards~: (H0 Y). destructs (typing_regular H9).
+        destructs (okt_push_sub_inv H10). apply okt_sub. apply* okt_pure.
+        apply wft_pure. apply* ok_from_okt. apply wft_narrow with Q; auto.
+        rewrite wft_pure in H14; auto. eapply wft_subseq. apply* ok_from_okt.
+        apply subseq_extend with (F := F) (G := G); auto. auto.
+      eapply subseq_fresh. apply subseq_pure. auto.
+      rewrite H2. rewrite concat_assoc. auto.
+    rewrite concat_assoc in H9. auto.
+  apply* typing_tapp. eapply sub_subseq. auto. apply subseq_extend. eauto.
+    apply* (@sub_narrowing Q).
+  apply* typing_sub. eapply sub_subseq. auto. apply subseq_extend. eauto.
+    apply* (@sub_narrowing Q).
+Qed.
+
 Lemma typing_narrowing : forall Q E F X P e T,
   sub E P Q ->
   typing (E & X ~<: Q & F) e T ->
   typing (E & X ~<: P & F) e T.
-Proof.
-  introv PsubQ Typ. gen_eq E': (E & X ~<: Q & F). gen E F.
-  inductions Typ; introv PsubQ EQ; subst; simpl.
-  binds_cases H0; apply* typing_var.
-  apply_fresh* typing_abs as y.
-    forwards~ : okt_narrow P H.
-    forwards~ : pure_dist_middle_sub H2. destruct H3 as [N H3]. destructs H3.
-    rewrite H3. apply_ih_bind* H1.
-      apply tvar_sub with E0; auto. apply* pure_okt. apply tvar_pure.
-
-  apply_fresh* typing_cap as y. repeat(rewrite pure_dist in *).
-    rewrite <- concat_assoc. lets: H1 y. rewrite <- concat_assoc in H2.
-    replace (pure (X ~<: P)) with (X ~<: P) by (rewrite* single_def).
-    apply* H2. apply* sub_strengthening_env.
-    replace (pure (X ~<: Q)) with (X ~<: Q) by (rewrite* single_def). auto.
-  apply* typing_app.
-  apply_fresh* typing_tabs as Y. apply_ih_bind* H0.
-  apply* typing_tapp. apply* (@sub_narrowing Q).
-  apply* typing_sub. apply* (@sub_narrowing Q).
+Proof. introv Sub Typ. destructs (typing_regular Typ).
+  forwards~ : typing_narrowing_general Sub Typ.
+  apply okt_narrow with Q; auto.
 Qed.
 
 (************************************************************************ *)
