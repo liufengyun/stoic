@@ -2272,79 +2272,46 @@ Proof. introv Ok1 Sub. forwards~ Ok2: okt_narrow P Ok1.
 
   (* b = X <: T *)
   rewrite pure_push_sub in *. rewrite <- cons_to_push in H, H2.
-  replace (pure E & X ~<: Q & M) with
-    (LibList.append (LibList.append M ((X, bind_sub Q) :: nil)) (pure E)) in H.
-  forwards~ : LibList.cons_eq_last_val_app_inv H. destruct H5.
-  destructs H5. inversions H6. destructs (okt_push_sub_inv Ok1).
-    assert (binds X (bind_sub Q) (E & X ~<: Q & F)).
-      apply* binds_concat_left.
-    false. autos* binds_fresh_inv.
+  rewrite <- pure_push_sub, cons_to_push in H, H2.
+  lets: subseq_cons_inv H. apply subseq_pure_dist, subseq_concat, subseq_refl.
   destruct H5 as [M' H5]. substs.
-  replace (LibList.append (LibList.append ((v, bind_sub t) :: M')
-                                          ((X, bind_sub Q) :: nil))
-                          (pure E))%list
-    with (pure E & X ~<: Q & ((v, bind_sub t) :: M'))%list in H.
-  rewrite ?cons_to_push, concat_assoc in H.
-  rewrite <- ?cons_to_push in H. inversions H. rewrite ?cons_to_push in H6.
-
-  replace (pure E & X ~<: P & N) with
-    (LibList.append (LibList.append N ((X, bind_sub P) :: nil)) (pure E)) in H2.
-  forwards~ : LibList.cons_eq_last_val_app_inv H2. destruct H.
-  destructs H. inversions H5. destructs (okt_push_sub_inv Ok2).
-    assert (binds X (bind_sub P) (E & X ~<: P & F)).
-      apply* binds_concat_left.
-    false. autos* binds_fresh_inv.
-  destruct H as [N' H]. substs.
-  replace (LibList.append (LibList.append ((v, bind_sub t) :: N')
-                                          ((X, bind_sub P) :: nil))
-                          (pure E))%list
-    with (pure E & X ~<: P & ((v, bind_sub t) :: N'))%list in H2.
-  rewrite ?cons_to_push in H2. rewrite concat_assoc in H2.
-  rewrite <- ?cons_to_push in H2. inversions H2. rewrite ?cons_to_push in *.
+  lets: subseq_cons_inv H2. apply subseq_pure_dist, subseq_concat, subseq_refl.
+  destruct H5 as [N' H5]. substs.
+  rewrite concat_assoc, <- ?cons_to_push in H, H2. inversions H. inversions H2.
+  rewrite ?cons_to_push in H6, H5.
   destructs (okt_push_sub_inv Ok1). destructs (okt_push_sub_inv Ok2).
   rewrite ?tvar_push_sub in *. rewrite <- ?cons_to_push in H1, H4.
   inversions H1. inversions H4.
-  forwards~ : subseq_push_eq_inv H0. destruct* (ok_concat_inv (ok_from_okt H)).
-  forwards~ : subseq_push_eq_inv H3. destruct* (ok_concat_inv (ok_from_okt H)).
+  forwards~ : subseq_push_eq_inv H0. eapply ok_concat_inv_r, ok_from_okt. eauto.
+  forwards~ : subseq_push_eq_inv H3. eapply ok_concat_inv_r, ok_from_okt. eauto.
   destructs H1. destructs H4.
-  forwards~ : IHF H Sub H8 H6 H5. apply* subseq_cons. rewrite H12, H11. auto.
-  rewrite single_def. rewrite <- concat_assoc. rewrite* concat_def.
-  rewrite single_def. rewrite <- concat_assoc. rewrite* concat_def.
-  rewrite single_def. rewrite <- concat_assoc. rewrite* concat_def.
-  rewrite single_def. rewrite <- concat_assoc. rewrite* concat_def.
-
+  forwards~ : IHF X Sub M' N'. apply* subseq_cons. rewrite H12, H11. auto.
 
   (* b = x : T *)
   rewrite tvar_push_typ in *. rewrite <- cons_to_push in H2. simpl in H2.
   cases_if.
 
   (* 1. closed_typ (E & X <: P & F) t = true *)
-  rewrite cons_to_push, closed_typ_push_typ in H5.
-  lets Temp: H2. repeat(rewrite <- concat_assoc in Temp).
-  rewrite concat_def in Temp. rewrite single_def in Temp.
-  destruct(LibList.cons_eq_last_val_app_inv Temp).
-  destructs H6. false. destruct H6 as [N' H6]. substs. clear Temp.
-  rewrite cons_to_push in *. rewrite tvar_push_typ in *.
+  rewrite cons_to_push, ?closed_typ_push_typ in H5, H2.
+  lets: subseq_cons_inv H2. rewrite <- pure_push_sub.
+    apply subseq_pure_dist, subseq_concat, subseq_refl.
+  destruct H6 as [N' H6]. substs. rewrite tvar_push_typ in *.
   destructs (okt_push_typ_inv Ok1). destructs (okt_push_typ_inv Ok2).
-  forwards~ : subseq_push_eq_inv H3. destruct* (ok_concat_inv (ok_from_okt H9)).
+  forwards~ : subseq_push_eq_inv H3. eapply ok_concat_inv_r, ok_from_okt. eauto.
   destruct H12. clear H13.
 
   rewrite <- cons_to_push in H. simpl in H. cases_if.
   (* 1a. closed_typ (E & X <: Q & F) t = true *)
-  rewrite cons_to_push, closed_typ_push_typ in H13.
-  lets Temp: H. repeat(rewrite <- concat_assoc in Temp).
-  rewrite concat_def in Temp. rewrite single_def in Temp.
-  destruct(LibList.cons_eq_last_val_app_inv Temp).
-  destructs H14. false. destruct H14 as [M' H14]. substs. clear Temp.
-  rewrite cons_to_push in *. rewrite tvar_push_typ in *.
-  forwards~ : subseq_push_eq_inv H0. destruct* (ok_concat_inv (ok_from_okt H9)).
+  rewrite cons_to_push, ?closed_typ_push_typ in H13, H.
+  lets: subseq_cons_inv H. rewrite <- pure_push_sub.
+    apply subseq_pure_dist, subseq_concat, subseq_refl.
+  destruct H14 as [M' H14]. substs. rewrite tvar_push_typ in *.
+  forwards~ : subseq_push_eq_inv H0. eapply ok_concat_inv, ok_from_okt; eauto.
   destruct H14. clear H15.
+  rewrite concat_assoc, <- ?cons_to_push in H, H2. inversions H. inversions H2.
+  rewrite ?cons_to_push in H16, H15.
   apply subseq_cons. rewrite H1. rewrite* H4. apply* (IHF X P Q).
-    rewrite cons_to_push, concat_assoc, <- ?cons_to_push in H. inversions H.
-      rewrite ?cons_to_push in H16. rewrite* H16.
-    rewrite ?cons_to_push, ?concat_assoc, <- ?cons_to_push in H2. inversions H2.
-      rewrite ?cons_to_push in H16. rewrite* H16.
-  (* 1a. closed_typ (E & X <: Q & F) t = false *)
+  (* 1b. closed_typ (E & X <: Q & F) t = false *)
   rewrite ?cons_to_push, concat_assoc, <- ?cons_to_push in H2. inversions H2.
   rewrite ?cons_to_push in H15.
   apply subseq_ext. rewrite <- pure_push_sub in H. forwards~ : subseq_pure_concat H.
