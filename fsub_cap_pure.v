@@ -1198,15 +1198,25 @@ Proof. introv Ok Wf. inductions E; try destruct* T.
     apply_empty* wft_strengthen.
 Qed.
 
-Lemma exposure_sub: forall E P Q,
-  okt E ->
-  sub E P Q ->
-  sub E (exposure E P) (exposure E Q).
-Proof. introv Ok Sub. inductions Sub; try solve [rewrite* exposure_nontvar; auto].
-  replace (exposure E typ_top) with typ_top by (rewrite* exposure_nontvar).
-    apply* sub_top. apply* exposure_wft.
+Lemma exposure_binds: forall E X U, okt E -> binds X (bind_sub U) E ->
+  exposure E (typ_fvar X) = exposure E U.
+Proof. introv Ok Bind. inductions E.
+  rewrite <- empty_def in Bind. false* binds_empty_inv.
+  destruct a. rewrite cons_to_push in *.
+  destruct (binds_push_inv Bind) as [Eq | EqN]; [destruct Eq | destruct EqN].
+  destruct b; inversions H0. rewrite exposure_push_sub_eq.
+    destruct t; try solve [repeat(rewrite exposure_nontvar); auto].
+    rewrite <- cons_to_push. simpls. cases_if*.
 
-   admit. admit. admit. admit.
+  destruct b. rewrite* exposure_push_sub_neq.
+    destructs (okt_push_sub_inv Ok). forwards~ Eq: IHE X U. rewrite Eq.
+    forwards~ Wf: wft_from_env_has_sub H0.
+    destruct U; try solve [repeat(rewrite* exposure_nontvar)].
+    rewrite <- cons_to_push. simpls. cases_if*.
+      inversions Wf. false. autos* binds_fresh_inv.
+
+    destructs (okt_push_typ_inv Ok).
+    repeat(rewrite exposure_push_typ). auto.
 Qed.
 
 Lemma tvar_push_typ: forall E x T, tvar_env (E & x ~: T) = tvar_env E.
@@ -1749,8 +1759,18 @@ Proof.
    apply_ih_map_bind* H0.
 Qed.
 
-(* ********************************************************************** *)
-(** * Properties of subsequence *)
+Lemma exposure_sub: forall E P Q,
+  okt E ->
+  sub E P Q ->
+  sub E (exposure E P) (exposure E Q).
+Proof. introv Ok Sub. inductions Sub; try solve [rewrite* exposure_nontvar; auto].
+  replace (exposure E typ_top) with typ_top by (rewrite* exposure_nontvar).
+    apply* sub_top. apply* exposure_wft.
+  apply* sub_reflexivity. apply* exposure_wft.
+  apply* sub_trans_tvar.
+
+   admit. admit. admit. admit.
+Qed.
 
 Lemma closed_typ_narrowing: forall E F X P Q T,
   okt (E & X ~<: Q & F) ->
@@ -1766,6 +1786,10 @@ Proof. introv Ok1 Sub Closed.
 
   admit. admit.
 Qed.
+
+
+(* ********************************************************************** *)
+(** * Properties of subsequence *)
 
 Lemma subseq_empty: forall E, subseq empty E.
 Proof. intros. inductions E.
