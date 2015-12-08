@@ -1414,6 +1414,17 @@ Proof. introv Seq. inductions Seq; auto.
   destruct b; rewrite ?tvar_push_sub, ?tvar_push_typ, IHSeq; auto.
 Qed.
 
+Lemma subseq_concat: forall E F M N,
+  subseq E M -> subseq F N -> subseq (E & F) (M & N).
+Proof with eauto.
+  introv Sub1 Sub2. inductions Sub2; auto.
+
+  rewrite ?concat_empty_r...
+  rewrite concat_assoc. apply* subseq_ext.
+  rewrite ?concat_assoc. apply* subseq_cons.
+    rewrite ?tvar_dist, H, (subseq_tvar Sub1). auto.
+Qed.
+
 Lemma subseq_pure: forall E, subseq (pure E) E.
 Proof. intros. induction E; auto.
   simpl. rewrite* <- empty_def.
@@ -1455,6 +1466,14 @@ Proof. introv Ok Fresh Seq. inductions Seq.
   rewrite <- ?cons_to_push in x. inversions x.
   forwards~ : subseq_push_inv Ok Seq. false. autos* binds_fresh_inv.
   rewrite <- ?cons_to_push in x2, x. inversions x2. inversions x. auto.
+Qed.
+
+Lemma subseq_push_sub_inv : forall E F X T,
+  subseq E (F & X ~<: T) -> exists E', E = E' & X ~<: T /\ subseq E' F.
+Proof. introv Seq. inductions Seq.
+  rewrite empty_def, <- cons_to_push in x. inversion x.
+  rewrite <- ?cons_to_push in x. inversion x.
+  rewrite <- ?cons_to_push in x. inversions x. iauto.
 Qed.
 
 Lemma subseq_length: forall E F, subseq E F -> length E <= length F.
@@ -2161,31 +2180,35 @@ Proof. introv Ok Sub Bound.
   forwards~ Eq: exposure_binds Ok H. rewrite Eq in Bound. auto.
 Qed.
 
-Lemma closed_typ_narrowing: forall E F X P Q T,
+Lemma closed_typ_narrowing: forall E F G X P Q T,
   okt (E & X ~<: Q & F) ->
+  okt (E & X ~<: P & G) ->
+  subseq F G ->
   sub E P Q ->
-  closed_typ (E & X ~<: P & F) T = false ->
+  closed_typ (E & X ~<: P & G) T = false ->
   closed_typ (E & X ~<: Q & F) T = false.
-Proof. introv Ok1 Sub Closed.
-  forwards~ Ok2: okt_narrow P Ok1. inductions F.
+Proof. introv Ok1 Ok2 Seq Sub Closed. gen T. inductions Seq; intros.
 
-  rewrite <- empty_def, ?concat_empty_r in *.
+  rewrite ?concat_empty_r in *.
   destruct T; try solve [unfold closed_typ; autos].
-  repeat(rewrite <- cons_to_push in Closed |- *). simpls. cases_if*.
+  rewrite <- ?cons_to_push in Closed |- *. simpls. cases_if*.
   destructs (okt_push_sub_inv Ok1). apply* safe_bound_sub.
 
-  destruct a. rewrite ?cons_to_push, ?concat_assoc in *.
-  destruct T; try solve [unfolds closed_typ; autos]. destruct b.
+  rewrite ?cons_to_push, ?concat_assoc, ?closed_typ_push_typ in *.
+  destructs (okt_push_typ_inv Ok2). auto.
+
+  destruct b; rewrite ?cons_to_push, ?concat_assoc in *.
 
   destructs (okt_push_sub_inv Ok1). destructs (okt_push_sub_inv Ok2).
-  rewrite <- cons_to_push in Closed |- *. simpls. cases_if;
-  lets : IHF t H Sub.
+  destruct T; try solve [unfold closed_typ; autos].
+  rewrite <- ?cons_to_push in Closed |- *. simpls. cases_if*.
+  rewrite ?cons_to_push, ?concat_assoc in *.
   destruct t; try solve [rewrite exposure_nontvar in Closed |- *; simpls; autos].
-  simpl in H5. auto.
-  lets : IHF (typ_fvar v0) H Sub. simpl in H7. auto.
+  forwards~ IH: IHSeq (typ_fvar v).
+  rewrite ?cons_to_push, ?concat_assoc in *. forwards~ IH: IHSeq (typ_fvar v).
 
   destructs (okt_push_typ_inv Ok1). destructs (okt_push_typ_inv Ok2).
-  rewrite closed_typ_push_typ in Closed |- *. apply* IHF.
+  rewrite closed_typ_push_typ in *. auto.
 Qed.
 
 Lemma sub_tvar : forall E F T1 T2, okt E -> okt F ->
@@ -2213,76 +2236,7 @@ Proof. introv Sub. destructs (sub_regular Sub).
   eapply sub_tvar; eauto. apply* okt_pure. apply tvar_pure.
 Qed.
 
-Lemma pure_dist_narrow: forall E F X P Q,
-  okt (E & X ~<: Q & F) ->
-  sub E P Q ->
-  exists M N, pure (E & X ~<: Q & F) = pure E & X ~<: Q & M /\
-              pure (E & X ~<: P & F) = pure E & X ~<: P & N /\
-              subseq M N /\
-              subseq N F.
-Proof. introv Ok1 Sub.
-  forwards~ IH1 : pure_dist_middle_sub E X Q F. destruct IH1 as [M IH1]. destructs IH1.
-  forwards~ IH2 : pure_dist_middle_sub E X P F. destruct IH2 as [N IH2]. destructs IH2.
-  exists M N. splits; auto. inductions F.
-
-  rewrite <- empty_def, concat_empty_r, pure_push_sub in *.
-  forwards~ HM: subseq_empty_inv H0. forwards~ HN: subseq_empty_inv H2. substs*.
-
-  destruct a. destruct b; rewrite cons_to_push, concat_assoc in *.
-  (* b = X <: T *)
-  rewrite pure_push_sub in *.
-  rewrite <- cons_to_push, <- pure_push_sub, cons_to_push in H, H1.
-  forwards~ HM: pure_cons_inv H. destruct HM as [M' HM]. substs.
-  forwards~ HN: pure_cons_inv H1. destruct HN as [N' HN]. substs.
-  rewrite concat_assoc, <- ?cons_to_push in H, H1. inversions H. inversions H1.
-  rewrite ?cons_to_push in *.
-  destructs (okt_push_sub_inv Ok1).
-  forwards~ Inv1: subseq_push_eq_inv H0. eapply ok_concat_inv_r, ok_from_okt. eauto.
-  forwards~ Inv2: subseq_push_eq_inv H2. eapply ok_concat_inv_r, ok_from_okt. eauto.
-  destructs Inv1. destructs Inv2.
-  forwards~ : IHF X Sub M' N'. apply* subseq_cons. apply* subseq_tvar.
-
-  (* b = x : T *)
-  rewrite <- cons_to_push in H1. simpl in H1.
-  cases_if.
-
-  (* 1. closed_typ (E & X <: P & F) t = true *)
-  rewrite cons_to_push, ?closed_typ_push_typ in H1, H3.
-  rewrite <- cons_to_push, <- pure_push_sub, cons_to_push in H1.
-  forwards~ Inv: pure_cons_inv H1. destruct Inv as [N' Inv]. substs.
-  destructs (okt_push_typ_inv Ok1).
-  forwards~ Inv: subseq_push_eq_inv H2. eapply ok_concat_inv_r, ok_from_okt. eauto.
-  destruct Inv.
-
-  rewrite <- cons_to_push in H. simpl in H. cases_if.
-  (* 1a. closed_typ (E & X <: Q & F) t = true *)
-  rewrite cons_to_push, ?closed_typ_push_typ in H9, H.
-  rewrite <- cons_to_push, <- pure_push_sub, cons_to_push in H.
-  forwards~ Inv: pure_cons_inv H. destruct Inv as [M' Inv]. substs.
-  forwards~ Inv: subseq_push_eq_inv H0. eapply ok_concat_inv, ok_from_okt; eauto.
-  destruct Inv.
-  rewrite pure_push_sub, concat_assoc, <- ?cons_to_push in H, H1.
-  inversions H. inversions H1.
-  rewrite ?cons_to_push in *.
-  apply* subseq_cons. apply* subseq_tvar.
-  (* 1b. closed_typ (E & X <: Q & F) t = false *)
-  rewrite ?cons_to_push, concat_assoc, <- ?cons_to_push in H1. inversions H1.
-  rewrite ?cons_to_push in *.
-  apply subseq_ext. rewrite <- cons_to_push, <- pure_push_sub, ?cons_to_push in H.
-  forwards~ : subseq_pure_concat H.
-  rewrite pure_push_sub in H. apply* (IHF X P Q).
-
-  (* 2. closed_typ (E & X <: P & F) t = false *)
-  destructs (okt_push_typ_inv Ok1).  forwards~ Ok2: okt_narrow P H4.
-  rewrite cons_to_push, closed_typ_push_typ in *. forwards~ : closed_typ_narrowing Q H3.
-  rewrite pure_push_typ_false in H; auto.
-  rewrite <- pure_push_sub in H, H1.
-  forwards~ : subseq_pure_concat H. forwards~ : subseq_pure_concat H1.
-  rewrite pure_push_sub in H, H1.
-  applys~ IHF X P Q.
-Qed.
-
-Lemma pure_dist_narrow_general: forall E F G X P Q,
+Lemma pure_dist_narrow: forall E F G X P Q,
   okt (E & X ~<: Q & F) ->
   okt (E & X ~<: P & G) ->
   sub E P Q ->
@@ -2292,20 +2246,52 @@ Lemma pure_dist_narrow_general: forall E F G X P Q,
               subseq M N /\
               subseq M F /\
               subseq N G.
-Proof. introv Ok1 Ok2 Sub Seq.
-  forwards~ IH1 : pure_dist_middle_sub E X Q F. destruct IH1 as [M IH1]. destructs IH1.
-  forwards~ IH2 : pure_dist_middle_sub E X P G. destruct IH2 as [N IH2]. destructs IH2.
-  exists M N. splits; auto. inductions G.
+Proof. introv Ok1 Ok2 Sub Seq. inductions Seq.
+  rewrite ?concat_empty_r in *. exists (@empty bind) (@empty bind).
+  rewrite ?pure_push_sub, ?concat_empty_r. splits; auto.
 
-  rewrite <- empty_def in *. forwards~ : subseq_empty_inv H2.
-  forwards~ : subseq_empty_inv Seq. substs.
-  forwards~ : subseq_empty_inv H0.
+  rewrite concat_assoc in *. destructs (okt_push_typ_inv Ok2).
+  forwards~ IH: IHSeq. destruct IH as [M [N IH]]. destructs IH.
+  destruct (pure_push_typ (E & X ~<: P & F) x T) as [Pure | Impure].
+    rewrite Pure. exists M (N & x ~: T). splits; auto.
+      rewrite H3, concat_assoc; auto.
+      apply* subseq_concat. apply subseq_refl.
+    rewrite Impure. exists M N. splits; auto.
 
-  destruct a. destruct b; rewrite cons_to_push, concat_assoc in *.
+  destruct b.
   (* b = X <: T *)
-  admit. admit.
-Qed.
+  rewrite ?concat_assoc, ?pure_push_sub in *.
+  destructs (okt_push_sub_inv Ok1). destructs (okt_push_sub_inv Ok2).
+  forwards~ IH: IHSeq. destruct IH as [M [N IH]]. destructs IH.
+  exists (M & x ~<: t) (N & x ~<: t). splits; auto.
+    rewrite H6, concat_assoc; auto.
+    rewrite H7, concat_assoc; auto.
+    apply* subseq_concat. apply subseq_refl.
+    apply* subseq_concat. apply subseq_refl.
+    apply* subseq_concat. apply subseq_refl.
 
+  (* b = X : T *)
+  rewrite ?cons_to_push, ?concat_assoc in *.
+  destructs (okt_push_typ_inv Ok1). destructs (okt_push_typ_inv Ok2).
+  forwards~ IH: IHSeq. destruct IH as [M [N IH]]. destructs IH.
+  rewrite ?concat_assoc, <- concat_assoc, <- ?cons_to_push.
+  simpl. cases_if; rewrite ?cons_to_push, ?concat_assoc in *.
+
+  destruct (pure_push_typ (E & X ~<: Q & E0) x t) as [Pure | Impure].
+    rewrite Pure. exists (M & x ~: t) (N & x ~: t). splits; auto.
+      rewrite H6, concat_assoc; auto.
+      rewrite H7, concat_assoc; auto.
+      apply* subseq_concat. apply subseq_refl.
+      apply* subseq_concat. apply subseq_refl.
+      apply* subseq_concat. apply subseq_refl.
+    rewrite Impure. exists M (N & x ~: t). splits; auto.
+      rewrite H7, concat_assoc; auto.
+      apply* subseq_concat. apply subseq_refl.
+
+  rewrite closed_typ_push_typ in *.
+  rewrite pure_push_typ_false. exists M N. splits; auto.
+  forwards~ : closed_typ_narrowing H0 H3 Seq Sub H11.
+Qed.
 
 (* ********************************************************************** *)
 (** * Properties of Typing *)
@@ -2421,7 +2407,7 @@ Proof. introv Sub Seq Ok1 Typ. gen_eq E': (E & X ~<: Q & F). gen E F G.
     apply binds_concat_right. apply binds_subseq with F; auto.
       eapply ok_concat_inv_r, ok_from_okt. eauto.
   apply_fresh* typing_abs as y.
-    forwards~ : pure_dist_narrow_general H Ok1 Sub Seq.
+    forwards~ : pure_dist_narrow H Ok1 Sub Seq.
     destruct H2 as [M [N H2]]. destruct H2. destructs H3.
     rewrite H3. forwards~ : H1 y (pure E0) (M & y ~: V) (N & y ~: V).
       apply* sub_pure.
@@ -2437,7 +2423,7 @@ Proof. introv Sub Seq Ok1 Typ. gen_eq E': (E & X ~<: Q & F). gen E F G.
     rewrite concat_assoc in H7. auto.
   apply* typing_app.
   apply_fresh* typing_tabs as Y.
-    forwards~ : pure_dist_narrow_general H Ok1 Sub Seq.
+    forwards~ : pure_dist_narrow H Ok1 Sub Seq.
     destruct H2 as [M [N H2]]. destruct H2. destructs H3.
     rewrite H3. forwards~ : H1 Y (pure E0) (M & Y ~<: V) (N & Y ~<: V).
       apply* sub_pure.
