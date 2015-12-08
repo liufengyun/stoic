@@ -1369,6 +1369,12 @@ Proof. intros. induction E.
     eapply subset_trans. eauto. apply subset_union_weak_r.
 Qed.
 
+Lemma pure_binds_closed: forall E x T,
+  binds x (bind_typ T) E ->
+  closed_typ E T = true ->
+  binds x (bind_typ T) (pure E).
+Proof. admit. Qed.
+
 (** Properties of subsequence *)
 
 Lemma subseq_refl: forall E, subseq E E.
@@ -1474,6 +1480,16 @@ Proof. introv Seq. inductions Seq.
   rewrite empty_def, <- cons_to_push in x. inversion x.
   rewrite <- ?cons_to_push in x. inversion x.
   rewrite <- ?cons_to_push in x. inversions x. iauto.
+Qed.
+
+Lemma subseq_single_inv : forall E v b,
+  subseq E (v ~ b) -> E = empty \/ E = v ~ b.
+Proof. introv Seq. inductions Seq; auto.
+  rewrite <- cons_to_push, single_def in x. inversions x.
+    rewrite <- empty_def in Seq. forwards~ : subseq_empty_inv Seq.
+  rewrite <- cons_to_push, single_def in x. inversions x.
+    rewrite <- empty_def in Seq. forwards~ : subseq_empty_inv Seq.
+    right. rewrite H0, concat_empty_l; auto.
 Qed.
 
 Lemma subseq_length: forall E F, subseq E F -> length E <= length F.
@@ -2236,6 +2252,13 @@ Proof. introv Sub. destructs (sub_regular Sub).
   eapply sub_tvar; eauto. apply* okt_pure. apply tvar_pure.
 Qed.
 
+Lemma sub_closed: forall S T E,
+  sub E S T ->
+  closed_typ E T = true ->
+  closed_typ E S = true.
+Proof. admit. Qed.
+
+
 Lemma pure_dist_narrow: forall E F G X P Q,
   okt (E & X ~<: Q & F) ->
   okt (E & X ~<: P & G) ->
@@ -2452,6 +2475,17 @@ Proof. introv Sub Typ. destructs (typing_regular Typ).
   forwards~ : typing_narrowing_general Sub Ok Typ. apply subseq_refl.
 Qed.
 
+Lemma typing_strengthen_env: forall E u U, value u -> typing E u U ->
+  closed_typ E U = true -> typing (pure E) u U.
+Proof. introv Val Typ Closed. inductions Typ.
+  apply typing_var. apply* okt_pure. apply* pure_binds_closed.
+  apply_fresh* typing_abs as y. apply* okt_pure. rewrite* pure_eq.
+  inversion Val.
+  apply_fresh* typing_tabs as y. apply* okt_pure. rewrite* pure_eq.
+  inversion Val.
+  apply typing_sub with S. apply* IHTyp. apply* sub_closed. apply* sub_pure.
+Qed.
+
 (************************************************************************ *)
 (** Preservation by Term Substitution (8) *)
 
@@ -2545,27 +2579,50 @@ Lemma typing_env_fv : forall E e T, typing E e T ->
 Proof. intros. admit. Qed.
 
 Lemma typing_through_subst_ee : forall U E F x T e u,
+  value u ->
   typing (E & x ~: U & F) e T ->
   typing E u U ->
   typing (E & F) (subst_ee x u e) T.
 Proof.
-  introv TypT TypU. inductions TypT; introv; simpl.
+  introv Val TypT TypU. inductions TypT; introv; simpl.
   case_var.
     binds_get H0. apply_empty* typing_weakening.
     binds_cases H0; apply* typing_var.
   apply_fresh* typing_abs as y.
     rewrite* subst_ee_open_ee_var.
-    apply_ih_bind* H0.
-  apply typing_cap with L; eauto.
-    rewrite* subst_ee_fresh. repeat(rewrite pure_dist in *).
-    replace (pure (x ~: U)) with (@empty bind) in *
-      by (rewrite single_def; simpl; rewrite* empty_def).
-    rewrite concat_empty_r in *. autos.
-    eapply typing_cap_closed_trm. eapply typing_cap; eauto.
+    forwards~ Ok2: okt_strengthen H.
+    forwards~ Inv: pure_dist_weaken Ok2 H. destruct Inv as [M [N Inv]]. destructs Inv.
+    destruct (subseq_single_inv H4); substs.
+    (* if U is not safe,  x is free in e1; *)
+    rewrite H2 in H0. rewrite H3. rewrite concat_empty_r in *.
+    forwards~ IH: H0 y. rewrite* subst_ee_fresh.
+    destructs (typing_env_fv IH). destructs (ok_middle_inv (ok_from_okt H)).
+    forwards~ : subseq_fresh (pure E) H9. apply subseq_pure.
+    forwards~ : subseq_fresh N H10. rewrite ?dom_concat in H6.
+    unfold subset in H6. intros Contra. forwards~ Inv: H6 Contra.
+    rewrite ?in_union, or_assoc, dom_single, in_singleton in Inv.
+    branches Inv; false. substs. assert (y \notin \{ y}) by auto. false* notin_same.
+    (* if U is safe, then use IH *)
+    rewrite H3. apply_ih_bind* H1. rewrite H2. reflexivity.
+    apply* typing_strengthen_env. admit.
   apply* typing_app.
   apply_fresh* typing_tabs as Y.
     rewrite* subst_ee_open_te_var.
-    apply_ih_bind* H0.
+    forwards~ Ok2: okt_strengthen H.
+    forwards~ Inv: pure_dist_weaken Ok2 H. destruct Inv as [M [N Inv]]. destructs Inv.
+    destruct (subseq_single_inv H4); substs.
+    (* if U is not safe,  x is free in e1; *)
+    rewrite H2 in H0. rewrite H3. rewrite concat_empty_r in *.
+    forwards~ IH: H0 Y. rewrite* subst_ee_fresh.
+    destructs (typing_env_fv IH). destructs (ok_middle_inv (ok_from_okt H)).
+    forwards~ : subseq_fresh (pure E) H9. apply subseq_pure.
+    forwards~ : subseq_fresh N H10. rewrite ?dom_concat in H6.
+    unfold subset in H6. intros Contra. forwards~ Inv: H6 Contra.
+    rewrite ?in_union, or_assoc, dom_single, in_singleton in Inv.
+    branches Inv; false. substs. assert (Y \notin \{ Y}) by auto. false* notin_same.
+    (* if U is safe, then use IH *)
+    rewrite H3. apply_ih_bind* H1. rewrite H2. reflexivity.
+    apply* typing_strengthen_env. admit.
   apply* typing_tapp. apply* sub_strengthening.
   apply* typing_sub. apply* sub_strengthening.
 Qed.
