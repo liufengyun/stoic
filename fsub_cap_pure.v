@@ -318,7 +318,7 @@ Fixpoint tvar_env (E: env) := match E with
 
 (** subseq is useful in formulation of weakening lemmas *)
 Inductive subseq : env -> env -> Prop :=
-  | subseq_refl: forall E , subseq E E
+  | subseq_base: subseq empty empty
   | subseq_ext: forall E F x T,  subseq E F -> subseq E (F & x ~: T)
   | subseq_cons: forall E F x b, tvar_env E = tvar_env F ->
                                  subseq E F -> subseq (E & x ~ b) (F & x ~ b).
@@ -1371,6 +1371,12 @@ Qed.
 
 (** Properties of subsequence *)
 
+Lemma subseq_refl: forall E, subseq E E.
+Proof. intros. inductions E.
+  rewrite* <- empty_def.
+  destruct a. rewrite cons_to_push. apply* subseq_cons.
+Qed.
+
 Lemma subseq_empty: forall E, tvar_env E = empty -> subseq empty E.
 Proof. intros. inductions E.
  rewrite* <- empty_def.
@@ -1382,13 +1388,16 @@ Qed.
 Lemma subseq_trans : forall E F G,
  subseq E F -> subseq F G -> subseq E G.
 Proof. intros. gen E. induction H0; intros; auto.
-  inversions* H1; rewrite <- ?cons_to_push in H2; inversions* H2.
-    apply* subseq_cons. rewrite* H3.
+  inversions* H1.
+    rewrite empty_def, <- cons_to_push in H4. inversion H4.
+    rewrite <- ?cons_to_push in H2; inversions* H2.
+    rewrite <- ?cons_to_push in H2; inversions* H2. apply* subseq_cons. rewrite* H3.
 Qed.
 
 Lemma subseq_extend: forall E F G,
   subseq F G -> subseq (E & F) (E & G).
 Proof. introv Sub. inductions Sub; auto.
+  apply subseq_refl.
   rewrite concat_assoc. apply* subseq_ext.
   rewrite ?concat_assoc. apply* subseq_cons.
     rewrite ?tvar_dist, H. auto.
@@ -1407,6 +1416,7 @@ Qed.
 
 Lemma subseq_pure: forall E, subseq (pure E) E.
 Proof. intros. induction E; auto.
+  simpl. rewrite* <- empty_def.
   destruct a. destruct b.
     simpl. rewrite ?cons_to_push. apply* subseq_cons.
       rewrite* <- tvar_pure.
@@ -1428,6 +1438,7 @@ Lemma subseq_push_inv: forall E F x u,
   subseq (E & x ~ u) F ->
   binds x u F.
 Proof. introv Ok Seq. inductions Seq; auto.
+  rewrite empty_def, <- cons_to_push in x. inversion x.
   destruct (ok_push_inv Ok).  forwards~ : IHSeq H.
     destruct (classic (x = x0)). substs. false. autos* binds_fresh_inv.
     apply* binds_concat_left.
@@ -1439,10 +1450,11 @@ Lemma subseq_push_eq_inv: forall E F x u v,
   x # F ->
   subseq (E & x ~ u) (F & x ~ v) ->
   subseq E F /\ u = v.
-Proof. introv Ok Fresh Seq. inductions Seq; repeat(rewrite <- cons_to_push in x); inversions x.
-  split*.
+Proof. introv Ok Fresh Seq. inductions Seq.
+  rewrite empty_def, <- cons_to_push in x. inversions x.
+  rewrite <- ?cons_to_push in x. inversions x.
   forwards~ : subseq_push_inv Ok Seq. false. autos* binds_fresh_inv.
-  rewrite <- ?cons_to_push in x2; inversions x2. auto.
+  rewrite <- ?cons_to_push in x2, x. inversions x2. inversions x. auto.
 Qed.
 
 Lemma subseq_length: forall E F, subseq E F -> length E <= length F.
@@ -1658,6 +1670,7 @@ Qed.
 Lemma subseq_pure_dist: forall E F, subseq E F ->
   subseq (pure E) (pure F).
 Proof. introv Seq. inductions Seq; simpl; auto.
+  apply subseq_refl.
   rewrite <- cons_to_push. simpl. cases_if*. rewrite* cons_to_push.
   rewrite <- ?cons_to_push. destruct b.
     simpl. rewrite ?cons_to_push. apply* subseq_cons. rewrite <- ?tvar_pure; auto.
@@ -1717,7 +1730,7 @@ Proof. intros.
   destruct H as [M [N H]]. destructs H.
   exists N. splits; auto.
 
-  inversions H1. rewrite* H.
+  inversions H1. rewrite empty_def, single_def in H5. inversion H5.
   rewrite <- cons_to_push, single_def in H3. inversions H3.
   rewrite <- cons_to_push, single_def in H3. inversions H3.
   simpls. rewrite <- empty_def in *. forwards~ : subseq_empty_inv H6.
@@ -1762,7 +1775,7 @@ Lemma pure_dist_weaken_pure: forall E F,
 Proof. intros. inductions F.
   simpl. rewrite <- empty_def, concat_empty_r in *.
   exists (@empty bind). splits; repeat(rewrite concat_empty_r); try rewrite* empty_def; auto.
-     simpl. rewrite <- empty_def, concat_empty_r. auto.
+     simpl. rewrite <- empty_def, concat_empty_r. auto. rewrite* <- empty_def.
 
   destruct a. destruct b.
 
@@ -1848,7 +1861,7 @@ Lemma subseq_pure_concat: forall E F M,
 Proof. introv Eq. inductions F.
   rewrite <- empty_def, concat_empty_r in Eq.
   rewrite concat_def in Eq. forwards~ : LibList.app_eq_self_inv_r Eq.
-  substs*.
+  substs*. rewrite* <- empty_def.
 
   destruct a. destruct b.
   rewrite cons_to_push, ?concat_assoc, ?pure_push_sub in Eq.
@@ -2279,7 +2292,19 @@ Lemma pure_dist_narrow_general: forall E F G X P Q,
               subseq M N /\
               subseq M F /\
               subseq N G.
-Proof. admit. Qed.
+Proof. introv Ok1 Ok2 Sub Seq.
+  forwards~ IH1 : pure_dist_middle_sub E X Q F. destruct IH1 as [M IH1]. destructs IH1.
+  forwards~ IH2 : pure_dist_middle_sub E X P G. destruct IH2 as [N IH2]. destructs IH2.
+  exists M N. splits; auto. inductions G.
+
+  rewrite <- empty_def in *. forwards~ : subseq_empty_inv H2.
+  forwards~ : subseq_empty_inv Seq. substs.
+  forwards~ : subseq_empty_inv H0.
+
+  destruct a. destruct b; rewrite cons_to_push, concat_assoc in *.
+  (* b = X <: T *)
+  admit. admit.
+Qed.
 
 
 (* ********************************************************************** *)
@@ -2437,8 +2462,8 @@ Lemma typing_narrowing : forall Q E F X P e T,
   typing (E & X ~<: Q & F) e T ->
   typing (E & X ~<: P & F) e T.
 Proof. introv Sub Typ. destructs (typing_regular Typ).
-  forwards~ : typing_narrowing_general Sub Typ.
-  apply okt_narrow with Q; auto.
+  forwards~ Ok: okt_narrow P H.
+  forwards~ : typing_narrowing_general Sub Ok Typ. apply subseq_refl.
 Qed.
 
 (************************************************************************ *)
