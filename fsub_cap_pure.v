@@ -2385,11 +2385,10 @@ Qed.
 Lemma typing_narrowing_general : forall Q E F G X P e T,
   sub E P Q ->
   subseq F G ->
-  tvar_env F = tvar_env G ->
   okt (E & X ~<: P & G) ->
   typing (E & X ~<: Q & F) e T ->
   typing (E & X ~<: P & G) e T.
-Proof. introv Sub Seq Tvar Ok1 Typ. gen_eq E': (E & X ~<: Q & F). gen E F G.
+Proof. introv Sub Seq Ok1 Typ. gen_eq E': (E & X ~<: Q & F). gen E F G.
   inductions Typ; intros; subst; simpl.
   binds_cases H0; apply* typing_var.
     rewrite <- concat_assoc, <- concat_empty_r. apply* binds_weaken.
@@ -2402,7 +2401,6 @@ Proof. introv Sub Seq Tvar Ok1 Typ. gen_eq E': (E & X ~<: Q & F). gen E F G.
     rewrite H3. forwards~ : H1 y (pure E0) (M & y ~: V) (N & y ~: V).
       apply* sub_pure.
       apply* subseq_cons. apply* subseq_tvar.
-      rewrite ?tvar_push_typ. apply* subseq_tvar.
       rewrite concat_assoc, <- H3.
         forwards~: (H0 y). destructs (typing_regular H7).
         destructs (okt_push_typ_inv H8). apply okt_typ. apply* okt_pure.
@@ -2419,7 +2417,6 @@ Proof. introv Sub Seq Tvar Ok1 Typ. gen_eq E': (E & X ~<: Q & F). gen E F G.
     rewrite H3. forwards~ : H1 Y (pure E0) (M & Y ~<: V) (N & Y ~<: V).
       apply* sub_pure.
       apply* subseq_cons. apply* subseq_tvar.
-      rewrite ?tvar_push_sub. rewrite* (subseq_tvar H4).
       rewrite concat_assoc. rewrite <- H3.
         forwards~: (H0 Y). destructs (typing_regular H7).
         destructs (okt_push_sub_inv H8). apply okt_sub. apply* okt_pure.
