@@ -1134,6 +1134,12 @@ Proof. unfolds subset. intros. forwards K: (H x0 H1).
   tryfalse.
 Qed.
 
+Lemma subset_union : forall (T: Type) (a b c: fset T),
+  a \u b \c c -> a \c c /\ b \c c.
+Proof. intros. unfolds subset.
+  split; intros x; specializes H x; rewrite in_union in H; auto.
+Qed.
+
 
 (* ********************************************************************** *)
 (** * Properties of pure environment *)
@@ -2706,9 +2712,51 @@ Proof. intros. inductions H; simpls; autos* subset_empty_l.
       eapply subset_trans. apply open_tt_fv_subset. eauto.
 Qed.
 
+Ltac solve_subsets :=
+  match goal with
+    | [|- _ \u _ \c dom ?E ] => rewrite <- union_same; eapply subset_trans;
+                                apply* subset_union_2; apply pure_dom_subset
+    | [|- _ \c dom ?E ] => eapply subset_trans; eauto; apply pure_dom_subset
+    | [_: ?a \c ?E, _: ?b \c ?E |- ?a \u ?b \c ?E ] =>
+      rewrite <- union_same; apply* subset_union_2
+  end.
+
+Ltac splits_solve_subsets := splits*; try solve_subsets.
+
 Lemma typing_env_fv : forall E e T, typing E e T ->
   fv_ee e \c dom E /\ fv_te e \c dom E /\ fv_tt T \c dom E.
-Proof. intros. admit. Qed.
+Proof. introv Typ. inductions Typ.
+  (* var *)
+  simpls. splits; try solve [autos* subset_empty_l wft_fv_tt].
+    forwards~ K:  get_some_inv (binds_get H0). unfolds subset.
+    intros. rewrite in_singleton in H1. subst*.
+  (* abs closed *)
+  simpl. pick_fresh x. forwards~ : H0 x. forwards~ : H1 x. destructs H3.
+  rewrite dom_concat, dom_single in *.
+  forwards~ : subset_strengthen (subset_trans (@open_te_ee_fv_subset 0 (trm_fvar x) e1) H4).
+  forwards~ : subset_strengthen (subset_trans (@open_ee_fv_subset 0 (trm_fvar x) e1) H3).
+  forwards~ : subset_strengthen H5.
+  forwards~ : wft_fv_tt (wft_from_okt_typ (proj1 (typing_regular H2))).
+  splits_solve_subsets.
+  (* app *)
+  destructs IHTyp1. simpls. destruct (subset_union H1). destructs IHTyp2.
+  splits_solve_subsets.
+  (* tabs closed *)
+  simpl. pick_fresh X. forwards~ IH: H1 X. destructs IH.
+  rewrite dom_concat, dom_single in *.
+  forwards~ : subset_strengthen (subset_trans (@open_te_fv_subset 0 (typ_fvar X) e1) H3).
+  unfold open_te in H2. rewrite <- open_ee_te_fv_eq in H2. forwards~ : subset_strengthen H2.
+  forwards~ : subset_strengthen (subset_trans (@open_tt_fv_subset 0 (typ_fvar X) T1) H4).
+  forwards~ IH : H0 X.
+  forwards~ : wft_fv_tt (wft_from_okt_sub (proj1 (typing_regular IH))).
+  splits_solve_subsets.
+  (* tapp *)
+  destructs IHTyp. simpls. forwards~ : wft_fv_tt E T. destruct (subset_union H2).
+  splits_solve_subsets.
+  eapply subset_trans. apply open_tt_tt_fv_subset. solve_subsets.
+  (* sub *)
+  destructs IHTyp. forwards: subtyping_env_fv H. splits_solve_subsets.
+Qed.
 
 Lemma typing_through_subst_ee : forall U E F x T e u,
   value u ->
