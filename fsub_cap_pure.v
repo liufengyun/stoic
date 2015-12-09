@@ -1372,6 +1372,9 @@ Qed.
 
 (** pure properties *)
 
+Lemma pure_empty : pure empty = empty.
+Proof. rewrite empty_def. reflexivity. Qed.
+
 Lemma pure_push_sub: forall E X U, pure (E & X ~<: U) = pure E & X ~<: U.
 Proof. intros. rewrite <- cons_to_push. simpls. rewrite* cons_to_push. Qed.
 
@@ -2808,18 +2811,80 @@ Qed.
 (************************************************************************ *)
 (** Preservation by Type Substitution (11) *)
 
+Lemma tvar_single_sub: forall X T, tvar_env (X ~<: T) = X ~<: T.
+Proof. intros. rewrite single_def. reflexivity. Qed.
+
+Lemma tvar_map: forall E Z P,
+  tvar_env (pure (map (subst_tb Z P) E)) =
+  tvar_env (map (subst_tb Z P) (pure E)).
+Proof. intros. inductions E.
+  simpl; rewrite <- empty_def, map_empty, empty_def. reflexivity.
+  destruct a. destruct b; rewrite ?cons_to_push.
+
+  rewrite pure_push_sub, ?map_push. simpl.
+  rewrite ?tvar_dist, <- tvar_pure, <- (IHE Z P), <- tvar_pure.
+  rewrite ?tvar_dist, tvar_single_sub. auto.
+
+  rewrite <- ?tvar_pure, map_push. simpl. rewrite tvar_push_typ.
+  destruct (pure_push_typ E v t); rewrite H.
+  rewrite map_push. simpl. rewrite tvar_push_typ. rewrite <- IHE, <- tvar_pure. auto.
+  rewrite <- IHE, <- tvar_pure. auto.
+Qed.
+
+Lemma pure_map: forall E F G Z P Q,
+  okt (E & Z ~<: Q & F) ->
+  sub E P Q ->
+  subseq F G ->
+  exists M N, pure (E & Z ~<: Q & F) = pure E & Z ~<: Q & M /\
+              pure (E & F) = pure E & N /\
+              pure (E & map (subst_tb Z P) G) = pure E & N /\
+              N = map (subst_tb Z P) N /\
+              subseq M N /\ subseq M F /\ subseq N G.
+Proof. admit. Qed.
+
+Lemma typing_through_subst_te_general : forall Q E F G Z e T P,
+  closed_typ E P = true ->
+  subseq F G ->
+  typing (E & Z ~<: Q & F) e T ->
+  sub E P Q ->
+  okt (E & Z ~<: Q & G) ->
+  typing (E & map (subst_tb Z P) G) (subst_te Z P e) (subst_tt Z P T).
+Proof.
+  introv Closed Seq Typ Sub Ok. gen G.
+  inductions Typ; intros; simpls subst_tt; simpls subst_te.
+  apply* typing_var. rewrite* (@map_subst_tb_id E Z P).
+    admit.
+  apply_fresh* typing_abs as y.
+    unsimpl (subst_tb Z P (bind_typ V)).
+    rewrite* subst_te_open_ee_var.
+    forwards~ Map: pure_map H Sub Seq. destruct Map as [M [N Map]]. destructs Map.
+    rewrite H4, H5, <- concat_assoc, <- map_push.
+    applys~ H1 (M & y ~: V). rewrite* <- closed_typ_pure.
+    rewrite H2, ?concat_assoc. reflexivity. apply* sub_pure.
+    apply* subseq_concat. apply subseq_refl.
+    rewrite concat_assoc. apply okt_typ. auto.
+    apply okt_subseq with (E & Z ~<: Q & G). auto.
+    repeat(apply* subseq_concat). apply subseq_pure. apply subseq_refl.
+    apply wft_subseq with (E & Z ~<: Q & F).
+Qed.
+
 Lemma typing_through_subst_te : forall Q E F Z e T P,
+  closed_typ E P = true ->
   typing (E & Z ~<: Q & F) e T ->
   sub E P Q ->
   typing (E & map (subst_tb Z P) F) (subst_te Z P e) (subst_tt Z P T).
 Proof.
-  introv Typ PsubQ.
+  introv Closed Typ PsubQ.
   inductions Typ; introv; simpls subst_tt; simpls subst_te.
   apply* typing_var. rewrite* (@map_subst_tb_id E Z P).
    binds_cases H0; unsimpl_map_bind*.
   apply_fresh* typing_abs as y.
     unsimpl (subst_tb Z P (bind_typ V)).
     rewrite* subst_te_open_ee_var.
+    forwards~ Map: pure_map H PsubQ. destruct Map as [M [N Map]]. destructs Map.
+    rewrite H4, H5, <- concat_assoc, <- map_push.
+    apply* H1. rewrite* <- closed_typ_pure.
+    rewrite H2, ?concat_assoc.
     apply_ih_map_bind* H0.
   apply_fresh* typing_cap as y.
     unsimpl (subst_tb Z P (bind_typ V)).
