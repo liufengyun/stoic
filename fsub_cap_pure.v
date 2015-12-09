@@ -1332,6 +1332,30 @@ Proof. intros.
   simpl. rewrite <- empty_def, concat_empty_r. auto.
 Qed.
 
+Lemma closed_typ_binds: forall X U E,
+  okt E ->
+  binds X (bind_sub U) E ->
+  closed_typ E (typ_fvar X) = safe_bound (exposure E U).
+Proof. introv Ok Bnd. simpl. gen X U. inductions E; intros.
+  rewrite <- empty_def in *. false* binds_empty_inv.
+
+  destruct a. rewrite cons_to_push in *. destruct (binds_push_inv Bnd).
+  destruct H. substs. destructs (okt_push_sub_inv Ok).
+  simpl. rewrite <- cons_to_push at 1.
+  destruct U; try solve [simpl; case_if*; rewrite ?exposure_nontvar; simple; auto].
+  simpl. cases_if. rewrite <- cons_to_push. simpl. cases_if*.
+
+  destruct H. rewrite <- cons_to_push. destruct b.
+  simpl. cases_if. destructs (okt_push_sub_inv Ok).
+  destruct U; try solve [forwards~ IH: IHE H0; rewrite IH, ?exposure_nontvar; simple; auto].
+  cases_if. forwards~ Wf: wft_from_env_has_sub H0. inversions Wf. false. autos* binds_fresh_inv.
+  apply* IHE.
+
+  simpl. destructs (okt_push_typ_inv Ok).
+  destruct U; try solve [forwards~ IH: IHE H0; rewrite IH, ?exposure_nontvar; simple; auto].
+Qed.
+
+
 Lemma closed_typ_subst_tt: forall T E,
   closed_typ E T = true ->
   forall Z P, closed_typ E P = true ->
@@ -2232,6 +2256,7 @@ Proof.
    apply_ih_map_bind* H0.
 Qed.
 
+
 (* ********************************************************************** *)
 (** properties of pure environment related to subtyping *)
 
@@ -2333,12 +2358,27 @@ Proof. introv Sub. destructs (sub_regular Sub).
   eapply sub_tvar; eauto. apply* okt_pure. apply tvar_pure.
 Qed.
 
-Lemma sub_closed: forall S T E,
+Lemma sub_closed_left: forall E S T,
   sub E S T ->
-  closed_typ E T = true ->
-  closed_typ E S = true.
-Proof. admit. Qed.
+  closed_typ E S = true ->
+  closed_typ E T = true.
+Proof. introv Sub Closed. inductions Sub; auto.
+  destructs (sub_regular Sub). forwards~ Sb: closed_typ_binds H.
+  rewrite Sb in Closed. apply IHSub.
+  destruct U; try solve [auto; rewrite ?exposure_nontvar in Closed; auto].
+  inversion H1.
+Qed.
 
+Lemma sub_unsafe_right: forall E S T,
+  sub E S T ->
+  closed_typ E T = false ->
+  closed_typ E S = false.
+Proof. introv Sub Closed. inductions Sub; auto; tryfalse.
+  destructs (sub_regular Sub). forwards~ Sb: closed_typ_binds H.
+  rewrite Sb. forwards~ IH: IHSub.
+  destruct U; tryfalse; simpls; auto. inversion H1.
+  rewrite* exposure_nontvar.
+Qed.
 
 Lemma pure_dist_narrow: forall E F G X P Q,
   okt (E & X ~<: Q & F) ->
@@ -2556,15 +2596,26 @@ Proof. introv Sub Typ. destructs (typing_regular Typ).
   forwards~ : typing_narrowing_general Sub Ok Typ. apply subseq_refl.
 Qed.
 
-Lemma typing_strengthen_env: forall E u U, value u -> typing E u U ->
-  closed_typ E U = true -> typing (pure E) u U.
-Proof. introv Val Typ Closed. inductions Typ.
-  apply typing_var. apply* okt_pure. apply* pure_binds_closed.
+Lemma typing_abs_closed : forall E S e T,
+  typing E (trm_abs S e) T -> closed_typ E T = true.
+Proof. introv Typ. inductions Typ; auto.
+  apply sub_closed_left with S0; auto.
+Qed.
+
+Lemma typing_tabs_closed : forall E S e T,
+  typing E (trm_tabs S e) T -> closed_typ E T = true.
+Proof. introv Typ. inductions Typ; auto.
+  apply sub_closed_left with S0; auto.
+Qed.
+
+Lemma typing_strengthen_env: forall E u U,
+  value u ->
+  typing E u U ->
+  typing (pure E) u U.
+Proof. introv Val Typ. inductions Typ; try solve [inversion Val].
   apply_fresh* typing_abs as y. apply* okt_pure. rewrite* pure_eq.
-  inversion Val.
   apply_fresh* typing_tabs as y. apply* okt_pure. rewrite* pure_eq.
-  inversion Val.
-  apply typing_sub with S. apply* IHTyp. apply* sub_closed. apply* sub_pure.
+  apply typing_sub with S. apply* IHTyp. apply* sub_pure.
 Qed.
 
 (************************************************************************ *)
