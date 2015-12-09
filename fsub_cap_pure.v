@@ -1325,6 +1325,13 @@ Proof. introv Ok1 Ok2 Wf. inductions G.
   repeat(rewrite closed_typ_push_typ). apply* IHG. apply_empty* wft_strengthen.
 Qed.
 
+Lemma closed_typ_strengthen : forall E F x U T,
+  closed_typ (E & x ~: U & F) T = closed_typ (E & F) T.
+Proof. intros.
+  apply closed_typ_tvar. rewrite ?tvar_dist, single_def.
+  simpl. rewrite <- empty_def, concat_empty_r. auto.
+Qed.
+
 Lemma closed_typ_subst_tt: forall T E,
   closed_typ E T = true ->
   forall Z P, closed_typ E P = true ->
@@ -1368,12 +1375,6 @@ Proof. intros. induction E.
     eapply subset_union_2. eapply subset_refl. eauto.
     eapply subset_trans. eauto. apply subset_union_weak_r.
 Qed.
-
-Lemma pure_binds_closed: forall E x T,
-  binds x (bind_typ T) E ->
-  closed_typ E T = true ->
-  binds x (bind_typ T) (pure E).
-Proof. admit. Qed.
 
 (** Properties of subsequence *)
 
@@ -1716,6 +1717,30 @@ Proof. introv Seq. inductions Seq; simpl; auto.
     lets: exposure_tvar (typ_fvar v) H. false.
 Qed.
 
+Lemma pure_binds_closed: forall E x T,
+  okt E ->
+  binds x (bind_typ T) E ->
+  closed_typ E T = true ->
+  binds x (bind_typ T) (pure E).
+Proof. introv Ok Bnd Closed. induction E.
+  rewrite <- empty_def in *. false* binds_empty_inv.
+
+  destruct a. rewrite cons_to_push in *. destruct b.
+    rewrite pure_push_sub. destruct (binds_push_inv Bnd).
+      destruct H. inversion H0.
+      destruct H. apply* binds_concat_left.
+        destructs (okt_push_sub_inv Ok). apply* IHE.
+        destruct T; auto. rewrite <- cons_to_push in Closed. simpls.
+          cases_if*. forwards~ Wf: wft_from_env_has_typ H0.
+          inversion Wf. false. autos* binds_fresh_inv.
+
+    rewrite closed_typ_push_typ in Closed. destruct (binds_push_inv Bnd).
+    destruct H. inversions H0. rewrite* pure_push_typ_closed.
+    destruct H. destructs (okt_push_typ_inv Ok). forwards~ IH: IHE.
+      apply* binds_subseq. apply ok_from_okt, okt_pure; auto.
+      apply subseq_pure_dist, subseq_ext, subseq_refl.
+Qed.
+
 (* The following lemmas depend on subseq, thus are located here *)
 Lemma pure_dist_two: forall E F,
   exists N, pure (E & F) = pure E & N  /\ subseq N F.
@@ -1772,6 +1797,62 @@ Proof. intros.
   substs. rewrite concat_empty_l in *. rewrite* H.
 Qed.
 
+Lemma pure_dist_middle_typ: forall E F x U,
+  (exists N, closed_typ E U = true /\
+             pure (E & x ~: U & F) = pure E & x ~: U & N /\
+             pure (E & F) = pure E & N /\
+             subseq N F
+  ) \/
+  (exists N, closed_typ E U = false /\
+             pure (E & x ~: U & F) = pure E & N /\
+             pure (E & F) = pure E & N /\
+             subseq N F
+  ).
+Proof. intros. inductions F.
+  rewrite <- empty_def, ?concat_empty_r.
+  cases (closed_typ E U).
+    rewrite pure_push_typ_closed; auto. left. exists (@empty bind).
+      splits; auto; rewrite* concat_empty_r.
+    rewrite pure_push_typ_false; auto. right. exists (@empty bind).
+      splits; auto; rewrite* concat_empty_r.
+
+  destruct a. rewrite ?cons_to_push, ?concat_assoc.
+  forwards~ IH : IHF x U.
+  destruct IH as [Case | Case]; destruct Case as [N Case]; destructs Case.
+
+  left. destruct b.
+    rewrite ?pure_push_sub. exists (N & v ~<: t). splits; auto.
+    rewrite H0, concat_assoc; auto.
+    rewrite H1, concat_assoc; auto.
+    apply* subseq_concat. apply subseq_refl.
+
+    rewrite <- cons_to_push. simpl. cases_if; rewrite cons_to_push in *.
+      rewrite closed_typ_push_typ, closed_typ_strengthen in H3.
+      rewrite pure_push_typ_closed; auto. exists (N & v ~: t). splits; auto.
+        rewrite H0, concat_assoc; auto.
+        rewrite H1, concat_assoc; auto.
+        apply* subseq_concat. apply subseq_refl.
+
+      rewrite closed_typ_push_typ, closed_typ_strengthen in H3.
+      rewrite pure_push_typ_false; auto. exists N. splits; auto.
+
+  right. destruct b.
+    rewrite ?pure_push_sub. exists (N & v ~<: t). splits; auto.
+    rewrite H0, concat_assoc; auto.
+    rewrite H1, concat_assoc; auto.
+    apply* subseq_concat. apply subseq_refl.
+
+    rewrite <- cons_to_push. simpl. cases_if; rewrite cons_to_push in *.
+      rewrite closed_typ_push_typ, closed_typ_strengthen in H3.
+      rewrite pure_push_typ_closed; auto. exists (N & v ~: t). splits; auto.
+        rewrite H0, concat_assoc; auto.
+        rewrite H1, concat_assoc; auto.
+        apply* subseq_concat. apply subseq_refl.
+
+      rewrite closed_typ_push_typ, closed_typ_strengthen in H3.
+      rewrite pure_push_typ_false; auto. exists N. splits; auto.
+Qed.
+
 Lemma pure_dist_weaken: forall E F G, okt (E & G) -> okt (E & F & G) ->
   exists M N, pure (E & F & G) = pure E & M & N /\
               pure (E & G) = pure E & N /\
@@ -1781,7 +1862,7 @@ Proof. introv Ok1 Ok2. inductions G.
   lets: pure_dist_two E F. destruct H as [N H]. destructs H.
   exists N (@empty bind). splits; rewrite ?concat_empty_r; auto.
 
-  destruct a. rewrite cons_to_push in *. repeat(rewrite concat_assoc in *).
+  destruct a. rewrite ?cons_to_push, ?concat_assoc in *.
   destruct (okt_weaken Ok1). destruct (okt_weaken Ok2).
   forwards~ : IHG. destruct H3 as [M [N H3]]. destructs H3. destruct b.
     rewrite ?pure_push_sub. exists M (N & v ~<: t). splits; auto.
@@ -2590,11 +2671,13 @@ Proof.
     binds_cases H0; apply* typing_var.
   apply_fresh* typing_abs as y.
     rewrite* subst_ee_open_ee_var.
-    forwards~ Ok2: okt_strengthen H.
-    forwards~ Inv: pure_dist_weaken Ok2 H. destruct Inv as [M [N Inv]]. destructs Inv.
-    destruct (subseq_single_inv H4); substs.
+    forwards~ Inv: pure_dist_middle_typ E F x U.
+    destruct Inv as [[N Inv] | [N Inv]]; destructs Inv.
+    (* if U is safe, then use IH *)
+    rewrite H4. apply_ih_bind* H1. rewrite H3. reflexivity.
+    apply* typing_strengthen_env.
     (* if U is not safe,  x is free in e1; *)
-    rewrite H2 in H0. rewrite H3. rewrite concat_empty_r in *.
+    rewrite H3 in H0. rewrite H4.
     forwards~ IH: H0 y. rewrite* subst_ee_fresh.
     destructs (typing_env_fv IH). destructs (ok_middle_inv (ok_from_okt H)).
     forwards~ : subseq_fresh (pure E) H9. apply subseq_pure.
@@ -2602,17 +2685,16 @@ Proof.
     unfold subset in H6. intros Contra. forwards~ Inv: H6 Contra.
     rewrite ?in_union, or_assoc, dom_single, in_singleton in Inv.
     branches Inv; false. substs. assert (y \notin \{ y}) by auto. false* notin_same.
-    (* if U is safe, then use IH *)
-    rewrite H3. apply_ih_bind* H1. rewrite H2. reflexivity.
-    apply* typing_strengthen_env. admit.
   apply* typing_app.
   apply_fresh* typing_tabs as Y.
     rewrite* subst_ee_open_te_var.
-    forwards~ Ok2: okt_strengthen H.
-    forwards~ Inv: pure_dist_weaken Ok2 H. destruct Inv as [M [N Inv]]. destructs Inv.
-    destruct (subseq_single_inv H4); substs.
+    forwards~ Inv: pure_dist_middle_typ E F x U.
+    destruct Inv as [[N Inv] | [N Inv]]; destructs Inv.
+    (* if U is safe, then use IH *)
+    rewrite H4. apply_ih_bind* H1. rewrite H3. reflexivity.
+    apply* typing_strengthen_env.
     (* if U is not safe,  x is free in e1; *)
-    rewrite H2 in H0. rewrite H3. rewrite concat_empty_r in *.
+    rewrite H3 in H0. rewrite H4.
     forwards~ IH: H0 Y. rewrite* subst_ee_fresh.
     destructs (typing_env_fv IH). destructs (ok_middle_inv (ok_from_okt H)).
     forwards~ : subseq_fresh (pure E) H9. apply subseq_pure.
@@ -2620,9 +2702,6 @@ Proof.
     unfold subset in H6. intros Contra. forwards~ Inv: H6 Contra.
     rewrite ?in_union, or_assoc, dom_single, in_singleton in Inv.
     branches Inv; false. substs. assert (Y \notin \{ Y}) by auto. false* notin_same.
-    (* if U is safe, then use IH *)
-    rewrite H3. apply_ih_bind* H1. rewrite H2. reflexivity.
-    apply* typing_strengthen_env. admit.
   apply* typing_tapp. apply* sub_strengthening.
   apply* typing_sub. apply* sub_strengthening.
 Qed.
