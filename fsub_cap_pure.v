@@ -2853,7 +2853,11 @@ Proof.
   introv Closed Seq Typ Sub Ok. gen G.
   inductions Typ; intros; simpls subst_tt; simpls subst_te.
   apply* typing_var. rewrite* (@map_subst_tb_id E Z P).
-    admit.
+    unsimpl (subst_tb Z P (bind_typ T)).
+    rewrite <- map_concat. apply binds_map. binds_cases H0.
+    apply binds_concat_left_ok; auto. apply ok_remove with (Z ~<: Q); auto.
+    apply binds_concat_right. apply binds_subseq with F; auto.
+    apply (ok_concat_inv_r (ok_from_okt Ok)).
   apply_fresh* typing_abs as y.
     unsimpl (subst_tb Z P (bind_typ V)).
     rewrite* subst_te_open_ee_var.
@@ -2862,10 +2866,56 @@ Proof.
     applys~ H1 (M & y ~: V). rewrite* <- closed_typ_pure.
     rewrite H2, ?concat_assoc. reflexivity. apply* sub_pure.
     apply* subseq_concat. apply subseq_refl.
-    rewrite concat_assoc. apply okt_typ. auto.
+    rewrite concat_assoc. apply okt_typ.
+    (*okt*)
     apply okt_subseq with (E & Z ~<: Q & G). auto.
     repeat(apply* subseq_concat). apply subseq_pure. apply subseq_refl.
-    apply wft_subseq with (E & Z ~<: Q & F).
+    apply wft_tvar with (E & Z ~<: Q & G). apply ok_from_okt.
+    apply okt_subseq with (E & Z ~<: Q & G). auto.
+    repeat(apply* subseq_concat). apply subseq_pure. apply subseq_refl.
+    rewrite ?tvar_dist, <- tvar_pure, (subseq_tvar H8). auto.
+    (*wft*)
+    apply wft_tvar with (pure (E & Z ~<: Q & F)). auto.
+    rewrite <-tvar_pure, ?tvar_dist, (subseq_tvar Seq). auto.
+    forwards~ IH: H0 y. destructs (typing_regular IH). destructs (okt_push_typ_inv H9).
+    auto.
+    (* y fresh *)
+    apply subseq_fresh with (E & Z ~<: Q & G).
+    repeat(apply subseq_concat; auto; try apply subseq_refl; try apply subseq_pure).
+    auto.
+  apply* typing_app.
+  apply_fresh* typing_tabs as Y.
+    unsimpl (subst_tb Z P (bind_sub V)).
+    rewrite* subst_te_open_te_var.
+    rewrite* subst_tt_open_tt_var.
+    forwards~ Map: pure_map H Sub Seq. destruct Map as [M [N Map]]. destructs Map.
+    rewrite H4, H5, <- concat_assoc, <- map_push.
+    applys~ H1 (M & Y ~<: V). rewrite* <- closed_typ_pure.
+    rewrite H2, ?concat_assoc. reflexivity. apply* sub_pure.
+    apply* subseq_concat. apply subseq_refl.
+    rewrite concat_assoc. apply okt_sub.
+    (*okt*)
+    apply okt_subseq with (E & Z ~<: Q & G). auto.
+    repeat(apply* subseq_concat). apply subseq_pure. apply subseq_refl.
+    apply wft_tvar with (E & Z ~<: Q & G). apply ok_from_okt.
+    apply okt_subseq with (E & Z ~<: Q & G). auto.
+    repeat(apply* subseq_concat). apply subseq_pure. apply subseq_refl.
+    rewrite ?tvar_dist, <- tvar_pure, (subseq_tvar H8). auto.
+    (*wft*)
+    apply wft_tvar with (pure (E & Z ~<: Q & F)). auto.
+    rewrite <-tvar_pure, ?tvar_dist, (subseq_tvar Seq). auto.
+    forwards~ IH: H0 Y. destructs (typing_regular IH). destructs (okt_push_sub_inv H9).
+    auto.
+    (* y fresh *)
+    apply subseq_fresh with (E & Z ~<: Q & G).
+    repeat(apply subseq_concat; auto; try apply subseq_refl; try apply subseq_pure).
+    auto.
+  rewrite* subst_tt_open_tt. apply* typing_tapp.
+    eapply sub_through_subst_tt; eauto. apply sub_subseq with (E & Z ~<: Q & F); auto.
+    repeat(apply subseq_concat; auto; try apply subseq_refl; try apply subseq_pure).
+  apply* typing_sub. eapply sub_through_subst_tt; eauto.
+    apply sub_subseq with (E & Z ~<: Q & F); auto.
+    repeat(apply subseq_concat; auto; try apply subseq_refl; try apply subseq_pure).
 Qed.
 
 Lemma typing_through_subst_te : forall Q E F Z e T P,
@@ -2874,35 +2924,8 @@ Lemma typing_through_subst_te : forall Q E F Z e T P,
   sub E P Q ->
   typing (E & map (subst_tb Z P) F) (subst_te Z P e) (subst_tt Z P T).
 Proof.
-  introv Closed Typ PsubQ.
-  inductions Typ; introv; simpls subst_tt; simpls subst_te.
-  apply* typing_var. rewrite* (@map_subst_tb_id E Z P).
-   binds_cases H0; unsimpl_map_bind*.
-  apply_fresh* typing_abs as y.
-    unsimpl (subst_tb Z P (bind_typ V)).
-    rewrite* subst_te_open_ee_var.
-    forwards~ Map: pure_map H PsubQ. destruct Map as [M [N Map]]. destructs Map.
-    rewrite H4, H5, <- concat_assoc, <- map_push.
-    apply* H1. rewrite* <- closed_typ_pure.
-    rewrite H2, ?concat_assoc.
-    apply_ih_map_bind* H0.
-  apply_fresh* typing_cap as y.
-    unsimpl (subst_tb Z P (bind_typ V)).
-    rewrite* subst_te_open_ee_var. rewrite pure_dist.
-    rewrite pure_map. apply_ih_map_bind* H1.
-    repeat(rewrite pure_dist).
-    replace (pure (Z ~<: Q)) with (Z ~<:Q) by (rewrite* single_def).
-    rewrite concat_assoc. reflexivity.
-    apply* sub_strengthening_env.
-  apply* typing_app.
-  apply_fresh* typing_tabs as Y.
-    unsimpl (subst_tb Z P (bind_sub V)).
-    rewrite* subst_te_open_te_var.
-    rewrite* subst_tt_open_tt_var.
-    apply_ih_map_bind* H0.
-  rewrite* subst_tt_open_tt. apply* typing_tapp.
-    apply* sub_through_subst_tt.
-  apply* typing_sub. apply* sub_through_subst_tt.
+  introv Closed Typ Sub. destructs (typing_regular Typ).
+  forwards~ : typing_through_subst_te_general Closed (subseq_refl F) Typ.
 Qed.
 
 (* ********************************************************************** *)
