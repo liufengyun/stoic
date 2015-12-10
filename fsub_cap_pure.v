@@ -1273,6 +1273,19 @@ Proof. intros. inductions F.
     simpl. auto.
 Qed.
 
+Lemma tvar_map: forall E Z P,
+  tvar_env (map (subst_tb Z P) E) =
+  map (subst_tb Z P) (tvar_env E).
+Proof. intros. inductions E.
+  simpl; rewrite <- empty_def, map_empty, empty_def. reflexivity.
+  destruct a. destruct b; rewrite ?cons_to_push.
+
+  rewrite ?map_push, tvar_dist, tvar_push_sub, map_push. simpl.
+    rewrite tvar_single_sub. rewrite* IHE.
+
+  rewrite <- ?tvar_pure, map_push. simpl. rewrite ?tvar_push_typ. auto.
+Qed.
+
 (** closed_typ properties *)
 
 Lemma closed_typ_push_typ: forall E x U T, closed_typ (E & x ~: U) T = closed_typ E T.
@@ -1365,12 +1378,104 @@ Proof. introv Ok Bnd. simpl. gen X U. inductions E; intros.
 Qed.
 
 
-Lemma closed_typ_subst_tt: forall T E,
-  closed_typ E T = true ->
-  forall Z P, closed_typ E P = true ->
-              closed_typ E (subst_tt Z P T) = true.
-Proof. intros. inductions T; inversions H; simpls; auto. case_if*.
-  rewrite H0. rewrite H2. reflexivity.
+Lemma closed_typ_subst_tt: forall E F Z Q T,
+  okt (E & Z ~<: Q & F) ->
+  wft (E & Z ~<: Q & F) T ->
+  closed_typ (E & Z ~<: Q & F) T = true ->
+  closed_typ (E & map (subst_tb Z Q) F) (subst_tt Z Q T) = true.
+Proof. introv Ok Wf Closed. inductions F.
+
+  rewrite <- ?empty_def, map_empty, ?concat_empty_r in *.
+  destruct T; try solve [inversions Closed; simpls; auto].
+  simpl. cases_if. rewrite <- cons_to_push in Closed. simpl in Closed.
+  cases_if. destructs (okt_push_sub_inv Ok).
+    destruct* Q; try solve [rewrite ?exposure_nontvar in Closed; simpls; auto].
+    inversion H0.
+  inversions Wf. forwards~ : binds_concat_left_inv H2.
+    destructs (okt_push_sub_inv Ok).
+    rewrite <- concat_empty_r in Closed at 1.
+    rewrite <- closed_typ_weaken in Closed; rewrite ?concat_empty_r; auto.
+    rewrite concat_empty_r in Closed. auto.
+    apply wft_var with U; auto.
+
+  destruct a. destruct b.
+
+  rewrite ?cons_to_push, concat_assoc in *.
+  destruct T; try solve [inversions Closed; simpls; auto]. simpl.
+  cases_if. destructs (okt_push_sub_inv Ok).
+    lets OkL: okt_weaken_right H. destructs (okt_push_sub_inv OkL). simpls.
+    destructs (ok_middle_inv (ok_from_okt H)).
+    forwards~ Bnd: binds_middle_eq Z E (F & v ~<: t) (bind_sub Q). rewrite concat_assoc in Bnd.
+    rewrite (exposure_binds Ok Bnd) in Closed.
+    rewrite <- ?concat_assoc, <- exposure_weaken_right in Closed; rewrite ?concat_assoc; auto.
+    rewrite <- concat_empty_r at 1. rewrite <- closed_typ_weaken; rewrite ?concat_empty_r; auto.
+    destruct Q; auto. inversion H3. rewrite exposure_nontvar in Closed. simpls. false. auto.
+    apply* okt_subst_tb. rewrite concat_assoc. exact Ok.
+  rewrite <- cons_to_push in Closed. simpls. cases_if.
+    rewrite map_push, concat_assoc, <- cons_to_push. simpl. cases_if.
+      destructs (okt_push_sub_inv Ok).
+      destruct t; try solve [simpls; rewrite ?exposure_nontvar in *; simpls; auto].
+      forwards~ IH: IHF Z Q (typ_fvar v0). simpls. cases_if.
+        lets OkL: okt_weaken_right H0. destructs (okt_push_sub_inv OkL). simpls.
+          destructs (ok_middle_inv (ok_from_okt H0)).
+          forwards~ Bnd: binds_middle_eq Z E F (bind_sub Q).
+          rewrite (exposure_binds H0 Bnd) in Closed.
+          rewrite <- ?concat_assoc, <- exposure_weaken_right in Closed; rewrite ?concat_assoc; auto.
+          rewrite <- concat_empty_r at 1. rewrite <- exposure_weaken; rewrite ?concat_empty_r; auto.
+          apply* okt_subst_tb.
+        simpl in IH. auto.
+
+      destructs (okt_push_sub_inv Ok).
+      rewrite map_push, concat_assoc, <- cons_to_push. simpl. cases_if.
+      forwards~ IH: IHF Z Q (typ_fvar v0). inversions Wf.
+        forwards~ : binds_push_neq_inv H7. apply* wft_var.
+      simpls. cases_if. auto.
+
+  rewrite ?cons_to_push, map_push, concat_assoc in *. simpls.
+  rewrite ?closed_typ_push_typ in *. destructs (okt_push_typ_inv Ok).
+  apply* IHF. apply_empty* wft_strengthen.
+Qed.
+
+Lemma safe_bound_sub: forall E P Q,
+  okt E ->
+  sub E P Q ->
+  safe_bound (exposure E P) = false ->
+  safe_bound (exposure E Q) = false.
+Proof. introv Ok Sub Bound.
+  inductions Sub; try solve [rewrite ?exposure_nontvar; simpls; auto];
+    try solve [rewrite exposure_nontvar in Bound; auto; simpls; false]; auto.
+  forwards~ Eq: exposure_binds Ok H. rewrite Eq in Bound. auto.
+Qed.
+
+Lemma closed_typ_narrowing: forall E F G X P Q T,
+  okt (E & X ~<: Q & F) ->
+  okt (E & X ~<: P & G) ->
+  subseq F G ->
+  sub E P Q ->
+  closed_typ (E & X ~<: P & G) T = false ->
+  closed_typ (E & X ~<: Q & F) T = false.
+Proof. introv Ok1 Ok2 Seq Sub Closed. gen T. inductions Seq; intros.
+
+  rewrite ?concat_empty_r in *.
+  destruct T; try solve [unfold closed_typ; autos].
+  rewrite <- ?cons_to_push in Closed |- *. simpls. cases_if*.
+  destructs (okt_push_sub_inv Ok1). apply* safe_bound_sub.
+
+  rewrite ?cons_to_push, ?concat_assoc, ?closed_typ_push_typ in *.
+  destructs (okt_push_typ_inv Ok2). auto.
+
+  destruct b; rewrite ?cons_to_push, ?concat_assoc in *.
+
+  destructs (okt_push_sub_inv Ok1). destructs (okt_push_sub_inv Ok2).
+  destruct T; try solve [unfold closed_typ; autos].
+  rewrite <- ?cons_to_push in Closed |- *. simpls. cases_if*.
+  rewrite ?cons_to_push, ?concat_assoc in *.
+  destruct t; try solve [rewrite exposure_nontvar in Closed |- *; simpls; autos].
+  forwards~ IH: IHSeq (typ_fvar v).
+  rewrite ?cons_to_push, ?concat_assoc in *. forwards~ IH: IHSeq (typ_fvar v).
+
+  destructs (okt_push_typ_inv Ok1). destructs (okt_push_typ_inv Ok2).
+  rewrite closed_typ_push_typ in *. auto.
 Qed.
 
 (** pure properties *)
@@ -2303,48 +2408,6 @@ Proof. introv Ok Sub. inductions Sub; try solve [rewrite ?exposure_nontvar; auto
   rewrite ?exposure_nontvar; auto. apply* sub_all.
 Qed.
 
-Lemma safe_bound_sub: forall E P Q,
-  okt E ->
-  sub E P Q ->
-  safe_bound (exposure E P) = false ->
-  safe_bound (exposure E Q) = false.
-Proof. introv Ok Sub Bound.
-  inductions Sub; try solve [rewrite ?exposure_nontvar; simpls; auto];
-    try solve [rewrite exposure_nontvar in Bound; auto; simpls; false]; auto.
-  forwards~ Eq: exposure_binds Ok H. rewrite Eq in Bound. auto.
-Qed.
-
-Lemma closed_typ_narrowing: forall E F G X P Q T,
-  okt (E & X ~<: Q & F) ->
-  okt (E & X ~<: P & G) ->
-  subseq F G ->
-  sub E P Q ->
-  closed_typ (E & X ~<: P & G) T = false ->
-  closed_typ (E & X ~<: Q & F) T = false.
-Proof. introv Ok1 Ok2 Seq Sub Closed. gen T. inductions Seq; intros.
-
-  rewrite ?concat_empty_r in *.
-  destruct T; try solve [unfold closed_typ; autos].
-  rewrite <- ?cons_to_push in Closed |- *. simpls. cases_if*.
-  destructs (okt_push_sub_inv Ok1). apply* safe_bound_sub.
-
-  rewrite ?cons_to_push, ?concat_assoc, ?closed_typ_push_typ in *.
-  destructs (okt_push_typ_inv Ok2). auto.
-
-  destruct b; rewrite ?cons_to_push, ?concat_assoc in *.
-
-  destructs (okt_push_sub_inv Ok1). destructs (okt_push_sub_inv Ok2).
-  destruct T; try solve [unfold closed_typ; autos].
-  rewrite <- ?cons_to_push in Closed |- *. simpls. cases_if*.
-  rewrite ?cons_to_push, ?concat_assoc in *.
-  destruct t; try solve [rewrite exposure_nontvar in Closed |- *; simpls; autos].
-  forwards~ IH: IHSeq (typ_fvar v).
-  rewrite ?cons_to_push, ?concat_assoc in *. forwards~ IH: IHSeq (typ_fvar v).
-
-  destructs (okt_push_typ_inv Ok1). destructs (okt_push_typ_inv Ok2).
-  rewrite closed_typ_push_typ in *. auto.
-Qed.
-
 Lemma sub_tvar : forall E F T1 T2, okt E -> okt F ->
   tvar_env E = tvar_env F ->
   sub E T1 T2 -> sub F T1 T2.
@@ -2814,25 +2877,18 @@ Qed.
 (************************************************************************ *)
 (** Preservation by Type Substitution (11) *)
 
-Lemma tvar_map: forall E Z P,
-  tvar_env (map (subst_tb Z P) E) =
-  map (subst_tb Z P) (tvar_env E).
-Proof. intros. inductions E.
-  simpl; rewrite <- empty_def, map_empty, empty_def. reflexivity.
-  destruct a. destruct b; rewrite ?cons_to_push.
-
-  rewrite ?map_push, tvar_dist, tvar_push_sub, map_push. simpl.
-    rewrite tvar_single_sub. rewrite* IHE.
-
-  rewrite <- ?tvar_pure, map_push. simpl. rewrite ?tvar_push_typ. auto.
-Qed.
-
 Lemma closed_typ_subst: forall E Z P Q F T,
   okt (E & Z ~<: Q & F) ->
+  wft (E & Z ~<: Q & F) T ->
   closed_typ (E & Z ~<: Q & F) T = true ->
   sub E P Q ->
   closed_typ (E & map (subst_tb Z P) F) (subst_tt Z P T) = true.
-Proof. admit. Qed.
+Proof.
+  introv Ok Wf Closed Sub.
+  forwards~ OkP: okt_narrow P Ok. forwards~ WfP: wft_narrow Wf (ok_from_okt OkP).
+  cases (closed_typ (E & Z ~<: P & F) T). apply* closed_typ_subst_tt.
+  forwards~ : closed_typ_narrowing Ok OkP (subseq_refl F) Eq. false.
+Qed.
 
 Lemma pure_map: forall E F G Z P Q,
   okt (E & Z ~<: Q & F) ->
@@ -2867,7 +2923,7 @@ Proof. introv Ok Sub Seq. inductions Seq.
 
   rewrite <- cons_to_push. simpl.
   cases_if; rewrite ?cons_to_push, ?closed_typ_push_typ in *.
-    forwards~ Closed: closed_typ_subst P H5.
+    forwards~ Closed: closed_typ_subst P H5. destructs (okt_push_typ_inv Ok); auto.
     rewrite map_push, ?concat_assoc. simpl. rewrite* pure_push_typ_closed.
     exists (M & x ~: t) (N & x ~: t). splits; auto.
       rewrite H0, concat_assoc; auto.
