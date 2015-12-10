@@ -340,35 +340,35 @@ Definition progress := forall e T,
 (** problem: All X. All Y. X -> Y  should be caprod *)
 
 Inductive capsafe: env -> typ -> Prop :=
- | capsafe_B: forall E, okt E -> capsafe E typ_base
- | capsafe_T: forall E, okt E -> capsafe E typ_top
- | capsafe_X: forall E X T, okt E -> binds X (bind_sub T) E ->
-                            ~sub E typ_eff (exposure E T) ->
-                            capsafe E (typ_fvar X)
- | capsafe_C_X: forall E S T, wft E T -> caprod E S -> capsafe E (typ_arrow S T)
- | capsafe_X_S: forall E S T, wft E S -> capsafe E T -> capsafe E (typ_arrow S T)
- | capsafe_A: forall E U T L, wft E (typ_all U T) ->
-                              (forall X, X \notin L ->
-                                         capsafe (E & X ~<: U) (T open_tt_var X)) ->
+ | capsafe_base: forall E, okt E -> capsafe E typ_base
+ | capsafe_top: forall E, okt E -> capsafe E typ_top
+ | capsafe_var: forall E X T, okt E -> binds X (bind_sub T) E ->
+                              ~sub E typ_eff (exposure E T) ->
+                              capsafe E (typ_fvar X)
+ | capsafe_eff_any: forall E S T, wft E T -> caprod E S -> capsafe E (typ_arrow S T)
+ | capsafe_any_safe: forall E S T, wft E S -> capsafe E T -> capsafe E (typ_arrow S T)
+ | capsafe_all: forall E U T, wft E (typ_all U T) ->
+                              (forall V, sub E V (exposure E U) ->
+                                         capsafe E (open_tt T V)) ->
                               capsafe E (typ_all U T)
 
 with caprod: env -> typ -> Prop :=
- | caprod_E: forall E, okt E -> caprod E typ_eff
- | caprod_X: forall E X T, okt E -> binds X (bind_sub T) E ->
-                           sub E typ_eff (exposure E T) ->
-                           caprod E (typ_fvar X)
- | caprod_S_C: forall E S T, capsafe E S -> caprod E T -> caprod E (typ_arrow S T)
- | caprod_A: forall E U T L, wft E (typ_all U T) ->
-                           (forall X, X \notin L ->
-                                      capsafe (E & X ~<: U) (T open_tt_var X)) ->
-                           caprod E (typ_all U T).
+ | caprod_eff: forall E, okt E -> caprod E typ_eff
+ | caprod_var: forall E X T, okt E -> binds X (bind_sub T) E ->
+                             sub E typ_eff (exposure E T) ->
+                             caprod E (typ_fvar X)
+ | caprod_safe_eff: forall E S T, capsafe E S -> caprod E T -> caprod E (typ_arrow S T)
+ | caprod_all: forall E U T, wft E (typ_all U T) ->
+                             (exists V, sub E V (exposure E U) ->
+                                        caprod E (open_tt T V)) ->
+                             caprod E (typ_all U T).
 
 Inductive healthy: env -> Prop :=
-  | healthy_empty: healthy empty
-  | healthy_push_x: forall x E T, capsafe E T -> healthy E ->
-                                  healthy (E & x ~: T)
-  | healthy_push_X: forall X T E, healthy E -> wft E T ->
-                                healthy (E &  X ~<: T).
+ | healthy_empty: healthy empty
+ | healthy_push_x: forall x E T, capsafe E T -> healthy E ->
+                                 healthy (E & x ~: T)
+ | healthy_push_X: forall X T E, healthy E -> wft E T ->
+                                 healthy (E &  X ~<: T).
 
 (* effect safety : it's impossible to construct a term of typ_eff in pure environment  *)
 Definition effect_safety := forall E, healthy E ->

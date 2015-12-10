@@ -257,20 +257,20 @@ Definition progress := forall e T,
 (* capsafe types are not capability producing, i.e. capable of creating an instance of E *)
 
 Inductive capsafe: typ -> Prop :=
- | capsafe_B: capsafe typ_base
- | capsafe_X: forall X, capsafe (typ_fvar X)
- | capsafe_C_X: forall S T, type T -> caprod S -> capsafe (typ_arrow_closed S T)
- | capsafe_X_S: forall S T, type S -> capsafe T -> capsafe (typ_arrow_closed S T)
- | capsafe_A: forall T, type (typ_all_closed T) ->
-                        capsafe (open_tt T typ_eff) /\ capsafe (open_tt T typ_base) ->
-                        capsafe (typ_all_closed T)
+ | capsafe_base: capsafe typ_base
+ | capsafe_var: forall X, capsafe (typ_fvar X)
+ | capsafe_eff_any: forall S T, type T -> caprod S -> capsafe (typ_arrow_closed S T)
+ | capsafe_any_safe: forall S T, type S -> capsafe T -> capsafe (typ_arrow_closed S T)
+ | capsafe_all: forall T, type (typ_all_closed T) ->
+                          capsafe (open_tt T typ_eff) /\ capsafe (open_tt T typ_base) ->
+                          capsafe (typ_all_closed T)
 
 with caprod: typ -> Prop :=
- | caprod_E: caprod typ_eff
- | caprod_S_C: forall S T, capsafe S -> caprod T -> caprod (typ_arrow_closed S T)
- | caprod_A: forall T, type (typ_all_closed T) ->
-                       caprod (open_tt T typ_eff) \/ caprod (open_tt T typ_base) ->
-                       caprod (typ_all_closed T).
+ | caprod_eff: caprod typ_eff
+ | caprod_safe_eff: forall S T, capsafe S -> caprod T -> caprod (typ_arrow_closed S T)
+ | caprod_all: forall T, type (typ_all_closed T) ->
+                         caprod (open_tt T typ_eff) \/ caprod (open_tt T typ_base) ->
+                         caprod (typ_all_closed T).
 
 Inductive healthy: env -> Prop :=
   | healthy_empty: healthy empty
@@ -1810,9 +1810,9 @@ Proof. intros.  inductions T; unfolds; autos.
     unfolds same_as_cap.
     destruct H1. destruct H2.  destruct (same_cap_regular H0).
     splits; intros. inversions H7; simpl.
-      apply capsafe_C_X; autos* subst_tt_type_type.
-      apply capsafe_X_S; autos* subst_tt_type_type.
-    inversions H7. apply* caprod_S_C.
+      apply capsafe_eff_any; autos* subst_tt_type_type.
+      apply capsafe_any_safe; autos* subst_tt_type_type.
+    inversions H7. apply* caprod_safe_eff.
   simpls. inversions H.
 Qed.
 
@@ -1829,12 +1829,12 @@ Proof. intros. gen T. inductions k; intros.
     forwards~ : IHT2. apply (Max.max_lub_r _ _ _ H).
     destruct H1. destruct H2. destruct (same_cap_regular H0).
     splits; intros. inversions H7.
-      apply capsafe_C_X; autos* subst_tt_type_type.
-      apply capsafe_X_S; autos* subst_tt_type_type.
-    inversions H7. apply* caprod_S_C.
+      apply capsafe_eff_any; autos* subst_tt_type_type.
+      apply capsafe_any_safe; autos* subst_tt_type_type.
+    inversions H7. apply* caprod_safe_eff.
 
   split; intros. inversions H1. destruct H4. destruct (same_cap_regular H0).
-    apply capsafe_A. unsimpl (subst_tt Z Q (typ_all_closed T)).  autos* subst_tt_type_type.
+    apply capsafe_all. unsimpl (subst_tt Z Q (typ_all_closed T)).  autos* subst_tt_type_type.
     lets: le_S_n H. split.
       replace typ_eff with (subst_tt Z Q typ_eff) by reflexivity.
         replace typ_eff with (subst_tt Z P typ_eff) in H1 by reflexivity.
@@ -1845,13 +1845,13 @@ Proof. intros. gen T. inductions k; intros.
         unfolds open_tt. rewrite <- subst_tt_open_tt_rec in *; auto.
         apply* IHk. rewrite* <- degree_typ_eq_open_tt_rec.
   inversions H1. destruct H4; destruct (same_cap_regular H0).
-    apply caprod_A. unsimpl (subst_tt Z Q (typ_all_closed T)).  autos* subst_tt_type_type.
+    apply caprod_all. unsimpl (subst_tt Z Q (typ_all_closed T)).  autos* subst_tt_type_type.
     lets: le_S_n H. left.
       replace typ_eff with (subst_tt Z Q typ_eff) by reflexivity.
         replace typ_eff with (subst_tt Z P typ_eff) in H1 by reflexivity.
         unfolds open_tt. rewrite <- subst_tt_open_tt_rec in *; auto.
         apply* IHk. rewrite* <- degree_typ_eq_open_tt_rec.
-    apply caprod_A. unsimpl (subst_tt Z Q (typ_all_closed T)).  autos* subst_tt_type_type.
+    apply caprod_all. unsimpl (subst_tt Z Q (typ_all_closed T)).  autos* subst_tt_type_type.
     lets: le_S_n H. right.
       replace typ_base with (subst_tt Z Q typ_base) by reflexivity.
         replace typ_base with (subst_tt Z P typ_base) in H1 by reflexivity.
@@ -1875,9 +1875,9 @@ Lemma capsafe_all_open_tt: forall T U, type U ->
   capsafe (typ_all_closed T) -> capsafe (open_tt T U).
 Proof. intros. inversions H0. destruct H3. destruct (capsafe_decidable H).
   pick_fresh X. rewrite* (@subst_tt_intro X). eapply capsafe_subst_tt_capsafe.
-    apply capsafe_B. auto. rewrite* <- subst_tt_intro.
+    apply capsafe_base. auto. rewrite* <- subst_tt_intro.
   pick_fresh X.  rewrite* (@subst_tt_intro X). eapply capsafe_subst_tt_caprod.
-    apply caprod_E.  auto. rewrite* <- subst_tt_intro.
+    apply caprod_eff.  auto. rewrite* <- subst_tt_intro.
 Qed.
 
 Lemma healthy_env_term_capsafe_0: forall E t T,
@@ -1890,10 +1890,10 @@ Proof. intros. inductions H1; intros; autos.
   pick_fresh x. forwards~ : H2 x.
     assert (HI: type V) by destruct* (typing_regular H4).
     destruct (capsafe_decidable HI). simpls.
-      apply* capsafe_X_S. apply* (H3 x). rewrite* <- degree_trm_eq_open_ee.
+      apply* capsafe_any_safe. apply* (H3 x). rewrite* <- degree_trm_eq_open_ee.
         rewrite* (healthy_env_closed H0).
       apply* healthy_push_x. lets*: not_capsafe_caprod H5.
-      apply* capsafe_C_X. autos* wft_type typing_wft.
+      apply* capsafe_eff_any. autos* wft_type typing_wft.
   forwards~ : IHtyping1. lets*: degree_trm_parent_zero H.
     forwards~ : IHtyping2. lets*: degree_trm_parent_zero H.
     inversions* H1. lets*: capsafe_not_caprod T1.
@@ -1914,10 +1914,10 @@ Proof. intros. gen t E T. inductions k; intros.
   pick_fresh x. forwards~ : H2 x.
     assert (HI: type V) by destruct* (typing_regular H4).
     destruct (capsafe_decidable HI). simpls.
-      apply* capsafe_X_S. apply* (H3 x). rewrite* <- degree_trm_eq_open_ee.
+      apply* capsafe_any_safe. apply* (H3 x). rewrite* <- degree_trm_eq_open_ee.
         rewrite* (healthy_env_closed H0).
       apply* healthy_push_x. lets*: not_capsafe_caprod H5.
-      apply* capsafe_C_X. autos* wft_type typing_wft.
+      apply* capsafe_eff_any. autos* wft_type typing_wft.
   simpls. forwards~ : IHtyping1. apply (Max.max_lub_l _ _ _ H).
     forwards~ : IHtyping2. apply (Max.max_lub_r _ _ _ H).
     inversions* H1. lets*: capsafe_not_caprod T1.
@@ -1939,9 +1939,9 @@ Proof. intros. gen t E T. inductions k; intros.
       apply* (@typing_tabs_closed L). rewrite* (healthy_env_closed H0).
     forwards~ : IHk HI. rewrite* <- degree_trm_eq_open_te.
     forwards~ : IHk HII. rewrite* <- degree_trm_eq_open_te.
-    apply capsafe_A. autos* wft_type typing_wft. splits*.
+    apply capsafe_all. autos* wft_type typing_wft. splits*.
     rewrite* (@subst_tt_intro X).
-      assert (caprod (typ_arrow_closed typ_base typ_eff)) by apply* caprod_S_C.
+      assert (caprod (typ_arrow_closed typ_base typ_eff)) by apply* caprod_safe_eff.
       eapply capsafe_subst_tt_caprod; eauto. rewrite* <- subst_tt_intro.
   simpl in H. forwards~ : IHtyping. apply* capsafe_all_open_tt. apply* wft_type.
 Qed.

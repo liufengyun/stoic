@@ -197,17 +197,17 @@ Definition progress_statement := forall t T,
    creating an instance of E *)
 
 Inductive capsafe: typ -> Prop :=
-| capsafe_T: capsafe typ_top
-| capsafe_B: capsafe typ_base
-| capsafe_C_X_closed: forall S T, caprod S -> capsafe (typ_arrow_closed S T)
-| capsafe_X_S_closed: forall S T, capsafe T -> capsafe (typ_arrow_closed S T)
-| capsafe_C_X: forall S T, caprod S -> capsafe (typ_arrow S T)
-| capsafe_X_S: forall S T, capsafe T -> capsafe (typ_arrow S T)
+| capsafe_top: capsafe typ_top
+| capsafe_base: capsafe typ_base
+| capsafe_eff_any_closed: forall S T, caprod S -> capsafe (typ_arrow_closed S T)
+| capsafe_any_safe_closed: forall S T, capsafe T -> capsafe (typ_arrow_closed S T)
+| capsafe_eff_any: forall S T, caprod S -> capsafe (typ_arrow S T)
+| capsafe_any_safe: forall S T, capsafe T -> capsafe (typ_arrow S T)
 
 with caprod: typ -> Prop :=
- | caprod_E: caprod typ_eff
- | caprod_S_C_closed: forall S T, capsafe S -> caprod T -> caprod (typ_arrow_closed S T)
- | caprod_S_C: forall S T, capsafe S -> caprod T -> caprod (typ_arrow S T).
+ | caprod_eff: caprod typ_eff
+ | caprod_safe_eff_closed: forall S T, capsafe S -> caprod T -> caprod (typ_arrow_closed S T)
+ | caprod_safe_eff: forall S T, capsafe S -> caprod T -> caprod (typ_arrow S T).
 
 Inductive healthy: ctx -> Prop :=
   | healthy_empty: healthy empty
@@ -835,13 +835,13 @@ Lemma healthy_env_term_capsafe: forall E t T,
   capsafe T.
 Proof. intros. inductions H0; jauto.
   pick_fresh x. forwards~ : H1 x. destruct* (capsafe_decidable V).
-    apply capsafe_X_S. apply* (H2 x).
+    apply capsafe_any_safe. apply* (H2 x).
       apply* healthy_push.
-      apply capsafe_C_X. apply* not_capsafe_caprod.
+      apply capsafe_eff_any. apply* not_capsafe_caprod.
   pick_fresh x. forwards~ : H1 x. destruct* (capsafe_decidable V).
-    apply capsafe_X_S_closed. apply* (H2 x).
+    apply capsafe_any_safe_closed. apply* (H2 x).
       applys~ healthy_push. apply* healthy_closed.
-      apply capsafe_C_X_closed. apply* not_capsafe_caprod.
+      apply capsafe_eff_any_closed. apply* not_capsafe_caprod.
   forwards~ : IHtyping1 H. forwards~ : IHtyping2 H. inversions* H0.
     lets*: capsafe_not_caprod S.
   forwards~ : capsafe_sub H1.

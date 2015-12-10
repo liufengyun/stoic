@@ -182,18 +182,18 @@ Fixpoint pure(E: env) := match E with
 
 (* capsafe types are not capability producing, i.e. capable of creating an instance of E *)
 Inductive capsafe: typ -> Prop :=
- | capsafe_B: capsafe typ_base
- | capsafe_X: forall X, capsafe (typ_fvar X)
- | capsafe_C_X: forall S T, type T -> caprod S -> capsafe (typ_arrow_closed S T)
- | capsafe_X_S: forall S T, type S -> capsafe T -> capsafe (typ_arrow_closed S T)
- | capsafe_A: forall L T, type (typ_all_closed T) ->
+ | capsafe_base: capsafe typ_base
+ | capsafe_var: forall X, capsafe (typ_fvar X)
+ | capsafe_eff_any: forall S T, type T -> caprod S -> capsafe (typ_arrow_closed S T)
+ | capsafe_any_safe: forall S T, type S -> capsafe T -> capsafe (typ_arrow_closed S T)
+ | capsafe_all: forall L T, type (typ_all_closed T) ->
                           (forall X, X \notin L -> capsafe (T open_tt_var X)) ->
                           capsafe (typ_all_closed T)
 
 with caprod: typ -> Prop :=
- | caprod_E: caprod typ_eff
- | caprod_S_C: forall S T, capsafe S -> caprod T -> caprod (typ_arrow_closed S T)
- | caprod_A: forall L T, type (typ_all_closed T) ->
+ | caprod_eff: caprod typ_eff
+ | caprod_safe_eff: forall S T, capsafe S -> caprod T -> caprod (typ_arrow_closed S T)
+ | caprod_all: forall L T, type (typ_all_closed T) ->
                          (forall X, X \notin L -> caprod (T open_tt_var X)) ->
                          caprod (typ_all_closed T).
 
@@ -1337,10 +1337,10 @@ Lemma capsafe_subst_tt: forall T,
            (fun T prodT => forall Z P, capsafe P -> caprod (subst_tt Z P T) )
         ); intros; simpls; eauto.
   case_if*.
-  let L' := gather_vars in apply capsafe_A with L'; auto.
+  let L' := gather_vars in apply capsafe_all with L'; auto.
     unsimpl (subst_tt Z P (typ_all_closed T)). auto.
     intros. rewrite* subst_tt_open_tt_var.
-  let L' := gather_vars in apply caprod_A with L'; auto.
+  let L' := gather_vars in apply caprod_all with L'; auto.
     unsimpl (subst_tt Z P (typ_all_closed T)). auto.
     intros. rewrite* subst_tt_open_tt_var.
 Qed.
@@ -1352,10 +1352,10 @@ Lemma caprod_subst_tt: forall T,
            (fun T prodT => forall Z P, capsafe P -> caprod (subst_tt Z P T) )
         ); intros; simpls; eauto.
   case_if*.
-  let L' := gather_vars in apply capsafe_A with L'; auto.
+  let L' := gather_vars in apply capsafe_all with L'; auto.
     unsimpl (subst_tt Z P (typ_all_closed T)). auto.
     intros. rewrite* subst_tt_open_tt_var.
-  let L' := gather_vars in apply caprod_A with L'; auto.
+  let L' := gather_vars in apply caprod_all with L'; auto.
     unsimpl (subst_tt Z P (typ_all_closed T)). auto.
     intros. rewrite* subst_tt_open_tt_var.
 Qed.
@@ -1384,10 +1384,10 @@ Qed.
 Lemma capsafe_caprod_classic: forall T, type T -> capsafe T \/ caprod T.
 Proof. intros T Ht. inductions Ht; iauto.
   pick_fresh X. forwards~ : H0 X. destruct H1.
-  left. apply capsafe_A with (L \u fv_tt T2). apply* type_all_closed.
+  left. apply capsafe_all with (L \u fv_tt T2). apply* type_all_closed.
     intros. forwards~ : capsafe_subst_tt H1 X (typ_fvar X0).
     rewrite* <- (@subst_tt_intro X) in H3.
-  right. apply caprod_A with L. apply* type_all_closed.
+  right. apply caprod_all with L. apply* type_all_closed.
     intros. forwards~ : caprod_subst_tt H1 X (typ_fvar X0).
     rewrite* <- (@subst_tt_intro X) in H3.
 Qed.
@@ -1705,13 +1705,13 @@ Proof. intros. inductions H0.
   pick_fresh x. forwards~ : H1 x.
     assert (HI: type V) by destruct* (typing_regular H3).
     destruct (capsafe_decidable HI).
-      apply* capsafe_X_S. apply* (H2 x). rewrite* (healthy_env_closed H).
+      apply* capsafe_any_safe. apply* (H2 x). rewrite* (healthy_env_closed H).
       apply* healthy_push_x. lets*: not_capsafe_caprod H4.
-      apply* capsafe_C_X. autos* wft_type typing_wft.
+      apply* capsafe_eff_any. autos* wft_type typing_wft.
   forwards~ : IHtyping1 H. forwards~ : IHtyping2 H. inversions* H0.
     lets*: capsafe_not_caprod T1.
   assert (typing E (trm_tabs e1) (typ_all_closed T1)) by apply* typing_tabs_closed.
-    let L' := gather_vars in apply capsafe_A with L'; autos* wft_type typing_wft.
+    let L' := gather_vars in apply capsafe_all with L'; autos* wft_type typing_wft.
     intros. apply* H2. rewrite* (healthy_env_closed H). apply* healthy_push_X.
   lets: IHtyping H. inversions H3. pick_fresh X. forwards~ : H6 X.
     forwards~ : capsafe_subst_tt H3 X T.
