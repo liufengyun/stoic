@@ -3040,23 +3040,13 @@ Lemma typing_inv_abs : forall E S1 e1 T,
 Proof.
   introv Typ. gen_eq e: (trm_abs S1 e1). gen S1 e1.
   induction Typ; intros S1 b1 EQ U1 U2 Sub; inversions EQ.
-  inversions* Sub. autos* (@sub_transitivity T).
-Qed.
 
-Lemma typing_inv_cap : forall E S1 e1 T,
-  typing E (trm_cap S1 e1) T ->
-  forall U1 U2, sub E T (typ_arrow U1 U2) ->
-     sub E U1 S1
-  /\ exists S2, exists L, forall x, x \notin L ->
-     typing (E & x ~: S1) (e1 open_ee_var x) S2 /\ sub E S2 U2.
-Proof.
-  introv Typ. gen_eq e: (trm_cap S1 e1). gen S1 e1.
-  induction Typ; intros S1 b1 EQ U1 U2 Sub; inversions EQ.
-  inversions* Sub. splits*. exists T1.
-    let L1 := gather_vars in exists L1. split; auto.
-    rewrite <- (@concat_empty_l bind E).
-    apply typing_weakening_env. rewrite* concat_empty_l.
-    rewrite concat_empty_l. apply* okt_typ.
+  inversions* Sub. split*.
+  let L' := gather_vars in exists T1 L'. intros.
+  forwards~ : H0 x. split*.
+  rewrite <- concat_empty_l at 1. rewrite concat_assoc.
+  apply* typing_weakening_pure; rewrite* concat_empty_l.
+
   autos* (@sub_transitivity T).
 Qed.
 
@@ -3070,10 +3060,14 @@ Lemma typing_inv_tabs : forall E S1 e1 T,
 Proof.
   intros E S1 e1 T H. gen_eq e: (trm_tabs S1 e1). gen S1 e1.
   induction H; intros S1 b EQ U1 U2 Sub; inversion EQ.
-  inversions Sub. splits. auto.
-   exists T1. let L1 := gather_vars in exists L1.
-   intros Y Fr. splits.
-    apply_empty* (@typing_narrowing S1). auto.
+
+  inversions Sub. splits*.
+  exists T1. let L1 := gather_vars in exists L1.
+  intros Y Fr. splits*.
+  apply_empty* (@typing_narrowing S1).
+  rewrite <- concat_empty_l at 1. rewrite concat_assoc.
+  apply* typing_weakening_pure; rewrite* concat_empty_l.
+
   autos* (@sub_transitivity T).
 Qed.
 
@@ -3091,15 +3085,7 @@ Proof.
     apply* sub_reflexivity.
     pick_fresh X. forwards~ K: (P2 X). destruct K.
      rewrite* (@subst_ee_intro X).
-     apply_empty (@typing_through_subst_ee V).
-       apply* (@typing_sub S2). apply_empty* sub_weakening.
-       autos*.
-
-  destruct~ (typing_inv_cap Typ1 (U1:=T1) (U2:=T2)) as [P1 [S2 [L P2]]].
-    apply* sub_reflexivity.
-    pick_fresh X. forwards~ K: (P2 X). destruct K.
-     rewrite* (@subst_ee_intro X).
-     apply_empty (@typing_through_subst_ee V).
+     apply_empty (@typing_through_subst_ee V). auto.
        apply* (@typing_sub S2). apply_empty* sub_weakening.
        autos*.
 
@@ -3127,15 +3113,13 @@ Qed.
 
 Lemma canonical_form_abs : forall t U1 U2,
   value t -> typing empty t (typ_arrow U1 U2) ->
-  exists V, exists e1, t = trm_abs V e1 \/ t = trm_cap V e1.
+  exists V, exists e1, t = trm_abs V e1.
 Proof.
   introv Val Typ. gen_eq E: (@empty bind).
   gen_eq T: (typ_arrow U1 U2). gen U1 U2.
   induction Typ; introv EQT EQE;
-   try solve [ inversion Val | inversion EQT | eauto ].
-    subst. inversion H.
-      false (binds_empty_inv H0).
-      inversions H0. forwards*: IHTyp.
+  try solve [ inversion Val | inversion EQT | eauto ].
+  subst. inversions* H. false* binds_empty_inv.
 Qed.
 
 Lemma canonical_form_tabs : forall t U1 U2,
@@ -3145,10 +3129,9 @@ Proof.
   introv Val Typ. gen_eq E: (@empty bind).
   gen_eq T: (typ_all U1 U2). gen U1 U2.
   induction Typ; introv EQT EQE;
-   try solve [ inversion Val | inversion EQT | eauto ].
-    subst. inversion H.
-      false* binds_empty_inv.
-      inversions H0. forwards*: IHTyp.
+  try solve [ inversion Val | inversion EQT | eauto ].
+  subst. inversions* H.
+  false* binds_empty_inv.
 Qed.
 
 (* ********************************************************************** *)
@@ -3162,20 +3145,18 @@ Proof.
   false* binds_empty_inv.
   (* case: abs *)
   left*.
-  (* case: cap *)
-  left*.
   (* case: app *)
   right. destruct* IHTyp1 as [Val1 | [e1' Rede1']].
     destruct* IHTyp2 as [Val2 | [e2' Rede2']].
       destruct (canonical_form_abs Val1 Typ1) as [S [e3 EQ]].
-        destruct EQ; subst; exists* (open_ee e3 e2).
+      substs.  exists* (open_ee e3 e2).
   (* case: tabs *)
   left*.
   (* case: tapp *)
   right. destruct~ IHTyp as [Val1 | [e1' Rede1']].
     destruct (canonical_form_tabs Val1 Typ) as [S [e3 EQ]].
       subst. exists* (open_te e3 T).
-      exists* (trm_tapp e1' T).
+    exists* (trm_tapp e1' T).
   (* case: sub *)
   autos*.
 Qed.
