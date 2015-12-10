@@ -874,6 +874,66 @@ Proof.
    apply_ih_map_bind* H0.
 Qed.
 
+Lemma wft_subst_tb_keep : forall F Q E Z P T,
+  wft (E & Z ~<: Q & F) T ->
+  wft E P ->
+  ok (E & Z ~<: Q & map (subst_tb Z P) F) ->
+  wft (E & Z ~<: Q & map (subst_tb Z P) F) (subst_tt Z P T).
+Proof. introv Wf1 Wf2 Ok1.
+  forwards~ Ok2 : ok_remove Ok1.
+  forwards~ Wf3 : wft_subst_tb Wf1 Wf2 Ok2.
+  apply wft_weaken; auto.
+Qed.
+
+Lemma wft_subst: forall E F Z Y P b T,
+  wft E P ->
+  ok (E & Y ~ b & F) ->
+  wft (E & Y ~ b & F) T <-> wft (E & Y ~ subst_tb Z P b & F) T.
+Proof.
+  introv Wf Ok. split; introv WfU.
+
+  inductions WfU; auto. binds_cases H.
+    eapply wft_var. apply* binds_concat_left.
+    inversions EQ. apply wft_var with (subst_tt Z P U). apply* binds_concat_left.
+    eapply wft_var. apply* binds_concat_right.
+  apply_fresh* wft_all as X. rewrite <- concat_assoc. apply* H0.
+    rewrite concat_assoc. apply* ok_push.
+    rewrite* concat_assoc.
+
+  inductions WfU; auto. binds_cases H.
+    eapply wft_var. apply* binds_concat_left. destruct b.
+    rewrite EQ in B1. apply wft_var with t. apply* binds_concat_left.
+    simpl in EQ. inversion EQ.
+    eapply wft_var. apply* binds_concat_right.
+  apply* wft_arrow.
+  apply_fresh* wft_all as X. rewrite <- concat_assoc. applys~ H0 b P Y Z.
+    rewrite concat_assoc. apply* ok_push.
+    rewrite* concat_assoc.
+Qed.
+
+Lemma wft_subst_tb_same : forall F Q E Z P T,
+  wft (E & Z ~<: Q & F) T ->
+  wft E P ->
+  ok (E & Z ~<: Q & map (subst_tb Z P) F) ->
+  wft (E & Z ~<: Q & map (subst_tb Z P) F) T.
+Proof.
+  introv WT WP. gen_eq G: (E & Z ~<: Q & F). gen F.
+  induction WT; intros F EQ Ok; subst; simpl subst_tt; auto.
+  binds_cases H; try solve [apply* wft_var].
+    apply wft_var with (subst_tt Z P U).
+    unsimpl (subst_tb Z P (bind_sub U)).
+    apply binds_concat_right. apply binds_map; auto.
+  apply_fresh* wft_all as Y.
+    forwards~ IH: H0 Y (F & Y ~<: T1). rewrite* concat_assoc.
+    rewrite map_push, concat_assoc. simpl. apply* ok_push.
+    rewrite map_push, concat_assoc in IH. simpl in IH.
+    rewrite <- (@concat_empty_r bind) at 1. rewrite wft_subst.
+    rewrite concat_empty_r. exact IH.
+    rewrite <- concat_assoc. apply_empty* wft_weaken.
+    rewrite* concat_assoc.
+    rewrite concat_empty_r. apply* ok_push.
+Qed.
+
 (** Through type reduction *)
 
 Lemma wft_open : forall E U T1 T2,
@@ -1081,6 +1141,22 @@ Proof.
       applys~ okt_sub. applys* wft_subst_tb.
      lets (?&?&?): (okt_push_typ_inv O).
       applys~ okt_typ. applys* wft_subst_tb.
+Qed.
+
+Lemma okt_subst_tb_keep : forall Q Z P (E F:env),
+  okt (E & Z ~<: Q & F) ->
+  wft E P ->
+  okt (E & Z ~<: Q & map (subst_tb Z P) F).
+Proof.
+ introv O W. induction F using env_ind.
+  rewrite map_empty. rewrite concat_empty_r in *.
+   lets*: (okt_push_sub_inv O).
+  rewrite map_push. rewrite concat_assoc in *.
+   lets (U&[?|?]): okt_push_inv O; subst.
+     lets (?&?&?): (okt_push_sub_inv O).
+      applys~ okt_sub. applys* wft_subst_tb_keep.
+     lets (?&?&?): (okt_push_typ_inv O).
+      applys~ okt_typ. applys* wft_subst_tb_keep.
 Qed.
 
 (** Automation *)
@@ -2836,11 +2912,19 @@ Lemma pure_map: forall E F G Z P Q,
   sub E P Q ->
   subseq F G ->
   exists M N, pure (E & Z ~<: Q & F) = pure E & Z ~<: Q & M /\
-              pure (E & F) = pure E & N /\
+              pure (E & F) = pure E & M /\
               pure (E & map (subst_tb Z P) G) = pure E & N /\
               N = map (subst_tb Z P) N /\
-              subseq M N /\ subseq M F /\ subseq N G.
-Proof. admit. Qed.
+              subseq M N /\ subseq M F /\ subseq N (map (subst_tb Z P) G).
+Proof. introv Ok Sub Seq. inductions Seq.
+  rewrite ?concat_empty_r, map_empty in *. exists (@empty bind) (@empty bind).
+  splits; auto; rewrite ?map_empty, ?concat_empty_r, ?pure_push_sub; auto.
+
+  destruct IHSeq as [M [N IH]]; auto. destructs IH.
+  rewrite map_push. simpl. rewrite ?concat_assoc.
+  destruct (pure_push_typ (E & map (subst_tb Z P) F) x (subst_tt Z P T)).
+  admit. admit. admit.
+Qed.
 
 Lemma typing_through_subst_te_general : forall Q E F G Z e T P,
   subseq F G ->
@@ -2862,26 +2946,29 @@ Proof.
     rewrite* subst_te_open_ee_var.
     forwards~ Map: pure_map H Sub Seq. destruct Map as [M [N Map]]. destructs Map.
     rewrite H4, H5, <- concat_assoc, <- map_push.
-    applys~ H1 (M & y ~: V).
+    applys~ H1 Q (pure E) (M & y ~: V) (N & y ~: V).
     rewrite H2, ?concat_assoc. reflexivity. apply* sub_pure.
     apply* subseq_concat. apply subseq_refl.
-    rewrite concat_assoc. apply okt_typ.
+    rewrite concat_assoc.
     (*okt*)
-    apply okt_subseq with (E & Z ~<: Q & G). auto.
-    repeat(apply* subseq_concat). apply subseq_pure. apply subseq_refl.
-    apply wft_tvar with (E & Z ~<: Q & G). apply ok_from_okt.
-    apply okt_subseq with (E & Z ~<: Q & G). auto.
-    repeat(apply* subseq_concat). apply subseq_pure. apply subseq_refl.
-    rewrite ?tvar_dist, <- tvar_pure, (subseq_tvar H8). auto.
+    assert (okt (pure E & Z ~<: Q & N)) as OkN.
+      apply okt_subseq with (pure E & Z ~<: Q & ( (map (subst_tb Z P) G))).
+      apply okt_subst_tb_keep. apply okt_subseq with (E & Z ~<: Q & G); auto.
+      repeat(apply* subseq_concat; try apply subseq_pure; try apply subseq_refl).
+      apply* wft_pure. repeat(apply* subseq_concat; auto; try apply subseq_refl).
+    apply okt_typ. auto.
     (*wft*)
-    apply wft_tvar with (pure (E & Z ~<: Q & F)). auto.
-    rewrite <-tvar_pure, ?tvar_dist, (subseq_tvar Seq). auto.
+    apply wft_tvar with (E & Z ~<: Q & (map (subst_tb Z P) G)); auto.
+    rewrite ?tvar_dist, <- ?tvar_pure, (subseq_tvar H8). auto.
+    apply wft_subst_tb_same.
     forwards~ IH: H0 y. destructs (typing_regular IH). destructs (okt_push_typ_inv H9).
-    auto.
+    apply wft_tvar with (pure (E & Z ~<: Q & F)); auto.
+    rewrite <- tvar_pure, ?tvar_dist, (subseq_tvar Seq). auto.
+    destruct* (sub_regular Sub).
+    apply* ok_concat_map.
     (* y fresh *)
-    apply subseq_fresh with (E & Z ~<: Q & G).
+    apply subseq_fresh with (E & Z ~<: Q & map (subst_tb Z P) G); auto.
     repeat(apply subseq_concat; auto; try apply subseq_refl; try apply subseq_pure).
-    auto.
   apply* typing_app.
   apply_fresh* typing_tabs as Y.
     unsimpl (subst_tb Z P (bind_sub V)).
@@ -2889,26 +2976,29 @@ Proof.
     rewrite* subst_tt_open_tt_var.
     forwards~ Map: pure_map H Sub Seq. destruct Map as [M [N Map]]. destructs Map.
     rewrite H4, H5, <- concat_assoc, <- map_push.
-    applys~ H1 (M & Y ~<: V).
+    applys~ H1 Q (pure E) (M & Y ~<: V) (N & Y ~<: V).
     rewrite H2, ?concat_assoc. reflexivity. apply* sub_pure.
     apply* subseq_concat. apply subseq_refl.
-    rewrite concat_assoc. apply okt_sub.
+    rewrite concat_assoc.
     (*okt*)
-    apply okt_subseq with (E & Z ~<: Q & G). auto.
-    repeat(apply* subseq_concat). apply subseq_pure. apply subseq_refl.
-    apply wft_tvar with (E & Z ~<: Q & G). apply ok_from_okt.
-    apply okt_subseq with (E & Z ~<: Q & G). auto.
-    repeat(apply* subseq_concat). apply subseq_pure. apply subseq_refl.
-    rewrite ?tvar_dist, <- tvar_pure, (subseq_tvar H8). auto.
+    assert (okt (pure E & Z ~<: Q & N)) as OkN.
+      apply okt_subseq with (pure E & Z ~<: Q & ( (map (subst_tb Z P) G))).
+      apply okt_subst_tb_keep. apply okt_subseq with (E & Z ~<: Q & G); auto.
+      repeat(apply* subseq_concat; try apply subseq_pure; try apply subseq_refl).
+      apply* wft_pure. repeat(apply* subseq_concat; auto; try apply subseq_refl).
+    apply okt_sub. auto.
     (*wft*)
-    apply wft_tvar with (pure (E & Z ~<: Q & F)). auto.
-    rewrite <-tvar_pure, ?tvar_dist, (subseq_tvar Seq). auto.
+    apply wft_tvar with (E & Z ~<: Q & (map (subst_tb Z P) G)); auto.
+    rewrite ?tvar_dist, <- ?tvar_pure, (subseq_tvar H8). auto.
+    apply wft_subst_tb_same.
     forwards~ IH: H0 Y. destructs (typing_regular IH). destructs (okt_push_sub_inv H9).
-    auto.
+    apply wft_tvar with (pure (E & Z ~<: Q & F)); auto.
+    rewrite <- tvar_pure, ?tvar_dist, (subseq_tvar Seq). auto.
+    destruct* (sub_regular Sub).
+    apply* ok_concat_map.
     (* y fresh *)
-    apply subseq_fresh with (E & Z ~<: Q & G).
+    apply subseq_fresh with (E & Z ~<: Q & map (subst_tb Z P) G); auto.
     repeat(apply subseq_concat; auto; try apply subseq_refl; try apply subseq_pure).
-    auto.
   rewrite* subst_tt_open_tt. apply* typing_tapp.
     eapply sub_through_subst_tt; eauto. apply sub_subseq with (E & Z ~<: Q & F); auto.
     repeat(apply subseq_concat; auto; try apply subseq_refl; try apply subseq_pure).
