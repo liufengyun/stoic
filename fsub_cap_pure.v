@@ -337,29 +337,32 @@ Definition progress := forall e T,
 
 (* capsafe types are not capability producing, i.e. capable of creating an instance of E *)
 
-(** problem: All X. All Y. X -> Y  should be caprod *)
+(** problem: All X<:Top. All Y<:Top. X -> Y  is caprod *)
+(** problem: All X<:Top. All Y<:Z<:Top. X -> Y  is capsafe *)
+(** problem:  X<:Top -> Y<:Top  can be capsafe *)
+(** problem:  X<:Top -> Y<:Eff  must be caprod *)
 
 Inductive capsafe: env -> typ -> Prop :=
  | capsafe_base: forall E, okt E -> capsafe E typ_base
  | capsafe_top: forall E, okt E -> capsafe E typ_top
  | capsafe_var: forall E X, okt E -> wft E (typ_fvar X) ->
-                            closed_typ E (typ_fvar X) = true ->
+                            ~sub E (typ_fvar X) typ_eff ->
                             capsafe E (typ_fvar X)
  | capsafe_eff_any: forall E S T, wft E T -> caprod E S -> capsafe E (typ_arrow S T)
  | capsafe_any_safe: forall E S T, wft E S -> capsafe E T -> capsafe E (typ_arrow S T)
  | capsafe_all: forall E U T, wft E (typ_all U T) ->
-                              (forall V, sub E V (exposure E U) ->
+                              (forall V, sub E V U ->
                                          capsafe E (open_tt T V)) ->
                               capsafe E (typ_all U T)
 
 with caprod: env -> typ -> Prop :=
  | caprod_eff: forall E, okt E -> caprod E typ_eff
- | caprod_var: forall E X, okt E -> wft E (typ_fvar X) ->
-                           closed_typ E (typ_fvar X) = false ->
+ | caprod_var: forall E X, okt E ->
+                           sub E (typ_fvar X) typ_eff ->
                            caprod E (typ_fvar X)
  | caprod_safe_eff: forall E S T, capsafe E S -> caprod E T -> caprod E (typ_arrow S T)
  | caprod_all: forall E U T, wft E (typ_all U T) ->
-                             (exists V, sub E V (exposure E U) ->
+                             (exists V, sub E V U /\
                                         caprod E (open_tt T V)) ->
                              caprod E (typ_all U T).
 
