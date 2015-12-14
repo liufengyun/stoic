@@ -345,9 +345,9 @@ Definition progress := forall e T,
 Inductive capsafe: env -> typ -> Prop :=
  | capsafe_base: forall E, okt E -> capsafe E typ_base
  | capsafe_top: forall E, okt E -> capsafe E typ_top
- | capsafe_var: forall E X, okt E -> wft E (typ_fvar X) ->
-                            ~sub E (typ_fvar X) typ_eff ->
-                            capsafe E (typ_fvar X)
+ | capsafe_var: forall E U X, okt E -> binds X (bind_sub U) E ->
+                              capsafe E U ->
+                              capsafe E (typ_fvar X)
  | capsafe_eff_any: forall E S T, wft E T -> caprod E S -> capsafe E (typ_arrow S T)
  | capsafe_any_safe: forall E S T, wft E S -> capsafe E T -> capsafe E (typ_arrow S T)
  | capsafe_all: forall L E U T, okt E -> wft E (typ_all U T) ->
@@ -359,8 +359,9 @@ Inductive capsafe: env -> typ -> Prop :=
 
 with caprod: env -> typ -> Prop :=
  | caprod_eff: forall E, okt E -> caprod E typ_eff
- | caprod_var: forall E X, sub E (typ_fvar X) typ_eff ->
-                           caprod E (typ_fvar X)
+ | caprod_var: forall E U X, okt E -> binds X (bind_sub U) E ->
+                             caprod E U ->
+                             caprod E (typ_fvar X)
  | caprod_safe_eff: forall E S T, capsafe E S -> caprod E T -> caprod E (typ_arrow S T)
  | caprod_all: forall L E U T, wft E (typ_all U T) ->
                                (exists V, sub E V U /\
