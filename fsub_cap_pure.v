@@ -352,10 +352,8 @@ Inductive capsafe: env -> typ -> Prop :=
  | capsafe_eff_any: forall E S T, wft E T -> caprod E S -> capsafe E (typ_arrow S T)
  | capsafe_any_safe: forall E S T, wft E S -> capsafe E T -> capsafe E (typ_arrow S T)
  | capsafe_all: forall L E U T, okt E -> wft E (typ_all U T) ->
-                              (forall V, sub E V U ->
-                                         (forall X,
-                                            X \notin L ->
-                                            capsafe (E & X ~<: V) (T open_tt_var X))) ->
+                                (forall V X, sub E V U -> X \notin L ->
+                                             capsafe (E & X ~<: V) (T open_tt_var X)) ->
                               capsafe E (typ_all U T)
 
 with caprod: env -> typ -> Prop :=
@@ -365,10 +363,9 @@ with caprod: env -> typ -> Prop :=
                              caprod E (typ_fvar X)
  | caprod_safe_eff: forall E S T, capsafe E S -> caprod E T -> caprod E (typ_arrow S T)
  | caprod_all: forall L E U V T, wft E (typ_all U T) -> sub E V U ->
-                                 (forall X,
-                                    X \notin L ->
-                                    caprod (E & X ~<: V) (T open_tt_var X)) ->
-                               caprod E (typ_all U T).
+                                 (forall X, X \notin L ->
+                                            caprod (E & X ~<: V) (T open_tt_var X)) ->
+                                 caprod E (typ_all U T).
 
 Inductive healthy: env -> Prop :=
  | healthy_empty: healthy empty
@@ -3257,80 +3254,45 @@ Qed.
 Hint Constructors capsafe caprod.
 Hint Immediate capsafe_regular caprod_regular.
 
-Lemma capsafe_not_caprod : forall E T, capsafe E T -> ~ caprod E T.
-Proof.
-  apply (capsafe_mut
-           (fun E T safeT =>  ~ caprod E T )
-           (fun E T prodT =>  ~ capsafe E T )
-        ); intros; intros Hc; inversions Hc; eauto; try solve [simpls; false*].
+Lemma ok_binds_right_inv: forall (E F: env) x b,
+  ok (E & F) ->
+  binds x b F ->
+  x # E.
+Proof. introv Ok Bd. inductions F.
+  rewrite <- empty_def in Bd. false. autos* binds_empty_inv.
 
-  pick_fresh X. forwards~ : H5 X. forwards~ : H H4 X.
-  pick_fresh X. forwards~ : H5 s X. forwards~ : H X.
+  destruct a. rewrite cons_to_push, concat_assoc in *.
+  inversions Ok. rewrite empty_def, <- cons_to_push in H0. inversion H0.
+    rewrite <- ?cons_to_push in H. inversions H.
+  destruct (binds_push_inv Bd) as [Inv|Inv]; destruct Inv.
+    substs. auto.
+    apply* IHF.
 Qed.
 
+Lemma ok_binds_left_inv: forall (E F: env) x b,
+  ok (E & F) ->
+  binds x b E ->
+  x # F.
+Proof. introv Ok Bd. inductions F.
+  rewrite <- empty_def. auto.
 
-Lemma capsafe_caprod_classic_0: forall E T,
-   okt E ->
-   wft E T ->
-   degree_typ T = 0 ->
-   capsafe E T \/ caprod E T.
-Proof. introv Ok Wf Deg. inductions T; iauto.
-  inversions Wf.
-  destruct (classic (sub E (typ_fvar v) typ_eff)); auto.
-  inversions Wf. destruct (degree_typ_parent_zero T1 T2 Deg).
-    destruct* IHT1; destruct* IHT2.
-  simpl in Deg. inversion Deg.
+  destruct a. rewrite cons_to_push, concat_assoc in *. inversions Ok.
+    rewrite empty_def, <- cons_to_push in H0. inversion H0.
+    rewrite <- ?cons_to_push in H. inversions H. introv In.
+      rewrite dom_concat, in_union, dom_single in In. destruct In.
+        forwards~ : IHF Bd.
+        rewrite in_singleton in H. substs. applys~ binds_fresh_inv Bd.
 Qed.
-
-Lemma capsafe_caprod_classic_k: forall E T k,
-   okt E ->
-   wft E T ->
-   degree_typ T <= k ->
-   capsafe E T \/ caprod E T.
-Proof. introv Ok Wf Deg. gen E T. inductions k; intros.
-  lets: Le.le_n_0_eq Deg. apply* capsafe_caprod_classic_0.
-  inductions T; try solve [inversion Wf]; eauto.
-    destruct (classic (sub E (typ_fvar v) typ_eff)); auto.
-    inversions Wf. simpl in Deg.
-      forwards~ : Max.max_lub_l Deg.
-      forwards~ : Max.max_lub_r Deg.
-      destruct* IHT1; destruct* IHT2.
-    simpls. lets: le_S_n Deg.
-      inversions Wf.
-      let L' := gather_vars in
-      destruct (classic (forall V, sub E V T1 ->
-                                   (forall X,
-                                      X \notin L' ->
-                                      capsafe (E & X ~<: V) (T2 open_tt_var X)))).
-      left. apply_fresh* capsafe_all as Y.
-      rewrite not_forall in H0. destruct H0 as [V H0].
-      rewrite not_impl, not_forall in H0. destruct H0 as [Sub [X H0]].
-      rewrite not_impl in H0. destruct H0.
-
-      forwards~ IH: IHk (E & X ~<: V) (T2 open_tt_var X).
-        forwards~ : H4 X. apply_empty* wft_narrow.
-        rewrite* <- degree_typ_eq_open_tt.
-        destruct IH. false. right.
-          apply_fresh* caprod_all as X. exists V. splits*.
-          intros. admit.
-Qed.
-
-Lemma capsafe_caprod_classic: forall E T, okt E -> wft E T -> capsafe E T \/ caprod E T.
-Proof. intros. apply* capsafe_caprod_classic_k. Qed.
-
-Lemma capsafe_decidable: forall E T, okt E -> wft E T -> capsafe E T \/ ~ capsafe E T.
-Proof. introv Ok Wf. destruct (capsafe_caprod_classic Ok Wf). left*.
-  right. intros Hc. lets*: capsafe_not_caprod Hc.
-Qed.
-
-Lemma not_capsafe_caprod : forall E T, okt E -> wft E T -> ~capsafe E T -> caprod E T.
-Proof. introv Ok Wf SafeN. destruct* (capsafe_caprod_classic Ok Wf). Qed.
 
 Lemma ok_binds_inv: forall (E F G: env) x b,
   ok (E & F & G) ->
   binds x b F ->
   x # E /\ x # G.
-Proof. admit. Qed.
+Proof. introv Ok Bd. split.
+  lets Ok1: ok_concat_inv_l Ok. apply* ok_binds_right_inv.
+  rewrite <- concat_assoc in Ok.
+  lets Ok1: ok_concat_inv_r Ok. apply* ok_binds_left_inv.
+Qed.
 
 Lemma binds_strengthen: forall E F G U1 U2 X,
   ok (E & F & G) ->
@@ -3369,54 +3331,102 @@ Proof. introv Sub Ok WfS WfT. inductions Sub; auto.
     auto.
 Qed.
 
-Lemma capsafe_weaken: forall E X U T, capsafe E T -> okt (E & X ~<: U) -> capsafe (E & X ~<: U) T.
-Proof. introv Cap Ok. induction Cap; auto.
-  apply capsafe_var. auto. apply_empty* wft_weaken.
-    introv Sub. inversions Sub. inversions H0.
-    destructs (okt_push_sub_inv Ok). destruct (binds_push_inv H3).
-    destruct H7. inversions H8. false. autos* binds_fresh_inv.
-    destruct H7. apply H1. destruct U0; try solve [inversions H5].
-      inversions H5.
-
-  rewrite <- empty_def, concat_empty_r in *. auto.
-
-  destruct a. rewrite cons_to_push, concat_assoc in *. destruct Cap; auto.
-  apply capsafe_var. auto. rewrite <- concat_assoc.
-  rewrite* concat_assoc. intros Sub. apply H1. inversions Sub.
+Lemma capsafe_tvar: forall E F T,
+  okt E -> okt F ->
+  tvar_env E = tvar_env F ->
+  capsafe E T -> capsafe F T.
+Proof. introv OkE OkF Tv Safe. gen OkE OkF Tv. gen Safe F. gen E T.
+  apply (capsafe_mut
+           (fun E T _ => forall F, okt E -> okt F ->
+                                   tvar_env E = tvar_env F ->
+                         capsafe F T )
+           (fun E T _ => forall F, okt E -> okt F ->
+                                   tvar_env E = tvar_env F ->
+                         caprod F T )
+        ); intros; substs; auto.
+  apply* capsafe_var. rewrite binds_tvar_equiv, <- H2, <- binds_tvar_equiv; auto.
+  forwards~ : H F. apply* capsafe_eff_any. apply wft_tvar with E; auto.
+  forwards~ : H F. apply* capsafe_any_safe. apply wft_tvar with E; auto.
+  apply_fresh* capsafe_all as X. apply wft_tvar with E; auto. introv Sub Fr.
+    forwards~ Sub2: sub_tvar E Sub. apply* H. rewrite ?tvar_push_sub, H2; auto.
+  apply* caprod_var. rewrite binds_tvar_equiv, <- H2, <- binds_tvar_equiv; auto.
+  apply_fresh caprod_all as X. apply wft_tvar with E; auto. apply* sub_tvar.
+    forwards~ Sub2: sub_tvar F s. apply* H. rewrite ?tvar_push_sub, H2; auto.
 Qed.
 
-Lemma capsafe_sub: forall E S T, sub E S T -> capsafe E S -> capsafe E T.
-Proof. admit. Qed.
-
-Lemma capsafe_tvar: forall E F T, tvar_env E = tvar_env F -> capsafe E T -> capsafe F T.
-Proof. admit. Qed.
-
-Lemma caprod_tvar: forall E F T, tvar_env E = tvar_env F -> caprod E T -> caprod F T.
-Proof. admit. Qed.
-
-Lemma healthy_subseq: forall E F, subseq E F -> healthy F -> healthy E.
-Proof. admit. Qed.
-
-(* Lemma capsafe_tvar *)
-
-(* Lemma healthy_pure *)
-
-Lemma healthy_env_capsafe : forall E S x, healthy E ->
-   binds x (bind_typ S) E ->  capsafe E S.
-Proof. introv H Hb. inductions H.
-  false* binds_empty_inv.
-  destruct (binds_push_inv Hb).
-    destruct H2. inversions H3. apply* capsafe_weaken.
-      destruct (capsafe_regular H). apply* okt_typ.
-    destruct H2. forwards~ : IHhealthy. apply* capsafe_weaken.
-      destruct (capsafe_regular H). apply* okt_typ.
-  destruct (binds_push_inv Hb).
-    destruct H2. inversion H3.
-    destruct H2. forwards~ : IHhealthy. apply* capsafe_weaken.
-      destruct (capsafe_regular H4). apply* okt_sub.
+Lemma caprod_tvar: forall E F T,
+  okt E -> okt F ->
+  tvar_env E = tvar_env F ->
+  caprod E T -> caprod F T.
+Proof. introv OkE OkF Tv Safe. gen OkE OkF Tv. gen Safe F. gen E T.
+  apply (caprod_mut
+           (fun E T _ => forall F, okt E -> okt F ->
+                                   tvar_env E = tvar_env F ->
+                         capsafe F T )
+           (fun E T _ => forall F, okt E -> okt F ->
+                                   tvar_env E = tvar_env F ->
+                         caprod F T )
+        ); intros; substs; auto.
+  apply* capsafe_var. rewrite binds_tvar_equiv, <- H2, <- binds_tvar_equiv; auto.
+  forwards~ : H F. apply* capsafe_eff_any. apply wft_tvar with E; auto.
+  forwards~ : H F. apply* capsafe_any_safe. apply wft_tvar with E; auto.
+  apply_fresh* capsafe_all as X. apply wft_tvar with E; auto. introv Sub Fr.
+    forwards~ Sub2: sub_tvar E Sub. apply* H. rewrite ?tvar_push_sub, H2; auto.
+  apply* caprod_var. rewrite binds_tvar_equiv, <- H2, <- binds_tvar_equiv; auto.
+  apply_fresh caprod_all as X. apply wft_tvar with E; auto. apply* sub_tvar.
+    forwards~ Sub2: sub_tvar F s. apply* H. rewrite ?tvar_push_sub, H2; auto.
 Qed.
 
-Hint Resolve healthy_env_capsafe not_capsafe_caprod.
+Lemma capsafe_weaken_typ: forall E S T x,
+  capsafe E S ->
+  wft E T ->
+  x # E ->
+  capsafe (E & x ~: T) S.
+Proof. introv Safe Wf Fr. destructs (capsafe_regular Safe).
+  apply capsafe_tvar with E; auto. rewrite* tvar_push_typ.
+Qed.
+
+Lemma capsafe_weaken_sub: forall E S T X,
+  capsafe E S ->
+  wft E T ->
+  X # E ->
+  capsafe (E & X ~<: T) S.
+Proof. introv Safe Wf Fr.
+  gen Wf Fr. gen E S.
+  apply (capsafe_mut
+           (fun E S _ => wft E T -> X # E -> capsafe (E & X ~<: T) S )
+           (fun E S _ => wft E T -> X # E -> caprod (E & X ~<: T) S )
+        ); intros; substs; auto.
+  forwards~ IH: H. destructs (capsafe_regular IH). apply* capsafe_var.
+    forwards~ : ok_binds_left_inv (ok_from_okt H3) b.
+  apply* capsafe_eff_any. apply_empty* wft_weaken. apply* ok_push.
+    destruct* (caprod_regular c).
+  apply* capsafe_any_safe. apply_empty* wft_weaken. apply* ok_push.
+    destruct* (capsafe_regular c).
+  apply_fresh* capsafe_all as X. introv Sub Fr. admit.  (* impossible to prove *)
+  forwards~ IH: H. destructs (caprod_regular IH). apply* caprod_var.
+    forwards~ : ok_binds_left_inv (ok_from_okt H3) b.
+  apply_fresh* caprod_all as X. apply_empty* sub_weakening. admit. (* context permutation *)
+Qed.
+
+Lemma capsafe_weaken: forall E F G T,
+  capsafe (E & G) T -> okt (E & F & G) -> capsafe (E & F & G) T.
+Proof.
+  introv Cap Ok. gen_eq N: (E & G). gen N T E F G.
+  apply (capsafe_mut
+           (fun N T _ => forall E F G, okt (E & F & G) ->
+                                       N = E & G ->
+                                       capsafe (E & F & G) T )
+           (fun N T _ => forall E F G, okt (E & F & G) ->
+                                       N = E & G ->
+                                       caprod (E & F & G) T )
+        ); intros; substs; auto.
+  apply* capsafe_var. apply* binds_weaken.
+  apply_fresh* capsafe_all as X. introv Sub Fr. admit. (* impossible to prove *)
+  apply* caprod_var. apply* binds_weaken.
+  apply_fresh caprod_all as X. auto. apply* sub_weakening.
+    apply_ih_bind* H.
+Qed.
 
 Lemma capsafe_subst_tb: forall F Q E Z P T,
   capsafe (E & Z ~<: Q & F) T ->
@@ -3426,13 +3436,127 @@ Proof. admit. Qed.
 
 Lemma capsafe_all_open_tt: forall E T U V, sub E V U ->
   capsafe E (typ_all U T) -> capsafe E (open_tt T V).
-Proof. introv Sub Cap. inversions Cap.
-  pick_fresh X. forwards~ Cap : H4 V X.
-  rewrite* (@subst_tt_intro X). rewrite <- concat_empty_r at 1.
-  replace empty with (map (subst_tb X V) empty) by rewrite* map_empty.
-  rewrite <- concat_empty_r in Cap at 1.
-  applys~ capsafe_subst_tb Cap. apply* sub_reflexivity.
+Proof. introv Sub Cap. inversions Cap. pick_fresh X.
+  forwards~ IH: H4 V X. rewrite <- concat_empty_r at 1.
+  rewrite* (@subst_tt_intro X).
+  replace (@empty bind) with (map (subst_tb X V) empty) by rewrite* map_empty.
+  applys~ capsafe_subst_tb V. rewrite concat_empty_r; auto.
+  apply* sub_reflexivity.
 Qed.
+
+Lemma healthy_regular: forall E, healthy E -> okt E.
+Proof. introv H. inductions H; auto.
+  apply* okt_typ. destruct* (capsafe_regular H).
+Qed.
+
+Lemma healthy_push_sub_inv: forall F X U, healthy (F & X ~<: U) ->
+  wft F U /\ X # F /\ healthy F.
+Proof. introv H. inversions H.
+  rewrite empty_def, <- cons_to_push in H1. inversion H1.
+  rewrite <- ?cons_to_push in H0. inversion H0.
+  rewrite <- ?cons_to_push in H0. inversions H0. auto.
+Qed.
+
+Lemma healthy_push_typ_inv: forall F x T, healthy (F & x ~: T) ->
+  capsafe F T /\ x # F /\ healthy F.
+Proof. introv H. inversions H.
+  rewrite empty_def, <- cons_to_push in H1. inversion H1.
+  rewrite <- ?cons_to_push in H0. inversions H0. auto.
+  rewrite <- ?cons_to_push in H0. inversion H0.
+Qed.
+
+Lemma healthy_subseq: forall E F, subseq E F -> healthy F -> healthy E.
+Proof. introv Sub H. inductions Sub; auto.
+  destructs (healthy_push_typ_inv H). auto.
+  destruct b.
+    destructs (healthy_push_sub_inv H0).
+      forwards~ : IHSub.  apply healthy_push_X. auto.
+      apply wft_tvar with F; auto. apply ok_from_okt, healthy_regular. auto.
+      apply subseq_fresh with F; auto.
+    destructs (healthy_push_typ_inv H0).
+      forwards~ : IHSub. apply healthy_push_x; auto.
+      apply capsafe_tvar with F; auto; try apply* healthy_regular.
+      apply subseq_fresh with F; auto.
+Qed.
+
+Lemma healthy_env_capsafe : forall E S x, healthy E ->
+   binds x (bind_typ S) E ->  capsafe E S.
+Proof. introv H Hb. inductions H.
+  false* binds_empty_inv.
+  destruct (binds_push_inv Hb).
+    destruct H2. inversions H3. apply* capsafe_weaken_typ.
+      destruct* (capsafe_regular H).
+    destruct H2. forwards~ : IHhealthy. apply* capsafe_weaken_typ.
+      destruct* (capsafe_regular H).
+  destruct (binds_push_inv Hb).
+    destruct H2. inversion H3.
+    destruct H2. forwards~ : IHhealthy. apply* capsafe_weaken_sub.
+Qed.
+
+Lemma capsafe_not_caprod : forall E T, capsafe E T -> ~ caprod E T.
+Proof.
+  apply (capsafe_mut
+           (fun E T safeT =>  ~ caprod E T )
+           (fun E T prodT =>  ~ capsafe E T )
+        ); intros; intros Hc; inversions Hc; eauto; try solve [simpls; false*].
+
+  pick_fresh X. forwards~ : H5 X. false*.
+  pick_fresh X. forwards~ : H5 X s. false*.
+Qed.
+
+Lemma capsafe_caprod_classic_0: forall E T,
+   okt E ->
+   wft E T ->
+   degree_typ T = 0 ->
+   capsafe E T \/ caprod E T.
+Proof. introv Ok Wf Deg. inductions T; iauto.
+  inversions Wf.
+  inversions Wf. destruct (classic (capsafe E U)).
+    left. apply* capsafe_var.
+    right. apply* caprod_var. admit. (* not_capsafe_caprod *)
+  inversions Wf. destruct (degree_typ_parent_zero T1 T2 Deg).
+    destruct* IHT1; destruct* IHT2.
+  simpl in Deg. inversion Deg.
+Qed.
+
+Lemma capsafe_caprod_classic_k: forall E T k,
+   okt E ->
+   wft E T ->
+   degree_typ T <= k ->
+   capsafe E T \/ caprod E T.
+Proof. introv Ok Wf Deg. gen E T. inductions k; intros.
+  lets: Le.le_n_0_eq Deg. apply* capsafe_caprod_classic_0.
+  admit.
+Qed.
+
+Lemma capsafe_caprod_classic: forall E T, okt E -> wft E T -> capsafe E T \/ caprod E T.
+Proof. intros. apply* capsafe_caprod_classic_k. Qed.
+
+Lemma capsafe_decidable: forall E T, okt E -> wft E T -> capsafe E T \/ ~ capsafe E T.
+Proof. introv Ok Wf. destruct (capsafe_caprod_classic Ok Wf). left*.
+  right. intros Hc. lets*: capsafe_not_caprod Hc.
+Qed.
+
+Lemma not_capsafe_caprod : forall E T, okt E -> wft E T -> ~capsafe E T -> caprod E T.
+Proof. introv Ok Wf SafeN. destruct* (capsafe_caprod_classic Ok Wf). Qed.
+
+Lemma capsafe_sub: forall E S T, sub E S T -> capsafe E S -> capsafe E T.
+Proof. introv Sub Cap. inductions Sub; auto.
+  apply IHSub. inversions Cap. inversions H. inversions H2.
+    rewrite H3 in H0. inversions H0. auto.
+  inversions Cap. destruct (classic (capsafe E T1)).
+    forwards~ : IHSub1. forwards~ : capsafe_not_caprod H0. false.
+    apply* capsafe_eff_any. apply* not_capsafe_caprod.
+    apply* capsafe_any_safe.
+  inversions Cap. apply_fresh capsafe_all as X. auto.
+    apply_fresh wft_all as X. auto. forwards~ : H X.
+    introv Sub2 Fr. forwards~ : H6 V X. apply sub_transitivity with T1; auto.
+    forwards~ : H0 X.
+    admit. (* depends on <-> capsafe_narrowing *)
+Qed.
+
+
+Hint Resolve healthy_env_capsafe not_capsafe_caprod.
 
 Lemma healthy_env_term_capsafe_0: forall E t T,
   degree_trm t = 0 ->
@@ -3491,7 +3615,7 @@ Proof. introv Deg H Typ. gen t E T. inductions k; intros.
   simpl in Deg. lets: le_S_n Deg.
     apply_fresh* capsafe_all as X.
     assert (typing E (trm_tabs V e1) (typ_all V T1))  by apply* typing_tabs. auto.
-    introv Sub Fresh. forwards~ : H1 X.
+    introv Sub Fr. forwards~ : H1 X.
     assert (typing (pure E & X ~<: V0) (e1 open_te_var X) (T1 open_tt_var X)) as HI.
       apply_empty* typing_narrowing. apply* sub_pure.
     assert (typing (E & X ~<: V0) (e1 open_te_var X) (T1 open_tt_var X)) as HII.
