@@ -337,10 +337,11 @@ Definition progress := forall e T,
 
 (* capsafe types are not capability producing, i.e. capable of creating an instance of E *)
 
-(** problem: All X<:Top. All Y<:Top. X -> Y  is caprod *)
-(** problem: All X<:Top. All Y<:Z<:Top. X -> Y  is capsafe *)
-(** problem:  X<:Top -> Y<:Top  can be capsafe *)
-(** problem:  X<:Top -> Y<:Eff  must be caprod *)
+(*  All X<:Top. All Y<:Top. X -> Y  is caprod *)
+(*  All X<:Top. All Y<:Z<:Top. X -> Y  is capsafe *)
+(*  X<:Top -> Y<:Top  can be capsafe *)
+(*  X<:Top -> Y<:Eff  must be caprod *)
+(*  X<:B -> Eff  must be caprod *)
 
 Inductive capsafe: env -> typ -> Prop :=
  | capsafe_base: forall E, okt E -> capsafe E typ_base
@@ -363,11 +364,10 @@ with caprod: env -> typ -> Prop :=
                              caprod E U ->
                              caprod E (typ_fvar X)
  | caprod_safe_eff: forall E S T, capsafe E S -> caprod E T -> caprod E (typ_arrow S T)
- | caprod_all: forall L E U T, wft E (typ_all U T) ->
-                               (exists V, sub E V U /\
-                                         (forall X,
-                                            X \notin L ->
-                                            caprod (E & X ~<: V) (T open_tt_var X))) ->
+ | caprod_all: forall L E U V T, wft E (typ_all U T) -> sub E V U ->
+                                 (forall X,
+                                    X \notin L ->
+                                    caprod (E & X ~<: V) (T open_tt_var X)) ->
                                caprod E (typ_all U T).
 
 Inductive healthy: env -> Prop :=
@@ -3245,7 +3245,6 @@ Lemma capsafe_regular: forall E T, capsafe E T -> wft E T /\ okt E.
            (fun E T safeT => wft E T /\ okt E)
            (fun E T prodT => wft E T /\ okt E)
         ); intros; iauto.
-  split*. destruct e as [V [Sub _]]. auto.
 Qed.
 
 Lemma caprod_regular: forall E T, caprod E T -> wft E T /\ okt E.
@@ -3253,42 +3252,22 @@ Lemma caprod_regular: forall E T, caprod E T -> wft E T /\ okt E.
            (fun E T safeT => wft E T /\ okt E)
            (fun E T prodT => wft E T /\ okt E)
         ); intros; iauto.
-  split*. destruct e as [V [Sub _]]. auto.
 Qed.
 
 Hint Constructors capsafe caprod.
 Hint Immediate capsafe_regular caprod_regular.
 
-Lemma capsafe_not_caprod_0 : forall E T, capsafe E T -> degree_typ T = 0 -> ~ caprod E T.
-  apply (capsafe_mut
-           (fun E T safeT => degree_typ T = 0 -> ~ caprod E T )
-           (fun E T prodT => degree_typ T = 0 -> ~ capsafe E T )
-        ); intros; intros Hc; inversions Hc; eauto; try solve [simpls; false*];
-  repeat destruct* (degree_typ_parent_zero S T).
-Qed.
-
-Lemma capsafe_not_caprod_k : forall E T k, degree_typ T <= k -> capsafe E T -> ~ caprod E T.
-Proof. intros. gen E T. inductions k; intros.
-  lets: Le.le_n_0_eq H. apply* capsafe_not_caprod_0.
-  inductions T; try solve [simpls; apply* IHk; apply le_0_n].
-    inversions H0. intros Hc. inversions Hc.
-      simpl in H. destruct (classic (degree_typ T1 = S k)).
-        forwards~ : IHT1. rewrite* H0.
-        lets: Max.max_lub_l H. forwards~ : IHk E T1.
-          autos* PeanoNat.Nat.le_neq PeanoNat.Nat.lt_succ_r.
-      intros Hc. inversions Hc. destruct (classic (degree_typ T2 = S k)).
-        forwards~ : IHT2. rewrite* H0.
-        lets: Max.max_lub_r H. forwards~ : IHk E T2.
-          autos* PeanoNat.Nat.le_neq PeanoNat.Nat.lt_succ_r.
-    inversions H0. intros Hc.
-      inversions Hc. destruct H7 as [V [Sub Caprod]]. pick_fresh X.
-        forwards~ : Caprod X. forwards~ : H6 V Sub X.
-        forwards~ : IHk (E & X ~<: V) (T2 open_tt_var X).
-          simpl in H. lets: le_S_n H. rewrite* <- degree_typ_eq_open_tt.
-Qed.
-
 Lemma capsafe_not_caprod : forall E T, capsafe E T -> ~ caprod E T.
-Proof. intros. apply* capsafe_not_caprod_k. Qed.
+Proof.
+  apply (capsafe_mut
+           (fun E T safeT =>  ~ caprod E T )
+           (fun E T prodT =>  ~ capsafe E T )
+        ); intros; intros Hc; inversions Hc; eauto; try solve [simpls; false*].
+
+  pick_fresh X. forwards~ : H5 X. forwards~ : H H4 X.
+  pick_fresh X. forwards~ : H5 s X. forwards~ : H X.
+Qed.
+
 
 Lemma capsafe_caprod_classic_0: forall E T,
    okt E ->
