@@ -64,7 +64,8 @@ Inductive term : trm -> Prop :=
 
 Inductive value : trm -> Prop :=
   | value_abs : forall t1 T,
-      term (trm_abs T t1) -> value (trm_abs T t1).
+      term (trm_abs T t1) -> value (trm_abs T t1)
+  | value_var : forall x, value (trm_fvar x).
 
 Reserved Notation "t --> t'" (at level 68).
 
@@ -546,6 +547,12 @@ Proof.
       apply_empty* typing_subst. rewrite <- (@concat_empty_l typ E).
       apply* typing_weakening_env. rewrite* concat_empty_l.
       rewrite* concat_empty_l.
+
+      pick_fresh y. rewrite* (@subst_intro y).
+      apply_empty* typing_subst. rewrite <- (@concat_empty_l typ E).
+      apply* typing_weakening_env. rewrite* concat_empty_l.
+      rewrite* concat_empty_l.
+
   apply* typing_app_closed.
   apply* typing_app_closed.
 Qed.
@@ -554,11 +561,11 @@ Lemma progress_result : progress_statement.
 Proof.
   introv Typ. gen_eq E: (empty:ctx). lets Typ': Typ.
   inductions Typ; intros; subst; autos.
-  false* binds_empty_inv.
   right.
     destruct~ IHTyp1 as [Val1 | [t1' Red1]].
     destruct~ IHTyp2 as [Val2 | [t2' Red2]].
       inversions Typ1; inversions Val1.
+      false* binds_empty_inv.
       exists* (e1 ^^ t2).
       exists* (trm_app t1 t2').
     exists* (trm_app t1' t2).
