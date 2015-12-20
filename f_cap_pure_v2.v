@@ -215,7 +215,8 @@ Inductive value : trm -> Prop :=
   | value_abs  : forall V e1, term (trm_abs V e1) ->
                  value (trm_abs V e1)
   | value_tabs : forall e1, term (trm_tabs e1) ->
-                 value (trm_tabs e1).
+                 value (trm_tabs e1)
+  | value_var : forall x, value (trm_fvar x).
 
 (** One-step reduction *)
 
@@ -1550,6 +1551,7 @@ Proof.
   gen_eq T: (typ_arrow_closed U1 U2). gen U1 U2.
   induction Typ; introv EQT EQE;
    try solve [ inversion Val | inversion EQT | eauto ].
+  subst. false* binds_empty_inv.
 Qed.
 
 Lemma canonical_form_tabs : forall t U1,
@@ -1560,6 +1562,7 @@ Proof.
   gen_eq T: (typ_all_closed U1). gen U1.
   induction Typ; introv EQT EQE;
    try solve [ inversion Val | inversion EQT | eauto ].
+  subst. false* binds_empty_inv.
 Qed.
 
 Lemma progress_result : progress.
@@ -1567,7 +1570,7 @@ Proof.
   introv Typ. gen_eq E: (@empty bind). lets Typ': Typ.
   induction Typ; intros EQ; subst; autos.
   (* case: var *)
-  false* binds_empty_inv.
+  (* false* binds_empty_inv. *)
   (* case: abs closed *)
   left*. apply value_abs. lets*: typing_regular Typ'.
   (* case: app *)
