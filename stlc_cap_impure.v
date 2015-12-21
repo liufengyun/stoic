@@ -70,7 +70,8 @@ Inductive term : trm -> Prop :=
 Inductive value : trm -> Prop :=
   | value_top : value trm_top
   | value_abs : forall t1 T,
-      term (trm_abs T t1) -> value (trm_abs T t1).
+      term (trm_abs T t1) -> value (trm_abs T t1)
+  | value_var : forall x, value (trm_fvar x).
 
 Reserved Notation "t --> t'" (at level 68).
 
@@ -776,27 +777,22 @@ Proof.
     pick_fresh x. forwards~ : H6 x. rewrite* (@subst_intro x). apply_empty* typing_subst_top.
 Qed.
 
-Lemma canonical_form_abs : forall E t U1 U2,
-  value t -> typing E t (typ_arrow U1 U2) ->
+Lemma canonical_form_abs : forall t U1 U2,
+  value t -> typing empty t (typ_arrow U1 U2) ->
   exists V e1, t = trm_abs V e1.
 Proof. introv Val Typ. inductions Typ; inversions Val; jauto.
+  false* binds_empty_inv.
   lets*: sub_arrow_inv H. destruct H0 as [S1 [S2 [H1 _]]].
-  lets*: typing_inv_top Typ. destruct H1; false.
-Qed.
-
-Lemma canonical_form_abs_closed : forall E t U1 U2,
-  value t -> typing E t (typ_arrow_closed U1 U2) ->
-  exists V e1, t = trm_abs V e1.
-Proof. introv Val Typ. inductions Typ; inversions Val; jauto.
-  lets*: sub_arrow_closed_inv H. destruct H0 as [S1 [S2 [H1 _]]].
-  lets*: typing_inv_top Typ.
+    lets*: typing_inv_top Typ. destruct H1; false.
+  clear H IHTyp. false. inductions Typ.
+    false* binds_empty_inv. apply* IHTyp.
 Qed.
 
 Lemma progress_result : progress_statement.
 Proof.
   introv Typ. gen_eq E: (empty:ctx). lets Typ': Typ.
   inductions Typ; intros; subst; autos.
-  false* binds_empty_inv.
+  (* false* binds_empty_inv. *)
   right.
     destruct~ IHTyp1 as [Val1 | [t1' Red1]].
     destruct~ IHTyp2 as [Val2 | [t2' Red2]].
