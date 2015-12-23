@@ -818,7 +818,7 @@ Proof.  intros. inductions H0; auto.
     lets*: not_capsafe_caprod H.
 Qed.
 
-Lemma healthy_closed: forall E, healthy E -> healthy (pure E).
+Lemma healthy_pure: forall E, healthy E -> healthy (pure E).
 Proof. intros. inductions E; simpls*.
   inversions H. rewrite empty_def in H1. inversion H1.
     rewrite <- cons_to_push in H0. inversions H0.
@@ -836,7 +836,7 @@ Proof. intros. inductions H0; jauto.
       apply capsafe_eff_any. apply* not_capsafe_caprod.
   pick_fresh x. forwards~ : H1 x. destruct* (capsafe_decidable V).
     apply capsafe_any_safe_closed. apply* (H2 x).
-      applys~ healthy_push. apply* healthy_closed.
+      applys~ healthy_push. apply* healthy_pure.
       apply capsafe_eff_any_closed. apply* not_capsafe_caprod.
   forwards~ : IHtyping1 H. forwards~ : IHtyping2 H. inversions* H0.
     lets*: capsafe_not_caprod S.
