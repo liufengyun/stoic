@@ -305,7 +305,7 @@ Inductive healthy: env -> Prop :=
 Definition effect_safety_1 := forall E, healthy E ->
   ~exists e, typing E e typ_eff.
 
-Definition effect_safety_arrow_closed := forall E t1 t2 T, healthy E ->
+Definition effect_safety_2 := forall E t1 t2 T, healthy E ->
   pure E = E ->
   typing E (trm_app t1 t2) T  ->
   exists S1 S2, typing E t1 (typ_arrow_closed S1 S2).
@@ -1099,6 +1099,19 @@ Hint Extern 1 (term ?e) =>
 
 (* ********************************************************************** *)
 (** * Properties of environment *)
+
+Lemma pure_closed: forall E x T, binds x (bind_x T) (pure E) -> closed_typ T = true.
+Proof. intros. inductions E.
+  simpls. rewrite <- empty_def in H. false* binds_empty_inv.
+  destruct a. simpls. destruct b; rewrite cons_to_push in *.
+
+  destruct (binds_push_inv H); destruct H0. false. apply* IHE.
+
+  cases* (closed_typ t). destruct (binds_push_inv H); destruct H0.
+    inversions* H1.
+    apply* IHE.
+Qed.
+
 Lemma pure_dist: forall E F, pure (E & F) = pure E & pure F.
 Proof. rewrite concat_def. intros. gen E. induction F; intros E; autos.
   rewrite LibList.app_cons. destruct a. destruct b.
@@ -2110,4 +2123,62 @@ Proof. intros. apply* healthy_env_term_capsafe_k. Qed.
 Lemma effect_safety_result_1 : effect_safety_1.
 Proof. intros E H He. destruct He.
   lets*: healthy_env_term_capsafe H0. inversions H1.
+Qed.
+
+Axiom axiom_equiv_var : forall E S T t X,
+  typing E t (typ_arrow_closed (typ_fvar X) (typ_arrow S T)) ->
+  typing E t (typ_arrow_closed (typ_fvar X) (typ_arrow_closed S T)).
+
+Axiom axiom_equiv_base : forall E S T t,
+  typing E t (typ_arrow_closed typ_base (typ_arrow S T)) ->
+  typing E t (typ_arrow_closed typ_base (typ_arrow_closed S T)).
+
+Axiom axiom_equiv_stoic : forall E U V S T t,
+  typing E t (typ_arrow_closed (typ_arrow_closed U V) (typ_arrow S T)) ->
+  typing E t (typ_arrow_closed (typ_arrow_closed U V) (typ_arrow_closed S T)).
+
+Axiom axiom_equiv_all : forall E U S T t,
+  typing E t (typ_arrow_closed (typ_all_closed U) (typ_arrow S T)) ->
+  typing E t (typ_arrow_closed (typ_all_closed U) (typ_arrow_closed S T)).
+
+Axiom axiom_poly : forall E U V S T t1 t2,
+  typing E t1 (typ_arrow_closed (typ_arrow U V) (typ_arrow S T)) ->
+  typing E t2 (typ_arrow_closed U V) ->
+  typing E (trm_app t1 t2) (typ_arrow_closed S T).
+
+Axiom axiom_poly_all : forall E U V T T2 t,
+  typing E t (typ_all_closed T) ->
+  open_tt T T2 = typ_arrow U V ->
+  typing E (trm_tapp t T2) (typ_arrow_closed U V).
+
+Lemma effect_polymorphism: forall E t T1 T2,
+  healthy E -> pure E = E ->
+  typing E t (typ_arrow T1 T2) ->
+  typing E t (typ_arrow_closed T1 T2).
+Proof. introv HL Pure Typ.  inductions Typ; auto.
+  rewrite <- Pure in H0. lets: pure_closed H0. false.
+  apply* typing_abs_closed.
+    assert (Typ: typing E (trm_abs T1 e1) (typ_arrow T1 T2)) by apply* typing_abs.
+    destruct* (typing_regular Typ).
+    rewrite* Pure.
+
+  (* t = t1 t2 *)
+  forwards~ : IHTyp1. destruct T0.
+  lets Inv: typing_wft Typ2. inversion Inv.
+  forwards~ : axiom_equiv_var H. apply* typing_app. apply* typing_degen.
+  forwards~ : axiom_equiv_base H. apply* typing_app. apply* typing_degen.
+  lets: healthy_env_term_capsafe HL Typ2. inversion H0.
+  forwards~ : IHTyp2. apply* axiom_poly.
+  forwards~ : axiom_equiv_stoic H. apply* typing_app. apply* typing_degen.
+  forwards~ : axiom_equiv_all H. apply* typing_app. apply* typing_degen.
+
+  (* t = t [T] *)
+  apply* axiom_poly_all.
+Qed.
+
+Lemma effect_safety_result_2 : effect_safety_2.
+Proof. introv HL Pure Typ. inductions Typ; auto.
+  apply* IHTyp.
+
+  forwards~ : effect_polymorphism E t1 T1 T2. iauto.
 Qed.
