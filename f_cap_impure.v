@@ -2146,10 +2146,9 @@ Axiom axiom_poly : forall E U V S T t1 t2,
   typing E t2 (typ_arrow_closed U V) ->
   typing E (trm_app t1 t2) (typ_arrow_closed S T).
 
-Axiom axiom_poly_all : forall E U V T T2 t,
-  typing E t (typ_all_closed T) ->
-  open_tt T T2 = typ_arrow U V ->
-  typing E (trm_tapp t T2) (typ_arrow_closed U V).
+Axiom axiom_tapp : forall E U T1 T2 t,
+  typing E t (typ_all_closed (typ_arrow T1 T2)) ->
+  typing E (trm_tapp t U) (typ_arrow_closed (open_tt T1 U) (open_tt T2 U)).
 
 Lemma effect_polymorphism: forall E t T1 T2,
   healthy E -> pure E = E ->
@@ -2173,7 +2172,10 @@ Proof. introv HL Pure Typ.  inductions Typ; auto.
   forwards~ : axiom_equiv_all H. apply* typing_app. apply* typing_degen.
 
   (* t = t [T] *)
-  apply* axiom_poly_all.
+  destruct T0; try solve [inversion x]. destruct n; unfolds open_tt, open_tt_rec; cases_if.
+  subst. inversion H0.
+
+  unfolds open_tt. simpl in x. inversions x. forwards~ AX: axiom_tapp T Typ.
 Qed.
 
 Lemma effect_safety_result_2 : effect_safety_2.
