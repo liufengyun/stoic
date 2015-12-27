@@ -1959,3 +1959,51 @@ Lemma effect_safety_result : effect_safety.
 Proof. intros E H He. destruct He.
   lets*: healthy_env_term_capsafe H0. inversions H1.
 Qed.
+
+(* This proof ensures that all inhabitable types are capsafe, thus
+   justifies the definition of capsafe/caprod.
+
+   This theorem assumes that all inhabitable types in the system can
+   be inhabited by a value in the environment {x:B, y:E}. Note that
+   variables are values in the system, thus B and E are inhabitable.
+
+   If the term t is not a value, it should be able to take a step and
+   preserves the type.
+
+*)
+
+Theorem inhabitable_capsafe: forall x y t T,
+  typing (x ~: typ_base & y ~: typ_eff) t T -> value t ->
+  capsafe T \/ closed_typ T = false.
+Proof. introv Typ Val. inductions Typ; auto.
+  destruct (binds_push_inv H0) as [Inv | Inv]; destruct Inv.
+    inversions H2. auto.
+    destructs (binds_single_inv H2). inversions H4. auto.
+  pick_fresh z. forwards~ IH: H0 z.
+    lets (Ok&_): (typing_regular IH). lets (_&Wf&_): (okt_push_x_inv Ok).
+    lets TypV: wft_type Wf. lets TypT1: wft_type (typing_wft IH).
+    destruct (capsafe_decidable TypV) as [Case | Case].
+    (* capsafe V -> healthy E -> capsafe T1 *)
+    rewrite pure_dist, pure_single_true, pure_single_false, concat_empty_r in IH; auto.
+    forwards~ Hcap : healthy_env_term_capsafe IH.
+      rewrite <- concat_empty_l, concat_assoc. repeat(apply* healthy_push_x). apply healthy_empty.
+    (* caprod V -> capsafe V -> T1 *)
+    forwards~ Vcap : not_capsafe_caprod Case.
+  inversion Val.
+  pick_fresh X. forwards~ IH: H0 X.
+    assert (Typ: typing (x ~: typ_base & y ~: typ_eff) (trm_tabs e1) (typ_all_closed T1))
+      by apply* typing_tabs_closed.
+    left. apply capsafe_all. apply (wft_type (typing_wft Typ)).
+    rewrite pure_dist, pure_single_true, pure_single_false, concat_empty_r in IH; auto.
+    rewrite <- concat_empty_r in IH at 1.
+    forwards~ Typ1: typing_through_subst_te typ_base IH.
+    forwards~ Typ2: typing_through_subst_te (typ_arrow_closed typ_base typ_eff) IH.
+    rewrite map_empty, concat_empty_r in Typ1, Typ2.
+    forwards~ Safe1 : healthy_env_term_capsafe Typ1. rewrite <- concat_empty_l.
+      apply* healthy_push_x. apply healthy_empty.
+    forwards~ Safe2 : healthy_env_term_capsafe Typ2. rewrite <- concat_empty_l.
+      apply* healthy_push_x. apply healthy_empty.
+    split; rewrite* (@subst_tt_intro X).
+    applys~ capsafe_subst_tt_caprod (typ_arrow_closed typ_base typ_eff).
+  inversion Val.
+Qed.
