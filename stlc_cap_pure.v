@@ -634,3 +634,33 @@ Lemma effect_safety_result : effect_safety_statement.
 Proof. intros E H He. destruct He.
   lets*: healthy_env_term_capsafe H0. inversions H1.
 Qed.
+
+
+(* This proof ensures that all inhabitable types are capsafe, thus
+   justifies the definition of capsafe/caprod.
+
+   This theorem assumes that all inhabitable types in the system can
+   be inhabited by a value in the environment {x:B, y:E}. Note that
+   variables are values in the system, thus B and E are inhabitable.
+
+   If the term t is not a value, it should be able to take a step and
+   preserves the type.
+
+*)
+
+Theorem inhabitable_capsafe: forall x y t T,
+  typing (x ~ typ_base & y ~ typ_eff) t T -> value t ->
+  capsafe T \/ T = typ_eff.
+Proof. introv Typ Val. inductions Typ.
+  destruct (binds_push_inv H0) as [Inv | Inv]; destruct Inv.
+    subst. auto.
+    destructs (binds_single_inv H2). subst. auto.
+  pick_fresh z. forwards~ IH: H0 z. destruct (capsafe_decidable V) as [Case | Case].
+    (* capsafe V -> healthy E -> capsafe T1 *)
+    rewrite pure_dist, pure_single_true, pure_single_false, concat_empty_r in IH; auto.
+    forwards~ Hcap : healthy_env_term_capsafe IH.
+      rewrite <- concat_empty_l, concat_assoc. repeat(apply* healthy_push). apply healthy_empty.
+    (* caprod V -> capsafe V -> T1 *)
+    forwards~ Vcap : not_capsafe_caprod Case.
+  inversion Val.
+Qed.
