@@ -296,9 +296,9 @@ with caprod: typ -> Prop :=
 
 Inductive healthy: env -> Prop :=
   | healthy_empty: healthy empty
-  | healthy_push_typ: forall x E T, capsafe T -> healthy E ->
+  | healthy_typ: forall x E T, capsafe T -> healthy E ->
                                     x # E -> healthy (E & x ~: T)
-  | healthy_push_tvar: forall X E, healthy E ->
+  | healthy_tvar: forall X E, healthy E ->
                                    X # E -> healthy (E & [: X :]).
 
 (* effect safety : it's impossible to construct a term of typ_eff in pure environment  *)
@@ -2022,10 +2022,10 @@ Proof. introv H. inductions E; simpls*.
   inversions H. rewrite empty_def in H1. inversion H1.
     rewrite <- cons_to_push in H0. inversions H0.
     rewrite <- cons_to_push in H0. inversions H0.
-    apply~ healthy_push_tvar. lets : pure_dom_subset E. intros Fr. auto.
+    apply~ healthy_tvar. lets : pure_dom_subset E. intros Fr. auto.
   inversions H. rewrite empty_def in H1. inversion H1.
     rewrite <- cons_to_push in H0. inversions H0.
-    cases* (closed_typ t). apply~ healthy_push_typ.
+    cases* (closed_typ t). apply~ healthy_typ.
     lets : pure_dom_subset E. intros Fr. auto.
 
     rewrite <- cons_to_push in H0. inversion H0.
@@ -2042,13 +2042,13 @@ Proof. introv Deg H Typ. inductions Typ; intros; autos.
     assert (HI: type V) by destruct* (typing_regular H2).
     destruct (capsafe_decidable HI). simpls.
       apply* capsafe_any_safe_free. apply* (H1 x). rewrite* <- degree_trm_eq_open_ee.
-      apply* healthy_push_typ. lets*: not_capsafe_caprod H3.
+      apply* healthy_typ. lets*: not_capsafe_caprod H3.
       apply* capsafe_eff_any_free. autos* wft_type typing_wft.
   pick_fresh x. forwards~ : H1 x.
     assert (HI: type V) by destruct* (typing_regular H3).
     destruct (capsafe_decidable HI). simpls.
       apply* capsafe_any_safe. apply* (H2 x). rewrite* <- degree_trm_eq_open_ee.
-      apply~ healthy_push_typ. apply* healthy_pure.
+      apply~ healthy_typ. apply* healthy_pure.
       lets: pure_dom_subset E. intros Fx. assert (x \notin dom E) by auto. auto.
       lets*: not_capsafe_caprod H4.
       apply* capsafe_eff_any. autos* wft_type typing_wft.
@@ -2074,13 +2074,13 @@ Proof. introv Deg H Typ. gen t E T. inductions k; intros.
     assert (HI: type V) by destruct* (typing_regular Typ).
     destruct (capsafe_decidable HI). simpls.
       apply* capsafe_any_safe_free. apply* (H1 x). rewrite* <- degree_trm_eq_open_ee.
-      apply* healthy_push_typ. lets*: not_capsafe_caprod H2.
+      apply* healthy_typ. lets*: not_capsafe_caprod H2.
       apply* capsafe_eff_any_free. autos* wft_type typing_wft.
   pick_fresh x. forwards~ Typ: H1 x.
     assert (HI: type V) by destruct* (typing_regular Typ).
     destruct (capsafe_decidable HI). simpls.
       apply* capsafe_any_safe. apply* (H2 x). rewrite* <- degree_trm_eq_open_ee.
-      apply~ healthy_push_typ. apply* healthy_pure.
+      apply~ healthy_typ. apply* healthy_pure.
       lets: pure_dom_subset E. intros Fx. assert (x \notin dom E) by auto. auto.
       lets*: not_capsafe_caprod H3.
       apply* capsafe_eff_any. autos* wft_type typing_wft.
@@ -2211,7 +2211,7 @@ Proof. introv Typ Val. inductions Typ; auto.
     (* capsafe V -> healthy E -> capsafe T1 *)
     rewrite pure_dist, pure_single_true, pure_single_false, concat_empty_r in IH; auto.
     forwards~ Hcap : healthy_env_term_capsafe IH.
-      rewrite <- concat_empty_l, concat_assoc. repeat(apply* healthy_push_typ). apply healthy_empty.
+      rewrite <- concat_empty_l, concat_assoc. repeat(apply* healthy_typ). apply healthy_empty.
     (* caprod V -> capsafe V -> T1 *)
     forwards~ Vcap : not_capsafe_caprod Case.
   inversion Val.
@@ -2225,9 +2225,9 @@ Proof. introv Typ Val. inductions Typ; auto.
     forwards~ Typ2: typing_through_subst_te (typ_stoic typ_base typ_eff) IH.
     rewrite map_empty, concat_empty_r in Typ1, Typ2.
     forwards~ Safe1 : healthy_env_term_capsafe Typ1. rewrite <- concat_empty_l.
-      apply* healthy_push_typ. apply healthy_empty.
+      apply* healthy_typ. apply healthy_empty.
     forwards~ Safe2 : healthy_env_term_capsafe Typ2. rewrite <- concat_empty_l.
-      apply* healthy_push_typ. apply healthy_empty.
+      apply* healthy_typ. apply healthy_empty.
     split; rewrite* (@subst_tt_intro X).
     applys~ capsafe_subst_tt_caprod (typ_stoic typ_base typ_eff).
   inversion Val.

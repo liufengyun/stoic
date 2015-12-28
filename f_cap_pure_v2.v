@@ -275,10 +275,10 @@ with caprod: typ -> Prop :=
 
 Inductive healthy: env -> Prop :=
   | healthy_empty: healthy empty
-  | healthy_push_x: forall x E T, capsafe T -> healthy E ->
-                                  x # E -> healthy (E & x ~: T)
-  | healthy_push_X: forall X E, healthy E ->
-                                  X # E -> healthy (E & [: X :]).
+  | healthy_typ: forall x E T, capsafe T -> healthy E ->
+                               x # E -> healthy (E & x ~: T)
+  | healthy_tvar: forall X E, healthy E ->
+                              X # E -> healthy (E & [: X :]).
 
 (* effect safety : it's impossible to construct a term of typ_eff in pure environment  *)
 Definition effect_safety := forall E, healthy E ->
@@ -1895,7 +1895,7 @@ Proof. intros. inductions H1; intros; autos.
     destruct (capsafe_decidable HI). simpls.
       apply* capsafe_any_safe. apply* (H3 x). rewrite* <- degree_trm_eq_open_ee.
         rewrite* (healthy_env_closed H0).
-      apply* healthy_push_x. lets*: not_capsafe_caprod H5.
+      apply* healthy_typ. lets*: not_capsafe_caprod H5.
       apply* capsafe_eff_any. autos* wft_type typing_wft.
   forwards~ : IHtyping1. lets*: degree_trm_parent_zero H.
     forwards~ : IHtyping2. lets*: degree_trm_parent_zero H.
@@ -1919,7 +1919,7 @@ Proof. intros. gen t E T. inductions k; intros.
     destruct (capsafe_decidable HI). simpls.
       apply* capsafe_any_safe. apply* (H3 x). rewrite* <- degree_trm_eq_open_ee.
         rewrite* (healthy_env_closed H0).
-      apply* healthy_push_x. lets*: not_capsafe_caprod H5.
+      apply* healthy_typ. lets*: not_capsafe_caprod H5.
       apply* capsafe_eff_any. autos* wft_type typing_wft.
   simpls. forwards~ : IHtyping1. apply (Max.max_lub_l _ _ _ H).
     forwards~ : IHtyping2. apply (Max.max_lub_r _ _ _ H).
@@ -1986,7 +1986,7 @@ Proof. introv Typ Val. inductions Typ; auto.
     (* capsafe V -> healthy E -> capsafe T1 *)
     rewrite pure_dist, pure_single_true, pure_single_false, concat_empty_r in IH; auto.
     forwards~ Hcap : healthy_env_term_capsafe IH.
-      rewrite <- concat_empty_l, concat_assoc. repeat(apply* healthy_push_x). apply healthy_empty.
+      rewrite <- concat_empty_l, concat_assoc. repeat(apply* healthy_typ). apply healthy_empty.
     (* caprod V -> capsafe V -> T1 *)
     forwards~ Vcap : not_capsafe_caprod Case.
   inversion Val.
@@ -2000,9 +2000,9 @@ Proof. introv Typ Val. inductions Typ; auto.
     forwards~ Typ2: typing_through_subst_te (typ_stoic typ_base typ_eff) IH.
     rewrite map_empty, concat_empty_r in Typ1, Typ2.
     forwards~ Safe1 : healthy_env_term_capsafe Typ1. rewrite <- concat_empty_l.
-      apply* healthy_push_x. apply healthy_empty.
+      apply* healthy_typ. apply healthy_empty.
     forwards~ Safe2 : healthy_env_term_capsafe Typ2. rewrite <- concat_empty_l.
-      apply* healthy_push_x. apply healthy_empty.
+      apply* healthy_typ. apply healthy_empty.
     split; rewrite* (@subst_tt_intro X).
     applys~ capsafe_subst_tt_caprod (typ_stoic typ_base typ_eff).
   inversion Val.
