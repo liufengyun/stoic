@@ -39,7 +39,7 @@ Fixpoint open_rec (k : nat) (u : trm) (t : trm) {struct t} : trm :=
   | trm_bvar i    => If k = i then u else (trm_bvar i)
   | trm_fvar x    => trm_fvar x
   | trm_top       => trm_top
-  | trm_abs T t1    => trm_abs T (open_rec (S k) u t1)
+  | trm_abs T t1  => trm_abs T (open_rec (S k) u t1)
   | trm_app t1 t2 => trm_app (open_rec k u t1) (open_rec k u t2)
   end.
 

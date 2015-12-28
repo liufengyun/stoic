@@ -20,7 +20,7 @@ Inductive typ : Set :=
   | typ_base         : typ
   | typ_eff          : typ
   | typ_arrow        : typ -> typ -> typ
-  | typ_arrow_closed : typ -> typ -> typ.
+  | typ_stoic        : typ -> typ -> typ.
 
 Inductive trm : Set :=
   | trm_bvar : nat -> trm
@@ -38,7 +38,7 @@ Fixpoint open_rec (k : nat) (u : trm) (t : trm) {struct t} : trm :=
   match t with
   | trm_bvar i    => If k = i then u else (trm_bvar i)
   | trm_fvar x    => trm_fvar x
-  | trm_abs T t1    => trm_abs T (open_rec (S k) u t1)
+  | trm_abs T t1  => trm_abs T (open_rec (S k) u t1)
   | trm_app t1 t2 => trm_app (open_rec k u t1) (open_rec k u t2)
   end.
 
@@ -100,7 +100,7 @@ Fixpoint closed_typ(t: typ) := match t with
   | typ_base            => true
   | typ_eff             => false
   | typ_arrow U V       => false
-  | typ_arrow_closed U V => true
+  | typ_stoic U V       => true
   end.
 
 Fixpoint pure(E: ctx) := match E with
@@ -119,7 +119,7 @@ Inductive sub: typ -> typ -> Prop :=
   | sub_top_pure    : forall T, closed_typ T = true -> sub T typ_top_pure
   | sub_refl        : forall T, sub T T
   | sub_trans       : forall S T U, sub S T -> sub T U -> sub S U
-  | sub_closed_open : forall S T, sub (typ_arrow_closed S T) (typ_arrow S T)
+  | sub_degen       : forall S T, sub (typ_stoic S T) (typ_arrow S T)
   | sub_arrow       : forall S1 S2 T1 T2,
       sub T1 S1 ->
       sub S2 T2 ->
@@ -127,7 +127,7 @@ Inductive sub: typ -> typ -> Prop :=
   | sub_arrow_closed : forall S1 S2 T1 T2,
       sub T1 S1 ->
       sub S2 T2 ->
-      sub (typ_arrow_closed S1 S2) (typ_arrow_closed T1 T2).
+      sub (typ_stoic S1 S2) (typ_stoic T1 T2).
 
 Reserved Notation "E |= t ~: T" (at level 69).
 
@@ -145,7 +145,7 @@ Inductive typing : ctx -> trm -> typ -> Prop :=
       ok E ->
       (forall x, x \notin L ->
          ((pure E) & x ~ V) |= (e1 ^ x) ~: T1) ->
-      E |= (trm_abs V e1) ~: (typ_arrow_closed V T1)
+      E |= (trm_abs V e1) ~: (typ_stoic V T1)
   | typing_app : forall S T E t1 t2,
       E |= t1 ~: (typ_arrow S T) ->
       E |= t2 ~: S ->
@@ -158,25 +158,25 @@ Inductive typing : ctx -> trm -> typ -> Prop :=
 where "E |= t ~: T" := (typing E t T).
 
 Axiom typing_equiv_top : forall E S T t,
-  E |= t ~: typ_arrow_closed typ_top (typ_arrow S T) ->
-  E |= t ~: typ_arrow_closed typ_top (typ_arrow_closed S T).
+  E |= t ~: typ_stoic typ_top (typ_arrow S T) ->
+  E |= t ~: typ_stoic typ_top (typ_stoic S T).
 
 Axiom typing_equiv_top_pure : forall E S T t,
-  E |= t ~: typ_arrow_closed typ_top_pure (typ_arrow S T) ->
-  E |= t ~: typ_arrow_closed typ_top_pure (typ_arrow_closed S T).
+  E |= t ~: typ_stoic typ_top_pure (typ_arrow S T) ->
+  E |= t ~: typ_stoic typ_top_pure (typ_stoic S T).
 
 Axiom typing_equiv_base : forall E S T t,
-  E |= t ~: typ_arrow_closed typ_base (typ_arrow S T) ->
-  E |= t ~: typ_arrow_closed typ_base (typ_arrow_closed S T).
+  E |= t ~: typ_stoic typ_base (typ_arrow S T) ->
+  E |= t ~: typ_stoic typ_base (typ_stoic S T).
 
 Axiom typing_equiv_stoic : forall E U V S T t,
-  E |= t ~: typ_arrow_closed (typ_arrow_closed U V) (typ_arrow S T) ->
-  E |= t ~: typ_arrow_closed (typ_arrow_closed U V) (typ_arrow_closed S T).
+  E |= t ~: typ_stoic (typ_stoic U V) (typ_arrow S T) ->
+  E |= t ~: typ_stoic (typ_stoic U V) (typ_stoic S T).
 
 Axiom typing_poly : forall E U V S T t1 t2,
-  E |= t1 ~: typ_arrow_closed (typ_arrow U V) (typ_arrow S T) ->
-  E |= t2 ~: typ_arrow_closed U V ->
-  E |= trm_app t1 t2 ~: typ_arrow_closed S T.
+  E |= t1 ~: typ_stoic (typ_arrow U V) (typ_arrow S T) ->
+  E |= t2 ~: typ_stoic U V ->
+  E |= trm_app t1 t2 ~: typ_stoic S T.
 
 (* ********************************************************************** *)
 (** ** Statement of theorems *)
@@ -198,15 +198,15 @@ Inductive capsafe: typ -> Prop :=
  | capsafe_top: capsafe typ_top
  | capsafe_top_pure: capsafe typ_top_pure
  | capsafe_base: capsafe typ_base
- | capsafe_eff_any_closed: forall S T, caprod S -> capsafe (typ_arrow_closed S T)
- | capsafe_any_safe_closed: forall S T, capsafe T -> capsafe (typ_arrow_closed S T)
- | capsafe_eff_any: forall S T, caprod S -> capsafe (typ_arrow S T)
- | capsafe_any_safe: forall S T, capsafe T -> capsafe (typ_arrow S T)
+ | capsafe_eff_any: forall S T, caprod S -> capsafe (typ_stoic S T)
+ | capsafe_any_safe: forall S T, capsafe T -> capsafe (typ_stoic S T)
+ | capsafe_eff_any_free: forall S T, caprod S -> capsafe (typ_arrow S T)
+ | capsafe_any_safe_free: forall S T, capsafe T -> capsafe (typ_arrow S T)
 
 with caprod: typ -> Prop :=
  | caprod_eff: caprod typ_eff
- | caprod_safe_eff_closed: forall S T, capsafe S -> caprod T -> caprod (typ_arrow_closed S T)
- | caprod_safe_eff: forall S T, capsafe S -> caprod T -> caprod (typ_arrow S T).
+ | caprod_safe_eff: forall S T, capsafe S -> caprod T -> caprod (typ_stoic S T)
+ | caprod_safe_eff_free: forall S T, capsafe S -> caprod T -> caprod (typ_arrow S T).
 
 Inductive healthy: ctx -> Prop :=
   | healthy_empty: healthy empty
@@ -219,7 +219,7 @@ Definition effect_safety_no_capability := forall E, healthy E ->
 Definition effect_safety_arrow_closed := forall E t1 t2 T, healthy E ->
   pure E = E ->
   typing E (trm_app t1 t2) T  ->
-  exists S1 S2, typing E t1 (typ_arrow_closed S1 S2).
+  exists S1 S2, typing E t1 (typ_stoic S1 S2).
 
 (* ********************************************************************** *)
 (* ********************************************************************** *)
@@ -534,9 +534,9 @@ Qed.
 (** ** subtyping properties *)
 
 Lemma sub_arrow_closed_inv: forall T U1 U2,
-  sub T (typ_arrow_closed U1 U2) ->
-  exists S1 S2, T = typ_arrow_closed S1 S2 /\ sub U1 S1 /\ sub S2 U2.
-Proof. intros. gen_eq S: (typ_arrow_closed U1 U2). gen U1 U2.
+  sub T (typ_stoic U1 U2) ->
+  exists S1 S2, T = typ_stoic S1 S2 /\ sub U1 S1 /\ sub S2 U2.
+Proof. intros. gen_eq S: (typ_stoic U1 U2). gen U1 U2.
   inductions H; intros; substs; tryfalse; jauto.
   forwards~ : IHsub2 U1 U2. destruct H1 as [M1 [M2 H1]].
     forwards~ : IHsub1 M1 M2; jauto.
@@ -545,7 +545,7 @@ Qed.
 
 Lemma sub_arrow_inv: forall T U1 U2,
   sub T (typ_arrow U1 U2) ->
-  exists S1 S2, (T = typ_arrow S1 S2 \/ T = typ_arrow_closed S1 S2) /\ sub U1 S1 /\ sub S2 U2.
+  exists S1 S2, (T = typ_arrow S1 S2 \/ T = typ_stoic S1 S2) /\ sub U1 S1 /\ sub S2 U2.
 Proof. intros.
   gen_eq S: (typ_arrow U1 U2).  gen U1 U2.
   inductions H; intros; substs; tryfalse; jauto.
@@ -564,21 +564,21 @@ Proof. intros. lets: sub_arrow_inv H. destruct H0 as [S3 [S4 [H1 [H2 H3]]]].
 Qed.
 
 Lemma sub_arrow_closed_inv_sub: forall S1 S2 U1 U2,
-  sub (typ_arrow_closed S1 S2) (typ_arrow_closed U1 U2) ->
+  sub (typ_stoic S1 S2) (typ_stoic U1 U2) ->
   sub U1 S1 /\ sub S2 U2.
 Proof. intros. lets: sub_arrow_closed_inv H. destruct H0 as [S3 [S4 [H1 [H2 H3]]]].
   inversions* H1.
 Qed.
 
 Lemma sub_arrow_mixed_inv_sub: forall S1 S2 U1 U2,
-  sub (typ_arrow_closed S1 S2) (typ_arrow U1 U2) ->
+  sub (typ_stoic S1 S2) (typ_arrow U1 U2) ->
   sub U1 S1 /\ sub S2 U2.
 Proof. intros. lets: sub_arrow_inv H. destruct H0 as [S3 [S4 [H1 [H2 H3]]]].
   destruct H1 as [H1 | H1]; inversions* H1.
 Qed.
 
 Lemma sub_arrow_mixed_inv_false: forall S1 S2 U1 U2,
-  sub (typ_arrow S1 S2) (typ_arrow_closed U1 U2) -> False.
+  sub (typ_arrow S1 S2) (typ_stoic U1 U2) -> False.
 Proof. intros. lets: sub_arrow_closed_inv H. false* H0. Qed.
 
 Lemma sub_base_eq: forall S, sub S typ_base -> S = typ_base.
@@ -838,13 +838,13 @@ Lemma healthy_env_term_capsafe: forall E t T,
   capsafe T.
 Proof. intros. inductions H0; jauto.
   pick_fresh x. forwards~ : H1 x. destruct* (capsafe_decidable V).
-    apply capsafe_any_safe. apply* (H2 x).
+    apply capsafe_any_safe_free. apply* (H2 x).
       apply* healthy_push.
-      apply capsafe_eff_any. apply* not_capsafe_caprod.
+      apply capsafe_eff_any_free. apply* not_capsafe_caprod.
   pick_fresh x. forwards~ : H1 x. destruct* (capsafe_decidable V).
-    apply capsafe_any_safe_closed. apply* (H2 x).
+    apply capsafe_any_safe. apply* (H2 x).
       applys~ healthy_push. apply* healthy_closed.
-      apply capsafe_eff_any_closed. apply* not_capsafe_caprod.
+      apply capsafe_eff_any. apply* not_capsafe_caprod.
   forwards~ : IHtyping1 H. forwards~ : IHtyping2 H. inversions* H0.
     lets*: capsafe_not_caprod S.
   forwards~ : capsafe_sub H1.
@@ -858,7 +858,7 @@ Qed.
 Lemma effect_polymorphism: forall E t T1 T2,
   healthy E -> pure E = E ->
   E |= t ~: typ_arrow T1 T2 ->
-  E |= t ~: typ_arrow_closed T1 T2.
+  E |= t ~: typ_stoic T1 T2.
 Proof. intros E t T1 T2 H Hc Ha. inductions Ha.
   rewrite <- Hc in H0. lets: pure_closed H0. false.
   rewrite <- Hc in H0. apply* typing_abs_closed.
@@ -874,7 +874,7 @@ Proof. intros E t T1 T2 H Hc Ha. inductions Ha.
 
   lets: sub_arrow_inv H0. destruct H1 as [S1 [S2 [H3 [H4 H5]]]].
     destruct H3. substs. eapply typing_sub; auto.
-    assert (sub S (typ_arrow_closed T1 T2)) by (substs; auto).
+    assert (sub S (typ_stoic T1 T2)) by (substs; auto).
     apply typing_sub with S; auto.
 Qed.
 
