@@ -20,7 +20,7 @@ Inductive typ : Set :=
   | typ_fvar  : var -> typ
   | typ_base  : typ
   | typ_eff   : typ
-  | typ_arrow : typ -> typ -> typ
+  | typ_stoic : typ -> typ -> typ
   | typ_all   : typ -> typ -> typ.
 
 (** Representation of pre-terms *)
@@ -42,7 +42,7 @@ Fixpoint open_tt_rec (K : nat) (U : typ) (T : typ) {struct T} : typ :=
   | typ_fvar X      => typ_fvar X
   | typ_base        => typ_base
   | typ_eff         => typ_eff
-  | typ_arrow T1 T2 => typ_arrow (open_tt_rec K U T1) (open_tt_rec K U T2)
+  | typ_stoic T1 T2 => typ_stoic (open_tt_rec K U T1) (open_tt_rec K U T2)
   | typ_all T1 T2   => typ_all (open_tt_rec K U T1) (open_tt_rec (S K) U T2)
   end.
 
@@ -91,10 +91,10 @@ Inductive type : typ -> Prop :=
       type (typ_fvar X)
   | type_base: type typ_base
   | type_eff: type typ_eff
-  | type_arrow : forall T1 T2,
+  | type_stoic : forall T1 T2,
       type T1 ->
       type T2 ->
-      type (typ_arrow T1 T2)
+      type (typ_stoic T1 T2)
   | type_all : forall L T1 T2,
       type T1 ->
       (forall X, X \notin L -> type (T2 open_tt_var X)) ->
@@ -154,10 +154,10 @@ Inductive wft : env -> typ -> Prop :=
   | wft_var : forall U E X,
       binds X (bind_sub U) E ->
       wft E (typ_fvar X)
-  | wft_arrow : forall E T1 T2,
+  | wft_stoic : forall E T1 T2,
       wft E T1 ->
       wft E T2 ->
-      wft E (typ_arrow T1 T2)
+      wft E (typ_stoic T1 T2)
   | wft_all : forall L E T1 T2,
       wft E T1 ->
       (forall X, X \notin L ->
@@ -200,7 +200,7 @@ Inductive sub : env -> typ -> typ -> Prop :=
   | sub_arrow : forall E S1 S2 T1 T2,
       sub E T1 S1 ->
       sub E S2 T2 ->
-      sub E (typ_arrow S1 S2) (typ_arrow T1 T2)
+      sub E (typ_stoic S1 S2) (typ_stoic T1 T2)
   | sub_all : forall L E S1 S2 T1 T2,
       sub E T1 S1 ->
       (forall X, X \notin L ->
@@ -233,7 +233,7 @@ Definition  closed_typ(E: env)(T: typ)  := match T with
   | typ_base            => true
   | typ_top             => true
   | typ_eff             => false
-  | typ_arrow _ _       => true
+  | typ_stoic _ _       => true
   | typ_all _ _         => true
   end.
 
@@ -254,13 +254,13 @@ Inductive typing : env -> trm -> typ -> Prop :=
       okt E ->
       binds x (bind_typ T) E ->
       typing E (trm_fvar x) T
-  | typing_abs: forall L E V e1 T1,
+  | typing_stoic: forall L E V e1 T1,
       okt E ->
       (forall x, x \notin L ->
         typing ((pure E) & x ~: V) (e1 open_ee_var x) T1) ->
-      typing E (trm_abs V e1) (typ_arrow V T1)
+      typing E (trm_abs V e1) (typ_stoic V T1)
   | typing_app : forall T1 E e1 e2 T2,
-      typing E e1 (typ_arrow T1 T2) ->
+      typing E e1 (typ_stoic T1 T2) ->
       typing E e2 T1 ->
       typing E (trm_app e1 e2) T2
   | typing_tabs : forall L E V e1 T1,
@@ -349,8 +349,8 @@ Inductive capsafe: env -> typ -> Prop :=
  | capsafe_var: forall E U X, okt E -> binds X (bind_sub U) E ->
                               capsafe E U ->
                               capsafe E (typ_fvar X)
- | capsafe_eff_any: forall E S T, wft E T -> caprod E S -> capsafe E (typ_arrow S T)
- | capsafe_any_safe: forall E S T, wft E S -> capsafe E T -> capsafe E (typ_arrow S T)
+ | capsafe_eff_any: forall E S T, wft E T -> caprod E S -> capsafe E (typ_stoic S T)
+ | capsafe_any_safe: forall E S T, wft E S -> capsafe E T -> capsafe E (typ_stoic S T)
  | capsafe_all: forall L E U T, okt E -> wft E (typ_all U T) ->
                                 (forall V X, sub E V U -> X \notin L ->
                                              capsafe (E & X ~<: V) (T open_tt_var X)) ->
@@ -361,7 +361,7 @@ with caprod: env -> typ -> Prop :=
  | caprod_var: forall E U X, okt E -> binds X (bind_sub U) E ->
                              caprod E U ->
                              caprod E (typ_fvar X)
- | caprod_safe_eff: forall E S T, capsafe E S -> caprod E T -> caprod E (typ_arrow S T)
+ | caprod_safe_eff: forall E S T, capsafe E S -> caprod E T -> caprod E (typ_stoic S T)
  | caprod_all: forall L E U V T, wft E (typ_all U T) -> sub E V U ->
                                  (forall X, X \notin L ->
                                             caprod (E & X ~<: V) (T open_tt_var X)) ->
@@ -369,11 +369,11 @@ with caprod: env -> typ -> Prop :=
 
 Inductive healthy: env -> Prop :=
  | healthy_empty: healthy empty
- | healthy_push_x: forall x E T, capsafe E T ->
+ | healthy_typ: forall x E T, capsafe E T ->
                                  healthy E ->
                                  x # E ->
                                  healthy (E & x ~: T)
- | healthy_push_X: forall X T E, healthy E ->
+ | healthy_tvar: forall X T E, healthy E ->
                                  wft E T ->
                                  X # E ->
                                  healthy (E &  X ~<: T).
@@ -395,7 +395,7 @@ Fixpoint fv_tt (T : typ) {struct T} : vars :=
   | typ_eff         => \{}
   | typ_bvar J      => \{}
   | typ_fvar X      => \{X}
-  | typ_arrow T1 T2 => (fv_tt T1) \u (fv_tt T2)
+  | typ_stoic T1 T2 => (fv_tt T1) \u (fv_tt T2)
   | typ_all T1 T2   => (fv_tt T1) \u (fv_tt T2)
   end.
 
@@ -432,7 +432,7 @@ Fixpoint subst_tt (Z : var) (U : typ) (T : typ) {struct T} : typ :=
   | typ_eff         => typ_eff
   | typ_bvar J      => typ_bvar J
   | typ_fvar X      => If X = Z then U else (typ_fvar X)
-  | typ_arrow T1 T2 => typ_arrow (subst_tt Z U T1) (subst_tt Z U T2)
+  | typ_stoic T1 T2 => typ_stoic (subst_tt Z U T1) (subst_tt Z U T2)
   | typ_all T1 T2   => typ_all (subst_tt Z U T1) (subst_tt Z U T2)
   end.
 
@@ -2171,7 +2171,7 @@ Proof.
       forwards*: (okt_push_typ_inv H1).
     specializes H1 y. destructs~ H1.
     pick_fresh y. specializes H1 y. destructs~ H1.
-      apply* wft_arrow.
+      apply* wft_stoic.
       apply* wft_pure.
       apply* wft_pure.
       rewrite <- (@concat_empty_r bind (pure E)).
@@ -2534,7 +2534,7 @@ Lemma typing_weakening : forall E F G e T,
 Proof.
   introv Typ. gen F. inductions Typ; introv Ok.
   apply* typing_var. apply* binds_weaken.
-  apply_fresh* typing_abs as x.
+  apply_fresh* typing_stoic as x.
     forwards~ : pure_dist_weaken H Ok. destruct H2 as [M [N H2]]. destructs H2.
     rewrite H2. rewrite <- concat_assoc. apply* H1.
     rewrite H3. rewrite* concat_assoc.
@@ -2566,7 +2566,7 @@ Proof. introv Typ Ok. inductions Typ.
     apply* binds_weaken. apply* binds_concat_left.
     apply binds_concat_right. apply* binds_pure.
     autos* ok_concat_inv_l ok_concat_inv_r ok_from_okt.
-  apply_fresh typing_abs as x. auto.
+  apply_fresh typing_stoic as x. auto.
     forwards~ : pure_dist_weaken_pure2 E F G. destruct H2 as [M [N H2]].
       destruct H2. destruct H3. destructs H4.
     rewrite H2. rewrite <- concat_assoc. apply* H1.
@@ -2633,7 +2633,7 @@ Proof. introv Sub Seq Ok1 Typ. gen_eq E': (E & X ~<: Q & F). gen E F G.
       rewrite concat_empty_r, concat_assoc. auto.
     apply binds_concat_right. apply binds_subseq with F; auto.
       eapply ok_concat_inv_r, ok_from_okt. eauto.
-  apply_fresh* typing_abs as y.
+  apply_fresh* typing_stoic as y.
     forwards~ : pure_dist_narrow H Ok1 Sub Seq.
     destruct H2 as [M [N H2]]. destruct H2. destructs H3.
     rewrite H3. forwards~ : H1 y (pure E0) (M & y ~: V) (N & y ~: V).
@@ -2679,7 +2679,7 @@ Proof. introv Sub Typ. destructs (typing_regular Typ).
   forwards~ : typing_narrowing_general Sub Ok Typ. apply subseq_refl.
 Qed.
 
-Lemma typing_abs_closed : forall E S e T,
+Lemma typing_stoic_closed : forall E S e T,
   typing E (trm_abs S e) T -> closed_typ E T = true.
 Proof. introv Typ. inductions Typ; auto.
   apply sub_closed_left with S0; auto.
@@ -2696,7 +2696,7 @@ Lemma typing_strengthen_env: forall E u U,
   typing E u U ->
   typing (pure E) u U.
 Proof. introv Val Typ. inductions Typ; try solve [inversion Val].
-  apply_fresh* typing_abs as y. apply* okt_pure. rewrite* pure_eq.
+  apply_fresh* typing_stoic as y. apply* okt_pure. rewrite* pure_eq.
   apply_fresh* typing_tabs as y. apply* okt_pure. rewrite* pure_eq.
   apply typing_sub with S. apply* IHTyp. apply* sub_pure.
 Qed.
@@ -2845,7 +2845,7 @@ Proof.
   case_var.
     binds_get H0. apply_empty* typing_weakening.
     binds_cases H0; apply* typing_var.
-  apply_fresh* typing_abs as y.
+  apply_fresh* typing_stoic as y.
     rewrite* subst_ee_open_ee_var.
     forwards~ Inv: pure_dist_middle_typ E F x U.
     destruct Inv as [[N Inv] | [N Inv]]; destructs Inv.
@@ -2964,7 +2964,7 @@ Proof.
     apply binds_concat_left_ok; auto. apply ok_remove with (Z ~<: Q); auto.
     apply binds_concat_right. apply binds_subseq with F; auto.
     apply (ok_concat_inv_r (ok_from_okt Ok)).
-  apply_fresh* typing_abs as y.
+  apply_fresh* typing_stoic as y.
     unsimpl (subst_tb Z P (bind_typ V)).
     rewrite* subst_te_open_ee_var.
     forwards~ Map: pure_map H Sub Seq. destruct Map as [M [N Map]]. destructs Map.
@@ -3041,7 +3041,7 @@ Qed.
 
 Lemma typing_inv_abs : forall E S1 e1 T,
   typing E (trm_abs S1 e1) T ->
-  forall U1 U2, sub E T (typ_arrow U1 U2) ->
+  forall U1 U2, sub E T (typ_stoic U1 U2) ->
      sub E U1 S1
   /\ exists S2, exists L, forall x, x \notin L ->
      typing (E & x ~: S1) (e1 open_ee_var x) S2 /\ sub E S2 U2.
@@ -3120,11 +3120,11 @@ Qed.
 (** Canonical Forms (14) *)
 
 Lemma canonical_form_abs : forall t U1 U2,
-  value t -> typing empty t (typ_arrow U1 U2) ->
+  value t -> typing empty t (typ_stoic U1 U2) ->
   exists V, exists e1, t = trm_abs V e1.
 Proof.
   introv Val Typ. gen_eq E: (@empty bind).
-  gen_eq T: (typ_arrow U1 U2). gen U1 U2.
+  gen_eq T: (typ_stoic U1 U2). gen U1 U2.
   induction Typ; introv EQT EQE;
   try solve [ inversion Val | inversion EQT | eauto ].
   subst. inversions* H. false* binds_empty_inv.
@@ -3177,7 +3177,7 @@ Qed.
 
 
 Fixpoint degree_typ (T: typ) := match T with
-  | typ_arrow T1 T2 => max (degree_typ T1) (degree_typ T2)
+  | typ_stoic T1 T2 => max (degree_typ T1) (degree_typ T2)
   | typ_all _ T => S (degree_typ T)
   | _ => O
   end.
@@ -3191,7 +3191,7 @@ Fixpoint degree_trm (t: trm) := match t with
   end.
 
 Lemma degree_typ_parent_zero: forall S T,
-  degree_typ (typ_arrow S T) = 0 ->
+  degree_typ (typ_stoic S T) = 0 ->
   degree_typ S = 0 /\ degree_typ T = 0.
 Proof. intros. simpl in H. destruct (degree_typ S); destruct (degree_typ T); eauto.
   simpl in H. inversion H.
@@ -3470,11 +3470,11 @@ Proof. introv Sub H. inductions Sub; auto.
   destructs (healthy_push_typ_inv H). auto.
   destruct b.
     destructs (healthy_push_sub_inv H0).
-      forwards~ : IHSub.  apply healthy_push_X. auto.
+      forwards~ : IHSub.  apply healthy_tvar. auto.
       apply wft_tvar with F; auto. apply ok_from_okt, healthy_regular. auto.
       apply subseq_fresh with F; auto.
     destructs (healthy_push_typ_inv H0).
-      forwards~ : IHSub. apply healthy_push_x; auto.
+      forwards~ : IHSub. apply healthy_typ; auto.
       apply capsafe_tvar with F; auto; try apply* healthy_regular.
       apply subseq_fresh with F; auto.
 Qed.
@@ -3571,7 +3571,7 @@ Proof. introv Deg H Typ. inductions Typ; intros; autos.
     destruct (capsafe_decidable OkE WfV). simpls.
       apply* capsafe_any_safe. apply* wft_pure. forwards~ : H2 x.
         rewrite* <- degree_trm_eq_open_ee.
-      apply healthy_push_x. auto. apply healthy_subseq with E; auto. apply subseq_pure.
+      apply healthy_typ. auto. apply healthy_subseq with E; auto. apply subseq_pure.
       apply subseq_fresh with E. apply subseq_pure. auto.
       apply capsafe_tvar with (pure E & x ~: V); auto. rewrite tvar_push_typ, <-tvar_pure; auto.
       lets*: not_capsafe_caprod H4.
@@ -3602,7 +3602,7 @@ Proof. introv Deg H Typ. gen t E T. inductions k; intros.
     destruct (capsafe_decidable OkE WfV). simpls.
       apply* capsafe_any_safe. apply* wft_pure. forwards~ : H2 x.
         rewrite* <- degree_trm_eq_open_ee.
-      apply healthy_push_x. auto. apply healthy_subseq with E; auto. apply subseq_pure.
+      apply healthy_typ. auto. apply healthy_subseq with E; auto. apply subseq_pure.
       apply subseq_fresh with E. apply subseq_pure. auto.
       apply capsafe_tvar with (pure E & x ~: V); auto. rewrite tvar_push_typ, <-tvar_pure; auto.
       lets*: not_capsafe_caprod H4.
@@ -3621,7 +3621,7 @@ Proof. introv Deg H Typ. gen t E T. inductions k; intros.
     assert (typing (E & X ~<: V0) (e1 open_te_var X) (T1 open_tt_var X)) as HII.
       rewrite <- concat_empty_l at 1. rewrite concat_assoc.
       apply* typing_weakening_pure; rewrite* concat_empty_l.
-    forwards~ : IHk HII. rewrite* <- degree_trm_eq_open_te. apply* healthy_push_X.
+    forwards~ : IHk HII. rewrite* <- degree_trm_eq_open_te. apply* healthy_tvar.
   simpl in Deg. forwards~ : IHTyp. applys~ capsafe_all_open_tt H0 H1.
   apply* capsafe_sub.
 Qed.
