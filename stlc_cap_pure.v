@@ -17,7 +17,7 @@ Require Import LibLN.
 Inductive typ : Set :=
   | typ_base         : typ
   | typ_eff          : typ
-  | typ_arrow_closed : typ -> typ -> typ.
+  | typ_stoic        : typ -> typ -> typ.
 
 Inductive trm : Set :=
   | trm_bvar : nat -> trm
@@ -94,7 +94,7 @@ Definition ctx := env typ.
 Fixpoint closed_typ(t: typ) := match t with
   | typ_base            => true
   | typ_eff             => false
-  | typ_arrow_closed U V => true   (* pure lambda abstraction *)
+  | typ_stoic U V       => true   (* pure lambda abstraction *)
   end.
 
 Fixpoint pure(E: ctx) := match E with
@@ -115,13 +115,13 @@ Inductive typing : ctx -> trm -> typ -> Prop :=
       ok E ->
       binds x T E ->
       E |= (trm_fvar x) ~: T
-  | typing_abs_closed: forall L E V e1 T1,
+  | typing_stoic: forall L E V e1 T1,
       ok E ->
       (forall x, x \notin L ->
          ((pure E) & x ~ V) |= (e1 ^ x) ~: T1) ->
-      E |= (trm_abs V e1) ~: (typ_arrow_closed V T1)
-  | typing_app_closed : forall S T E t1 t2,
-      E |= t1 ~: (typ_arrow_closed S T) ->
+      E |= (trm_abs V e1) ~: (typ_stoic V T1)
+  | typing_app : forall S T E t1 t2,
+      E |= t1 ~: (typ_stoic S T) ->
       E |= t2 ~: S ->
       E |= (trm_app t1 t2) ~: T
 
@@ -146,12 +146,12 @@ Definition progress_statement := forall t T,
 
 Inductive capsafe: typ -> Prop :=
 | capsafe_base: capsafe typ_base
-| capsafe_eff_any: forall S T, caprod S -> capsafe (typ_arrow_closed S T)
-| capsafe_any_safe: forall S T, capsafe T -> capsafe (typ_arrow_closed S T)
+| capsafe_eff_any: forall S T, caprod S -> capsafe (typ_stoic S T)
+| capsafe_any_safe: forall S T, capsafe T -> capsafe (typ_stoic S T)
 
 with caprod: typ -> Prop :=
  | caprod_eff: caprod typ_eff
- | caprod_safe_eff: forall S T, capsafe S -> caprod T -> caprod (typ_arrow_closed S T).
+ | caprod_safe_eff: forall S T, capsafe S -> caprod T -> caprod (typ_stoic S T).
 
 Inductive healthy: ctx -> Prop :=
   | healthy_empty: healthy empty
@@ -468,7 +468,7 @@ Proof.
   introv Typ. gen_eq H: (E & G). gen E F G.
   induction Typ; intros; subst.
   apply* typing_var. apply* binds_weaken.
-  apply_fresh* typing_abs_closed as y.
+  apply_fresh* typing_stoic as y.
     repeat(rewrite pure_dist in *). rewrite <- concat_assoc.
     apply* H1. rewrite* concat_assoc.
     rewrite concat_assoc. apply ok_push.
@@ -479,7 +479,7 @@ Proof.
       branch 1. lets*: pure_dom_subset E0.
       branch 2. lets*: pure_dom_subset F.
       branch 3. lets*: pure_dom_subset G.
-  apply* typing_app_closed.
+  apply* typing_app.
 Qed.
 
 Lemma typing_weakening_env : forall E F G e T,
@@ -491,17 +491,17 @@ Proof. intros. inductions H.
     apply* binds_weaken. apply* binds_concat_left.
     apply binds_concat_right. apply* pure_binds.
     autos* ok_concat_inv_l ok_concat_inv_r.
-  apply_fresh typing_abs_closed as x. auto.
+  apply_fresh typing_stoic as x. auto.
     repeat(rewrite pure_dist in *). rewrite pure_eq in *.
     apply_ih_bind* H1. rewrite* pure_eq. forwards~ : H0 x.
-  apply* typing_app_closed.
+  apply* typing_app.
 Qed.
 
 Lemma typing_strengthen_env: forall E u U, value u -> typing E u U ->
   closed_typ U = true -> typing (pure E) u U.
 Proof. intros. induction H0; simpls; inversion H1.
   apply typing_var. apply* pure_ok. apply* pure_binds_in.
-  apply_fresh* typing_abs_closed as y. apply* pure_ok. rewrite* pure_eq.
+  apply_fresh* typing_stoic as y. apply* pure_ok. rewrite* pure_eq.
   inversion H.
 Qed.
 
@@ -516,7 +516,7 @@ Proof.
   case_var.
     binds_get H0. apply_empty* typing_weaken.
     binds_cases H0; apply* typing_var.
-  apply_fresh typing_abs_closed as y. autos.
+  apply_fresh typing_stoic as y. autos.
     rewrite* subst_open_var.
     (* if U is closed, then use IH; else  x is free in e1; *)
     repeat(rewrite pure_dist in *). remember (closed_typ U) as b. destruct b.
@@ -535,7 +535,7 @@ Proof.
         apply H3. lets*: pure_dom_subset F.
         rewrite in_singleton in H5. substs. apply* Fry. repeat(rewrite in_union).
           autos* in_singleton_self.
-  apply* typing_app_closed.
+  apply* typing_app.
 Qed.
 
 Lemma preservation_result : preservation_statement.
@@ -553,8 +553,8 @@ Proof.
       apply* typing_weakening_env. rewrite* concat_empty_l.
       rewrite* concat_empty_l.
 
-  apply* typing_app_closed.
-  apply* typing_app_closed.
+  apply* typing_app.
+  apply* typing_app.
 Qed.
 
 Lemma progress_result : progress_statement.
