@@ -1,30 +1,29 @@
 # Typed Closure
 
-The purpose of this project is to construct a sound and effect-safe
-type-and-effect system based on *capabilities*.
+The purpose of this project is to explore the theoretical foundation
+as well as conceptual possibilities of *capability-based effect
+systems*.
 
-The core idea is to introduce *capability types* and *effect-closed
-functions* explicitly in the system.  Compared to ordinary functions,
-*effect-closed functions* are not allowed to capture variables of
-capability types in the lexial scope, as well as variables of ordinary
-function types.
+The core idea is that capabilities are required to make side effects,
+thus by tracking capabilities in the type system it's possible to
+track side effects in the type system. To make sure capabilities are
+passed by function parameters instead of being captured from the
+environment, we need to introduce *stoic functions*, which can't
+capture variables of capability types in the environment.
 
 ## Motivation
 
-Compared to existing effect systems in the literature(Gifford and
-Lucassen, [1986](http://dl.acm.org/citation.cfm?id=319848),
-[1988](http://dl.acm.org/citation.cfm?id=73564)), capability-based
-effect systems have the advantage of more succinct syntax and better
-handling of effect polymorphism. Thus capability-based effect systems
-stand a better chance to be adopted by programmers.
+Compared to existing type-and-effect systems(Gifford and Lucassen,
+[1986](http://dl.acm.org/citation.cfm?id=319848),
+[1988](http://dl.acm.org/citation.cfm?id=73564)) and monad-based
+effect systems, capability-based effect systems have the advantage of
+more succinct syntax and better handling of effect polymorphism. Thus
+capability-based effect systems stand a better chance to be adopted by
+programmers.
 
-In a capability-based effect system, effects can be controlled via
-effect-closed functions. Effect-closed functions cannot capture any
-capability variables in the outer lexical scope or variables of
-ordinary function types that might have potential side effects. To
-have side effects, the capability instances or ordinary functions must
-be passed in as parameters by the caller, thus visible from type
-signature and can be controlled by the caller.
+In a capability-based effect system, we need to introduce *stoic
+functions*, which can't capture variables of capability types in the
+environment.
 
 For example, in the following example, the type system would report an
 error on `foo`, as it's not allowed to capture any capability
@@ -32,7 +31,7 @@ variables in the environment:
 
 ``` scala
 def map(xs: List[Int], f: Int => Int): List[Int]
-def pmap(xs: List[Int], f: Int -> Int): List[Int]                //  => means f is effect-closed
+def pmap(xs: List[Int], f: Int -> Int): List[Int]                //  => means f is stoic function type
 def print(x: Any)(implicit c: IO): ()
 
 def bar(xs: List[Int])(implicit c: IO) = {
@@ -72,40 +71,43 @@ which particularly excludes variables of ordinary function types,
 variables of capability types and so on. Different systems may differ
 in details about what types can be kept in the *pure environment*,
 though they must all be *effect-safe*. Note that the pure environment
-may contain variables of ill types (un-inhabitable), such as `All
-X.X`, `B -> E` and so on. These ill types doesn't pose a problem, as
-from absurdity everything follows (*ex falso quodlibet*).
+may contain variables of non-inhabitable types, such as `All X.X`, `B
+-> E` and so on. These non-inhabitable types doesn't pose a problem,
+as from absurdity everything follows (*ex falso quodlibet*).
 
-An **effect-closed term abstraction** is a term abstraction that can
-be typed in *pure environment*. Its type is represented by `A -> B`.
+A **stoic function** is a function that can be typed in *pure
+environment*. Its type is represented by `A -> B`.
 
-An **effect-closed type abstraction** is a term that can be typed in
-*pure environment*. Its type is represented by `All_Closed X.T`.
+A **free function** is a function which can capture anything in the
+lexical scope.  Its type is represented by `A => B`.
 
-An **ordinary term abstraction** is a term abstraction which can
-capture anything in the lexical scope.  Its type is represented by `A
-=> B`.
+A type T is **inhabitable** if there exists a value v which can be
+typed as T under the environment {x:B, y:E} (note: variables are
+values).
 
-An **ordinary type abstraction** is a type abstraction which can
-capture anything in the lexical scope. Its type is represented by `All
-X.T`.
+An **inhabitable environment** is an environment with only variables
+of inhabitable types.
 
-A **healthy environment** is a *pure environment* where it does not
-contain variables of ill types (un-inhabitable), such as `All X.X`, `B
--> E` and so on. As a meta-theory, it's important to prove that **the
-formulation of healthy environment should only reject ill
-types(un-inhabitable)** in addition to types excluded by *pure
-environment*. It's incorrect to reject inhabitable types, but it's OK
-to keep ill types, as long as effect safety can be proved. For
-example, in our formulation the presence of the un-inhabitable type `E
--> B -> E` in healthy environment does not endanger effect safety.
+A capability-based effect system is **effect-safe** if from a **pure**
+and **inhabitable** environment (1) it’s impossible to construct a
+term of type `E`; (2) it's impossible to construct an application
+where the first term is not effect-closed.
 
-A capability-based type-and-effect system is **effect-safe** if from a
-**healthy environment** (1) it’s impossible to construct a term of
-type `E`; (2) it's impossible to construct an application where the
-first term is not effect-closed; (3) it's impossible to construct a
-type application where the first term is not effect-closed.
+A **healthy environment** is a construct to help prove effect
+safety. The indented relation between "pure", "inhabitable" and
+"healthy" environment is as follows in order to reduce effect safety
+to healthy environments:
 
+> A pure and inhabitable environment is also a healthy (and pure)
+> environment.
+
+
+## Highlights
+
+- [STLC-Pure](stlc_cap_pure.v)
+- [STLC-Impure](stlc_cap_impure.v)
+- [F-Pure](f_cap_pure_v2.v)
+- [F-Impure](f_cap_impure.v)
 
 ## Steps
 
@@ -124,9 +126,10 @@ type application where the first term is not effect-closed.
 |  **Phase 3**                              |    **Pure Capability + Subtyping**                     |                     |
 |  [stlc_cap_sub_pure.v](stlc_cap_sub_pure.v) |    STLC + capabilities + subtyping                   |      Finished       |
 |  [fsub_cap_pure.v](fsub_cap_pure.v)       |    F<: + capabilities                                  |      Working        |
-|  **Phase 4**                              |    **Impure Capability + Subtyping**                   |                     |
+|  **Phase 4**                              |    **Impure Capability**                               |                     |
 |  [stlc_cap_impure.v](stlc_cap_impure.v)   |    STLC + capabilities + =>                            |      Finished       |
 |  [stlc_cap_impure_top.v](stlc_cap_impure_top.v)   |    STLC + capabilities + =>(two `Top`)         |      Finished       |
+|  [f_cap_impure.v](f_cap_impure.v)         |    F + capabilities + =>                               |      Finished       |
 |  fsub_cap_impure.v                        |    F<: + capabilities + =>                             |      Working        |
 
 
