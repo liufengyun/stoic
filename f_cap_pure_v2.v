@@ -255,6 +255,19 @@ Definition progress := forall e T,
   \/ exists e', red e e'.
 
 
+Inductive inhabitable: env -> Prop :=
+  | inhabitable_empty: inhabitable empty
+  | inhabitable_tvar: forall X E,
+                        inhabitable E ->
+                        X # E ->
+                        inhabitable (E & [:X:])
+  | inhabitable_typ: forall x y z t T E,
+                        inhabitable E ->
+                        value t ->
+                        typing (x ~: typ_base & y ~: typ_eff) t T ->
+                        z # E ->
+                        inhabitable (E & z ~: T).
+
 (* capsafe types are not capability producing, i.e. capable of creating an instance of E *)
 
 Inductive capsafe: typ -> Prop :=
@@ -280,7 +293,10 @@ Inductive healthy: env -> Prop :=
   | healthy_tvar: forall X E, healthy E ->
                               X # E -> healthy (E & [: X :]).
 
-(* effect safety : it's impossible to construct a term of typ_eff in pure environment  *)
+Definition inhabitable_pure_healthy_statement := forall E,
+  inhabitable E -> pure E = E -> healthy E.
+
+(* effect safety : it's impossible to construct a term of typ_eff in healthy environment  *)
 Definition effect_safety := forall E, healthy E ->
   ~exists e, typing E e typ_eff.
 
@@ -1064,6 +1080,19 @@ Hint Extern 1 (term ?e) =>
 
 (* ********************************************************************** *)
 (** * Properties of environment *)
+
+Lemma pure_closed: forall E x T, binds x (bind_typ T) (pure E) -> closed_typ T = true.
+Proof. intros. inductions E.
+  simpls. rewrite <- empty_def in H. false* binds_empty_inv.
+  destruct a. simpls. destruct b; rewrite cons_to_push in *.
+
+  destruct (binds_push_inv H); destruct H0. false. apply* IHE.
+
+  cases* (closed_typ t). destruct (binds_push_inv H); destruct H0.
+    inversions* H1.
+    apply* IHE.
+Qed.
+
 Lemma pure_dist: forall E F, pure (E & F) = pure E & pure F.
 Proof. rewrite concat_def. intros. gen E. induction F; intros E; autos.
   rewrite LibList.app_cons. destruct a. destruct b.
@@ -2006,4 +2035,20 @@ Proof. introv Typ Val. inductions Typ; auto.
     split; rewrite* (@subst_tt_intro X).
     applys~ capsafe_subst_tt_caprod (typ_stoic typ_base typ_eff).
   inversion Val.
+Qed.
+
+
+Theorem inhabitable_pure_healthy: inhabitable_pure_healthy_statement.
+Proof. introv In Pure. inductions In.
+  apply healthy_empty.
+  apply* healthy_tvar. apply IHIn.
+    rewrite <- ?cons_to_push in Pure. simpls. inversion Pure. rewrite* H1.
+  assert (Closed: closed_typ T = true).
+    applys~ pure_closed (E & z ~: T) z.
+    rewrite Pure. apply binds_tail.
+  forwards~ IH: inhabitable_capsafe H0. destruct IH.
+    rewrite pure_dist, pure_single_true in Pure; auto.
+      rewrite <- ?cons_to_push in Pure. inversion Pure. rewrite H4.
+      apply* healthy_typ.
+    substs. false*.
 Qed.

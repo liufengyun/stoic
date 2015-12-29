@@ -272,6 +272,19 @@ Definition progress := forall e T,
      value e
   \/ exists e', red e e'.
 
+Inductive inhabitable: env -> Prop :=
+  | inhabitable_empty: inhabitable empty
+  | inhabitable_tvar: forall X E,
+                        inhabitable E ->
+                        X # E ->
+                        inhabitable (E & [:X:])
+  | inhabitable_typ: forall x y z t T E,
+                        inhabitable E ->
+                        value t ->
+                        typing (x ~: typ_base & y ~: typ_eff) t T ->
+                        z # E ->
+                        inhabitable (E & z ~: T).
+
 
 (* capsafe types are not capability producing, i.e. capable of creating an instance of E *)
 
@@ -300,6 +313,9 @@ Inductive healthy: env -> Prop :=
                                     x # E -> healthy (E & x ~: T)
   | healthy_tvar: forall X E, healthy E ->
                                    X # E -> healthy (E & [: X :]).
+
+Definition inhabitable_pure_healthy_statement := forall E,
+  inhabitable E -> pure E = E -> healthy E.
 
 (* effect safety : it's impossible to construct a term of typ_eff in pure environment  *)
 Definition effect_safety_1 := forall E, healthy E ->
@@ -2231,4 +2247,19 @@ Proof. introv Typ Val. inductions Typ; auto.
     split; rewrite* (@subst_tt_intro X).
     applys~ capsafe_subst_tt_caprod (typ_stoic typ_base typ_eff).
   inversion Val.
+Qed.
+
+Theorem inhabitable_pure_healthy: inhabitable_pure_healthy_statement.
+Proof. introv In Pure. inductions In.
+  apply healthy_empty.
+  apply* healthy_tvar. apply IHIn.
+    rewrite <- ?cons_to_push in Pure. simpls. inversion Pure. rewrite* H1.
+  assert (Closed: closed_typ T = true).
+    applys~ pure_closed (E & z ~: T) z.
+    rewrite Pure. apply binds_tail.
+  forwards~ IH: inhabitable_capsafe H0. destruct IH.
+    rewrite pure_dist, pure_single_true in Pure; auto.
+      rewrite <- ?cons_to_push in Pure. inversion Pure. rewrite H4.
+      apply* healthy_typ.
+    substs. false*.
 Qed.
