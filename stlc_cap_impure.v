@@ -194,6 +194,16 @@ Definition progress_statement := forall t T,
      value t
   \/ exists t', t --> t'.
 
+Inductive inhabitable: ctx -> Prop :=
+  | inhabitable_empty: inhabitable empty
+  | inhabitable_push: forall x y z t T E,
+                        inhabitable E ->
+                        value t ->
+                        x ~ typ_base & y ~ typ_eff |= t ~: T ->
+                        z # E ->
+                        inhabitable (E & z ~ T).
+
+
 (* Capability-safe types are not capability producing, i.e. capable of
    creating an instance of E *)
 
@@ -214,6 +224,9 @@ Inductive healthy: ctx -> Prop :=
   | healthy_empty: healthy empty
   | healthy_push: forall x E T, capsafe T -> healthy E ->
                                 healthy (E & x ~ T).
+
+Definition inhabitable_pure_healthy_statement := forall E,
+  inhabitable E -> pure E = E -> healthy E.
 
 Definition effect_safety_no_capability := forall E, healthy E ->
   ~exists e, typing E e typ_eff.
@@ -908,4 +921,17 @@ Proof. introv Typ Val. inductions Typ; auto.
     left. apply* capsafe_sub. destruct S; try solve [inversion H0].
     destruct T; auto. false (sub_stoic_inv H).
     destruct T; auto. false (sub_stoic_inv H).
+Qed.
+
+Theorem inhabitable_pure_healthy: inhabitable_pure_healthy_statement.
+Proof. introv In Pure. inductions In.
+  apply healthy_empty.
+  assert (Closed: closed_typ T = true).
+    applys~ pure_closed (E & z ~ T) z.
+    rewrite Pure. apply binds_tail.
+  forwards~ IH: inhabitable_capsafe H0. destruct IH.
+    rewrite pure_dist, pure_single_true in Pure; auto.
+      rewrite <- ?cons_to_push in Pure. inversion Pure. rewrite H4.
+      apply* healthy_push.
+    substs. false*.
 Qed.
