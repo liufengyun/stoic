@@ -1,4 +1,4 @@
-# Typed Closure
+# Stoic
 
 The purpose of this project is to explore the theoretical foundation
 as well as conceptual possibilities of *capability-based effect
