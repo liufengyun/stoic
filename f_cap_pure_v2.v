@@ -254,10 +254,11 @@ Definition progress := forall e T,
      value e
   \/ exists e', red e e'.
 
+(* inhabitable environment *)
 Inductive primitive: env -> Prop :=
   | primitive_base: forall x y, primitive (x ~: typ_base & y ~: typ_eff)
-  | primitive_tvar: forall x X E, primitive E ->
-                                  primitive (E & [:X:] & x ~: (typ_fvar X)).
+  | primitive_tvar: forall X E, primitive E -> primitive (E & [:X:])
+  | primitive_typ: forall x X E, primitive E -> primitive (E & x ~: (typ_fvar X)).
 
 Inductive inhabitable: env -> Prop :=
   | inhabitable_empty: inhabitable empty
@@ -2012,6 +2013,7 @@ Proof. introv Prim Bd. inductions Prim.
   destruct (binds_push_inv Bd) as [Inv | Inv]; destruct Inv.
     inversions H0. auto.
     destructs (binds_single_inv H0). inversions H2. auto.
+  binds_cases Bd. auto.
   binds_cases Bd. auto. inversions EQ. auto.
 Qed.
 
@@ -2020,8 +2022,8 @@ Theorem primitive_pure_healthy: forall E,
 Proof. introv Prim. inductions Prim.
   rewrite pure_dist, pure_single_true, pure_single_false, concat_empty_r; auto.
     rewrite <- concat_empty_l. apply* healthy_typ. apply healthy_empty.
-  rewrite ?pure_dist, pure_single_true, pure_single_tvar; auto.
-    apply healthy_typ, healthy_tvar; auto.
+  rewrite ?pure_dist, pure_single_tvar; auto. apply* healthy_tvar.
+  rewrite ?pure_dist, pure_single_true; auto. apply* healthy_typ.
 Qed.
 
 Theorem inhabitable_capsafe: forall E t T,
