@@ -254,18 +254,21 @@ Definition progress := forall e T,
      value e
   \/ exists e', red e e'.
 
+Inductive primitive: env -> Prop :=
+  | primitive_base: forall x y, primitive (x ~: typ_base & y ~: typ_eff)
+  | primitive_tvar: forall x X E, primitive E ->
+                                  primitive (E & [:X:] & x ~: (typ_fvar X)).
 
 Inductive inhabitable: env -> Prop :=
   | inhabitable_empty: inhabitable empty
   | inhabitable_tvar: forall X E,
                         inhabitable E ->
-                        X # E ->
                         inhabitable (E & [:X:])
-  | inhabitable_typ: forall x y z t T E,
+  | inhabitable_typ: forall z t T E F,
                         inhabitable E ->
+                        primitive F ->
                         value t ->
-                        typing (x ~: typ_base & y ~: typ_eff) t T ->
-                        z # E ->
+                        typing F t T ->
                         inhabitable (E & z ~: T).
 
 (* capsafe types are not capability producing, i.e. capable of creating an instance of E *)
@@ -289,9 +292,9 @@ with caprod: typ -> Prop :=
 Inductive healthy: env -> Prop :=
   | healthy_empty: healthy empty
   | healthy_typ: forall x E T, capsafe T -> healthy E ->
-                               x # E -> healthy (E & x ~: T)
+                               healthy (E & x ~: T)
   | healthy_tvar: forall X E, healthy E ->
-                              X # E -> healthy (E & [: X :]).
+                              healthy (E & [: X :]).
 
 Definition inhabitable_pure_healthy_statement := forall E,
   inhabitable E -> pure E = E -> healthy E.
@@ -1768,7 +1771,7 @@ Lemma healthy_env_closed: forall E, healthy E -> pure E = E.
 Proof. intros. inductions H.
   rewrite empty_def. reflexivity.
   rewrite <- cons_to_push. simpls. lets: capsafe_closed_typ H.
-    rewrite* H2. rewrite* IHhealthy.
+    cases_if. rewrite* IHhealthy.
   rewrite <- cons_to_push. simpls. rewrite* IHhealthy.
 Qed.
 
@@ -1777,11 +1780,11 @@ Lemma healthy_env_capsafe : forall E S x, healthy E ->
 Proof. introv H Hb. inductions H.
   false* binds_empty_inv.
   destruct (binds_push_inv Hb).
-    destruct H2. inversions* H3.
-    destruct H2. autos.
-  destruct (binds_push_inv Hb).
     destruct H1. inversions* H2.
     destruct H1. autos.
+  destruct (binds_push_inv Hb).
+    destruct H0. inversions* H1.
+    destruct H0. autos.
 Qed.
 
 Lemma subst_tt_type_type_0: forall P Q T Z,
@@ -2001,52 +2004,68 @@ Qed.
 
 *)
 
-Theorem inhabitable_capsafe: forall x y t T,
-  typing (x ~: typ_base & y ~: typ_eff) t T -> value t ->
+Theorem primitive_capsafe: forall E x T,
+  primitive E ->
+  binds x (bind_typ T) E ->
   capsafe T \/ closed_typ T = false.
-Proof. introv Typ Val. inductions Typ; auto.
-  destruct (binds_push_inv H0) as [Inv | Inv]; destruct Inv.
-    inversions H2. auto.
-    destructs (binds_single_inv H2). inversions H4. auto.
+Proof. introv Prim Bd. inductions Prim.
+  destruct (binds_push_inv Bd) as [Inv | Inv]; destruct Inv.
+    inversions H0. auto.
+    destructs (binds_single_inv H0). inversions H2. auto.
+  binds_cases Bd. auto. inversions EQ. auto.
+Qed.
+
+Theorem primitive_pure_healthy: forall E,
+  primitive E -> healthy (pure E).
+Proof. introv Prim. inductions Prim.
+  rewrite pure_dist, pure_single_true, pure_single_false, concat_empty_r; auto.
+    rewrite <- concat_empty_l. apply* healthy_typ. apply healthy_empty.
+  rewrite ?pure_dist, pure_single_true, pure_single_tvar; auto.
+    apply healthy_typ, healthy_tvar; auto.
+Qed.
+
+Theorem inhabitable_capsafe: forall E t T,
+  primitive E ->
+  typing E t T -> value t ->
+  capsafe T \/ closed_typ T = false.
+Proof. introv Prim Typ Val. inductions Typ; auto.
+  apply* primitive_capsafe.
   pick_fresh z. forwards~ IH: H0 z.
     lets (Ok&_): (typing_regular IH). lets (_&Wf&_): (okt_push_typ_inv Ok).
     lets TypV: wft_type Wf. lets TypT1: wft_type (typing_wft IH).
     destruct (capsafe_decidable TypV) as [Case | Case].
     (* capsafe V -> healthy E -> capsafe T1 *)
-    rewrite pure_dist, pure_single_true, pure_single_false, concat_empty_r in IH; auto.
     forwards~ Hcap : healthy_env_term_capsafe IH.
-      rewrite <- concat_empty_l, concat_assoc. repeat(apply* healthy_typ). apply healthy_empty.
+      apply* healthy_typ. apply* primitive_pure_healthy.
     (* caprod V -> capsafe V -> T1 *)
     forwards~ Vcap : not_capsafe_caprod Case.
   inversion Val.
   pick_fresh X. forwards~ IH: H0 X.
-    assert (Typ: typing (x ~: typ_base & y ~: typ_eff) (trm_tabs e1) (typ_all T1))
+    assert (Typ: typing E (trm_tabs e1) (typ_all T1))
       by apply* typing_tabs.
     left. apply capsafe_all. apply (wft_type (typing_wft Typ)).
-    rewrite pure_dist, pure_single_true, pure_single_false, concat_empty_r in IH; auto.
     rewrite <- concat_empty_r in IH at 1.
     forwards~ Typ1: typing_through_subst_te typ_base IH.
     forwards~ Typ2: typing_through_subst_te (typ_stoic typ_base typ_eff) IH.
     rewrite map_empty, concat_empty_r in Typ1, Typ2.
     forwards~ Safe1 : healthy_env_term_capsafe Typ1. rewrite <- concat_empty_l.
-      apply* healthy_typ. apply healthy_empty.
+      rewrite concat_empty_l. apply* primitive_pure_healthy.
     forwards~ Safe2 : healthy_env_term_capsafe Typ2. rewrite <- concat_empty_l.
-      apply* healthy_typ. apply healthy_empty.
+      rewrite concat_empty_l. apply* primitive_pure_healthy.
     split; rewrite* (@subst_tt_intro X).
     applys~ capsafe_subst_tt_caprod (typ_stoic typ_base typ_eff).
   inversion Val.
 Qed.
 
-
 Theorem inhabitable_pure_healthy: inhabitable_pure_healthy_statement.
 Proof. introv In Pure. inductions In.
   apply healthy_empty.
   apply* healthy_tvar. apply IHIn.
-    rewrite <- ?cons_to_push in Pure. simpls. inversion Pure. rewrite* H1.
+    rewrite <- ?cons_to_push in Pure. simpls. inversion Pure. rewrite* H0.
   assert (Closed: closed_typ T = true).
     applys~ pure_closed (E & z ~: T) z.
     rewrite Pure. apply binds_tail.
-  forwards~ IH: inhabitable_capsafe H0. destruct IH.
+  forwards~ IH: inhabitable_capsafe H1. destruct IH.
     rewrite pure_dist, pure_single_true in Pure; auto.
       rewrite <- ?cons_to_push in Pure. inversion Pure. rewrite H4.
       apply* healthy_typ.
