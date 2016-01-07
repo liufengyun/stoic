@@ -194,6 +194,7 @@ Definition progress_statement := forall t T,
      value t
   \/ exists t', t --> t'.
 
+(* inhabitable env *)
 Inductive inhabitable: ctx -> Prop :=
   | inhabitable_empty: inhabitable empty
   | inhabitable_push: forall x y z t T E,
