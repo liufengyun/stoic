@@ -71,8 +71,8 @@ which particularly excludes variables of ordinary function types,
 variables of capability types and so on. Different systems may differ
 in details about what types can be kept in the *pure environment*,
 though they must all be *effect-safe*. Note that the pure environment
-may contain variables of non-inhabitable types, such as `All X.X`, `B
--> E` and so on. These non-inhabitable types doesn't pose a problem,
+may contain variables of uninhabited types, such as `All X.X`, `B
+-> E` and so on. These uninhabited types doesn't pose a problem,
 as from absurdity everything follows (*ex falso quodlibet*).
 
 A **stoic function** is a function that can be typed in *pure
@@ -81,24 +81,23 @@ environment*. Its type is represented by `A -> B`.
 A **free function** is a function which can capture anything in the
 lexical scope.  Its type is represented by `A => B`.
 
-A type T is **inhabitable** if there exists a value v which can be
+A type T is **inhabited** if there exists a value v which can be
 typed as T under the environment {x:B, y:E} (note: variables are
 values).
 
-An **inhabitable environment** is an environment with only variables
+An **inhabited environment** is an environment with only variables
 of inhabitable types.
 
 A capability-based effect system is **effect-safe** if from a **pure**
-and **inhabitable** environment (1) it’s impossible to construct a
+and **inhabited** environment (1) it’s impossible to construct a
 term of type `E`; (2) it's impossible to construct an application
-where the first term is not effect-closed.
+where the first term is not stoic.
 
-A **healthy environment** is a construct to help prove effect
-safety. The indented relation between "pure", "inhabitable" and
-"healthy" environment is as follows in order to reduce effect safety
-to healthy environments:
+A **capsafe environment** is a construct to help prove effect
+safety. The intended relation between "pure", "inhabited" and
+"capsafe" environment is as follows:
 
-> A pure and inhabitable environment is also a healthy (and pure)
+> A pure and inhabited environment is also a capsafe (and pure)
 > environment.
 
 

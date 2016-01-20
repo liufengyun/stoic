@@ -168,6 +168,7 @@ with caprod: typ -> Prop :=
  | caprod_eff: caprod typ_eff
  | caprod_safe_eff: forall S T, capsafe S -> caprod T -> caprod (typ_stoic S T).
 
+(* capsafe environment *)
 Inductive healthy: ctx -> Prop :=
   | healthy_empty: healthy empty
   | healthy_push: forall x E T, capsafe T -> healthy E ->

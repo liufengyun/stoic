@@ -164,6 +164,7 @@ with caprod: typ -> Prop :=
  | caprod_eff: caprod typ_eff
  | caprod_safe_eff: forall S T, capsafe S -> caprod T -> caprod (typ_stoic S T).
 
+(* capsafe environment *)
 Inductive healthy: ctx -> Prop :=
   | healthy_empty: healthy empty
   | healthy_push: forall x E T, capsafe T -> healthy E ->
@@ -701,3 +702,31 @@ Proof. introv In Pure. inductions In.
       apply* healthy_push.
     substs. false*.
 Qed.
+
+(* requires the normalization theorem *)
+Lemma progress_base: forall x t T, typing (x ~ typ_base) t T ->
+                                   exists v, value v /\ typing (x ~ typ_base) v T.
+
+Lemma inhabitable_reduce: forall x E T t, inhabitable E ->
+                                          pure E = E ->
+                                          typing E t T ->
+                                          exists t', typing (x ~ typ_base) t' T.
+
+
+Lemma effect_safety_equivalence1: forall E,
+                                   (~exists e x, typing (x ~ typ_base & E) e typ_eff) ->
+                                   (~exists e, typing E e typ_eff).
+Proof. introv ExInv Ex. apply ExInv. destruct Ex as [e Ex].
+  pick_fresh x. exists e x. rewrite <- concat_empty_l, concat_assoc at 1.
+  apply* typing_weaken; rewrite* concat_empty_l. admit.
+Qed.
+
+Lemma effect_safety_equivalence2: forall E,
+                                    inhabitable E ->
+                                    pure E = E ->
+                                    (~exists e x, typing (x ~ typ_base) e typ_eff) ->
+                                    (~exists e, typing E e typ_eff).
+Proof. introv In Pure ExInv. apply effect_safety_equivalence1.
+  introv Ex. apply ExInv. clear ExInv. inductions In.
+  destruct Ex as [e [x Ex]]. rewrite concat_empty_r in Ex. jauto.
+  apply* IHIn. admit. (* t can be typed in x:B, substitution lemma works. *)

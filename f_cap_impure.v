@@ -311,6 +311,7 @@ with caprod: typ -> Prop :=
                          caprod (open_tt T typ_eff) \/ caprod (open_tt T typ_base) ->
                          caprod (typ_all T).
 
+(* capsafe environment *)
 Inductive healthy: env -> Prop :=
   | healthy_empty: healthy empty
   | healthy_typ: forall x E T, capsafe T -> healthy E ->
