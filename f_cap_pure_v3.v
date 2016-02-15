@@ -1250,11 +1250,6 @@ Proof. intros. induction E; auto.
       apply* subseq_cons. rewrite* <- tvar_pure.
 Qed.
 
-Lemma subseq_pure_dist: forall E F,
-  subseq E F -> subseq (pure E) (pure F).
-Proof. admit.
-Qed.
-
 Lemma subseq_fresh: forall E F x, subseq E F ->
   x # F -> x # E.
 Proof. intros. inductions H; auto. Qed.
@@ -1477,6 +1472,20 @@ Proof. intros. induction* E.
     apply okt_typ. apply* IHE. apply* pure_wft_reverse.
     lets: pure_dom_subset E. unfolds subset.
     unfolds notin. autos.
+Qed.
+
+Lemma subseq_pure_dist: forall E F,
+  subseq E F -> subseq (pure E) (pure F).
+Proof. introv Seq. inductions Seq.
+  rewrite* empty_def.
+  cases (closed_typ T).
+    rewrite pure_dist, pure_single_true; auto.
+    rewrite pure_dist, pure_single_false, concat_empty_r; auto.
+  destruct b.
+    rewrite ?pure_dist, ?pure_single_tvar. apply* subseq_concat.
+    cases (closed_typ t).
+      rewrite ?pure_dist, ?pure_single_true; auto. apply* subseq_concat.
+      rewrite ?pure_dist, ?pure_single_false, ?concat_empty_r; auto.
 Qed.
 
 Lemma pure_eq : forall E, pure (pure E) = pure E.
