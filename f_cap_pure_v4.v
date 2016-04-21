@@ -15,11 +15,11 @@ Implicit Types X : var.
 
 Inductive typ       : Set   :=
   | typ_bvar        : nat -> typ
-  | typ_fvar        : var -> typ
+  | typ_fvar        : bool -> var -> typ      (* bool indicates which type universe *)
   | typ_base        : typ
   | typ_eff         : typ
   | typ_stoic       : typ -> typ -> typ       (* effect closeded term abstraction *)
-  | typ_all         : typ -> typ.             (* effect closeded type abstraction *)
+  | typ_all         : bool -> typ -> typ.     (* Bool indicate which type universe *)
 
 (** Representation of pre-terms *)
 
@@ -28,7 +28,7 @@ Inductive trm : Set :=
   | trm_fvar : var -> trm
   | trm_abs  : typ -> trm -> trm
   | trm_app  : trm -> trm -> trm
-  | trm_tabs : trm -> trm
+  | trm_tabs : bool -> trm -> trm             (* Bool indicates which type universe *)
   | trm_tapp : trm -> typ -> trm.
 
 (** Opening up a type binder occuring in a type *)
@@ -36,11 +36,11 @@ Inductive trm : Set :=
 Fixpoint open_tt_rec (K : nat) (U : typ) (T : typ) {struct T} : typ :=
   match T with
   | typ_bvar J            => If K = J then U else (typ_bvar J)
-  | typ_fvar X            => typ_fvar X
+  | typ_fvar b X          => typ_fvar b X
   | typ_base              => typ_base
   | typ_eff               => typ_eff
   | typ_stoic T1 T2       => typ_stoic (open_tt_rec K U T1) (open_tt_rec K U T2)
-  | typ_all T1            => typ_all (open_tt_rec (S K) U T1)
+  | typ_all b T1          => typ_all b (open_tt_rec (S K) U T1)
   end.
 
 Definition open_tt T U := open_tt_rec 0 U T.
@@ -53,7 +53,7 @@ Fixpoint open_te_rec (K : nat) (U : typ) (e : trm) {struct e} : trm :=
   | trm_fvar x    => trm_fvar x
   | trm_abs V e1  => trm_abs  (open_tt_rec K U V)  (open_te_rec K U e1)
   | trm_app e1 e2 => trm_app  (open_te_rec K U e1) (open_te_rec K U e2)
-  | trm_tabs e1   => trm_tabs (open_te_rec (S K) U e1)
+  | trm_tabs b e1 => trm_tabs b (open_te_rec (S K) U e1)
   | trm_tapp e1 V => trm_tapp (open_te_rec K U e1) (open_tt_rec K U V)
   end.
 
@@ -67,7 +67,7 @@ Fixpoint open_ee_rec (k : nat) (f : trm) (e : trm) {struct e} : trm :=
   | trm_fvar x    => trm_fvar x
   | trm_abs V e1  => trm_abs V (open_ee_rec (S k) f e1)
   | trm_app e1 e2 => trm_app (open_ee_rec k f e1) (open_ee_rec k f e2)
-  | trm_tabs e1 => trm_tabs (open_ee_rec k f e1)
+  | trm_tabs b e1 => trm_tabs b (open_ee_rec k f e1)
   | trm_tapp e1 V => trm_tapp (open_ee_rec k f e1) V
   end.
 
@@ -75,24 +75,24 @@ Definition open_ee t u := open_ee_rec 0 u t.
 
 (** Notation for opening up binders with type or term variables *)
 
-Notation "T 'open_tt_var' X" := (open_tt T (typ_fvar X)) (at level 67).
-Notation "t 'open_te_var' X" := (open_te t (typ_fvar X)) (at level 67).
+Notation "T 'open_tt_var' b '\with' X" := (open_tt T (typ_fvar b X)) (at level 67).
+Notation "t 'open_te_var' b '\with' X" := (open_te t (typ_fvar b X)) (at level 67).
 Notation "t 'open_ee_var' x" := (open_ee t (trm_fvar x)) (at level 67).
 
 (** Types as locally closeded pre-types *)
 
 Inductive type : typ -> Prop :=
-  | type_var : forall X,
-      type (typ_fvar X)
+  | type_var : forall b X,
+      type (typ_fvar b X)
   | type_base: type typ_base
   | type_eff: type typ_eff
   | type_stoic : forall T1 T2,
       type T1 ->
       type T2 ->
       type (typ_stoic T1 T2)
-  | type_all : forall L T2,
-      (forall X, X \notin L -> type (T2 open_tt_var X)) ->
-      type (typ_all T2).
+  | type_all : forall L T2 b,
+      (forall X, X \notin L -> type (T2 open_tt_var b \with X)) ->
+      type (typ_all b T2).
 
 (** Terms as locally closeded pre-terms *)
 
@@ -107,9 +107,9 @@ Inductive term : trm -> Prop :=
       term e1 ->
       term e2 ->
       term (trm_app e1 e2)
-  | term_tabs : forall L e1,
-      (forall X, X \notin L -> term (e1 open_te_var X)) ->
-      term (trm_tabs e1)
+  | term_tabs : forall L e1 b,
+      (forall X, X \notin L -> term (e1 open_te_var b \with X)) ->
+      term (trm_tabs b e1)
   | term_tapp : forall e1 V,
       term e1 ->
       type V ->
@@ -122,10 +122,10 @@ Inductive term : trm -> Prop :=
  a typing assumption *)
 
 Inductive bind : Set :=
-  | bind_tvar : bind
+  | bind_tvar : bool -> bind              (* bool indicates which type universe *)
   | bind_typ : typ -> bind.
 
-Notation "[: X :]" := (X ~ bind_tvar)
+Notation "X \at b" := (X ~ bind_tvar b)
   (at level 23) : env_scope.
 Notation "x ~: T" := (x ~ bind_typ T)
   (at level 24, left associativity) : env_scope.
@@ -139,17 +139,17 @@ Definition env := LibEnv.env bind.
 Inductive wft : env -> typ -> Prop :=
   | wft_base: forall E, wft E typ_base
   | wft_eff: forall E, wft E typ_eff
-  | wft_var : forall E X,
-      binds X bind_tvar E ->
-      wft E (typ_fvar X)
+  | wft_var : forall E X b,
+      binds X (bind_tvar b) E ->
+      wft E (typ_fvar b X)
   | wft_stoic : forall E T1 T2,
       wft E T1 ->
       wft E T2 ->
       wft E (typ_stoic T1 T2)
-  | wft_all : forall L E T,
+  | wft_all : forall L E T b,
       (forall X, X \notin L ->
-        wft (E & [: X :]) (T open_tt_var X)) ->
-      wft E (typ_all T).
+        wft (E & (X \at b)) (T open_tt_var b \with X)) ->
+      wft E (typ_all b T).
 
 (** A environment E is well-formed if it contains no duplicate bindings
   and if each type in it is well-formed with respect to the environment
@@ -158,28 +158,28 @@ Inductive wft : env -> typ -> Prop :=
 Inductive okt : env -> Prop :=
   | okt_empty :
       okt empty
-  | okt_tvar : forall E X,
-      okt E -> X # E -> okt (E & [: X :])
+  | okt_tvar : forall E X b,
+      okt E -> X # E -> okt (E & (X \at b))
   | okt_typ : forall E x T,
       okt E -> wft E T -> x # E -> okt (E & x ~: T).
 
 (* closed rules *)
 Fixpoint closed_typ(t: typ) := match t with
   | typ_bvar _          => false  (* impossible, ill-formed *)
-  | typ_fvar _          => true
+  | typ_fvar b _        => b      (* true - ordinary type, false - capability type *)
   | typ_base            => true
   | typ_eff             => false
   | typ_stoic U V       => true   (* pure lambda abstraction *)
-  | typ_all T           => true   (* pure type abstraction *)
+  | typ_all _ T         => true   (* pure type abstraction *)
   end.
 
 Fixpoint pure(E: env) := match E with
   | nil => nil
-  | cons (X, bind_tvar) E' => cons (X, bind_tvar) (pure E')
-  | cons (x, bind_typ T) E' => if closed_typ T then
-                                 cons (x, bind_typ T) (pure E')
-                               else
-                                 pure E'
+  | cons (X, bind_tvar b) E' => cons (X, bind_tvar b) (pure E')
+  | cons (x, bind_typ T) E'  => if closed_typ T then
+                                  cons (x, bind_typ T) (pure E')
+                                else
+                                  pure E'
                          end.
 
 
@@ -199,14 +199,14 @@ Inductive typing : env -> trm -> typ -> Prop :=
       typing E e1 (typ_stoic T1 T2) ->
       typing E e2 T1 ->
       typing E (trm_app e1 e2) T2
-  | typing_tabs : forall L E e1 T1,
+  | typing_tabs : forall L E e1 T1 b,
       okt E ->
       (forall X, X \notin L ->
-        typing ((pure E) & [: X :]) (e1 open_te_var X) (T1 open_tt_var X)) ->
-      typing E (trm_tabs e1) (typ_all T1)
-  | typing_tapp : forall T1 E e1 T,
-      wft E T -> closed_typ T = true ->
-      typing E e1 (typ_all T1) ->
+        typing ((pure E) & (X \at b)) (e1 open_te_var b \with X) (T1 open_tt_var b \with X)) ->
+      typing E (trm_tabs b e1) (typ_all b T1)
+  | typing_tapp : forall T1 E e1 T b,
+      wft E T -> closed_typ T = b ->
+      typing E e1 (typ_all b T1) ->
       typing E (trm_tapp e1 T) (open_tt T1 T).
 
 (** Values *)
@@ -214,8 +214,8 @@ Inductive typing : env -> trm -> typ -> Prop :=
 Inductive value : trm -> Prop :=
   | value_abs  : forall V e1, term (trm_abs V e1) ->
                  value (trm_abs V e1)
-  | value_tabs : forall e1, term (trm_tabs e1) ->
-                 value (trm_tabs e1)
+  | value_tabs : forall e1 b, term (trm_tabs b e1) ->
+                 value (trm_tabs b e1)
   | value_var : forall x, value (trm_fvar x).
 
 (** One-step reduction *)
@@ -237,10 +237,10 @@ Inductive red : trm -> trm -> Prop :=
       term (trm_abs V e1) ->
       value v2 ->
       red (trm_app (trm_abs V e1) v2) (open_ee e1 v2)
-  | red_tabs : forall e1 V,
-      term (trm_tabs e1) ->
+  | red_tabs : forall e1 V b,
+      term (trm_tabs b e1) ->
       type V ->
-      red (trm_tapp (trm_tabs e1) V) (open_te e1 V).
+      red (trm_tapp (trm_tabs b e1) V) (open_te e1 V).
 
 (** Our goal is to prove preservation and progress *)
 
