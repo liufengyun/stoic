@@ -122,19 +122,22 @@ safety. The intended relation between "pure", "inhabited" and
 |  [stlc_cap_pure.v](stlc_cap_pure.v)       |    STLC + capabilities                                 |      Finished       |
 |  [f_cap_pure.v](f_cap_pure.v)             |    F + capabilities                                    |      Finished       |
 |  [f_cap_pure_v2.v](f_cap_pure_v2.v)       |    F + capabilities(allow B->E to type app)            |      Finished       |
+|  [f_cap_pure_v3.v](f_cap_pure_v3.v)       |    F + capabilities(allow E to type app)               |      Finished       |
 |  **Phase 3**                              |    **Pure Capability + Subtyping**                     |                     |
 |  [stlc_cap_sub_pure.v](stlc_cap_sub_pure.v) |    STLC + capabilities + subtyping                   |      Finished       |
-|  [fsub_cap_pure.v](fsub_cap_pure.v)       |    F<: + capabilities                                  |      Working        |
+|  [fsub_cap_pure.v](fsub_cap_pure.v)       |    F<: + capabilities                                  |      N/A            |
 |  **Phase 4**                              |    **Impure Capability**                               |                     |
 |  [stlc_cap_impure.v](stlc_cap_impure.v)   |    STLC + capabilities + =>                            |      Finished       |
 |  [stlc_cap_impure_top.v](stlc_cap_impure_top.v)   |    STLC + capabilities + =>(two `Top`)         |      Finished       |
 |  [f_cap_impure.v](f_cap_impure.v)         |    F + capabilities + =>                               |      Finished       |
-|  fsub_cap_impure.v                        |    F<: + capabilities + =>                             |      Working        |
+|  fsub_cap_impure.v                        |    F<: + capabilities + =>                             |      N/A            |
+|  **Phase 5**                              |    **Two Universe**                                    |                     |
+|  [f_cap_pure_v4.v](f_cap_pure_v4.v)       |    F + capabilities(allow E to type app)               |      Working        |
 
 
 ## Development
 
-Prerequisite: Install `Coq v8.5beta2`.
+Prerequisite: Install Coq v8.5 or above.
 
 ### Get Started
 
