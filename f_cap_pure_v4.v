@@ -257,14 +257,14 @@ Definition progress := forall e T,
 (* inhabitable environment *)
 Inductive primitive: env -> Prop :=
   | primitive_base: forall x y, primitive (x ~: typ_base & y ~: typ_eff)
-  | primitive_tvar: forall X E, primitive E -> primitive (E & [:X:])
-  | primitive_typ: forall x X E, primitive E -> primitive (E & x ~: (typ_fvar X)).
+  | primitive_tvar: forall X E b, primitive E -> primitive (E & (X \at b))
+  | primitive_typ: forall x X E b, primitive E -> primitive (E & x ~: (typ_fvar b X)).
 
 Inductive inhabitable: env -> Prop :=
   | inhabitable_empty: inhabitable empty
-  | inhabitable_tvar: forall X E,
+  | inhabitable_tvar: forall X E b,
                         inhabitable E ->
-                        inhabitable (E & [:X:])
+                        inhabitable (E & (X \at b))
   | inhabitable_typ: forall z t T E F,
                         inhabitable E ->
                         primitive F ->
@@ -276,27 +276,30 @@ Inductive inhabitable: env -> Prop :=
 
 Inductive capsafe: typ -> Prop :=
  | capsafe_base: capsafe typ_base
- | capsafe_var: forall X, capsafe (typ_fvar X)
+ | capsafe_var: forall X, capsafe (typ_fvar true X)
  | capsafe_eff_any: forall S T, type T -> caprod S -> capsafe (typ_stoic S T)
  | capsafe_any_safe: forall S T, type S -> capsafe T -> capsafe (typ_stoic S T)
- | capsafe_all: forall T, type (typ_all T) ->
-                          capsafe (open_tt T typ_eff) /\ capsafe (open_tt T typ_base) ->
-                          capsafe (typ_all T)
+ | capsafe_all: forall T b, type (typ_all b T) ->
+                            (b = false -> capsafe (open_tt T typ_eff)) ->
+                            (b = true -> capsafe (open_tt T typ_base)) ->
+                            capsafe (typ_all b T)
 
 with caprod: typ -> Prop :=
  | caprod_eff: caprod typ_eff
+ | caprod_var: forall X, caprod (typ_fvar false X)
  | caprod_safe_eff: forall S T, capsafe S -> caprod T -> caprod (typ_stoic S T)
- | caprod_all: forall T, type (typ_all T) ->
-                         caprod (open_tt T typ_eff) \/ caprod (open_tt T typ_base) ->
-                         caprod (typ_all T).
+ | caprod_all: forall T b, type (typ_all b T) ->
+                           (b = false -> caprod (open_tt T typ_eff)) ->
+                           (b = true -> caprod (open_tt T typ_base)) ->
+                           caprod (typ_all b T).
 
 (* capsafe environment *)
 Inductive healthy: env -> Prop :=
   | healthy_empty: healthy empty
   | healthy_typ: forall x E T, capsafe T -> healthy E ->
                                healthy (E & x ~: T)
-  | healthy_tvar: forall X E, healthy E ->
-                              healthy (E & [: X :]).
+  | healthy_tvar: forall X E b, healthy E ->
+                                healthy (E & ( X \at b)).
 
 Definition inhabitable_pure_healthy_statement := forall E,
   inhabitable E -> pure E = E -> healthy E.
@@ -315,9 +318,9 @@ Fixpoint fv_tt (T : typ) {struct T} : vars :=
   | typ_bvar J            => \{}
   | typ_base              => \{}
   | typ_eff               => \{}
-  | typ_fvar X            => \{X}
-  | typ_stoic T1 T2 => (fv_tt T1) \u (fv_tt T2)
-  | typ_all T1      => (fv_tt T1)
+  | typ_fvar _ X          => \{X}
+  | typ_stoic T1 T2       => (fv_tt T1) \u (fv_tt T2)
+  | typ_all _ T1          => (fv_tt T1)
   end.
 
 (** Computing free type variables in a term *)
@@ -328,7 +331,7 @@ Fixpoint fv_te (e : trm) {struct e} : vars :=
   | trm_fvar x    => \{}
   | trm_abs V e1  => (fv_tt V) \u (fv_te e1)
   | trm_app e1 e2 => (fv_te e1) \u (fv_te e2)
-  | trm_tabs e1   => (fv_te e1)
+  | trm_tabs _ e1 => (fv_te e1)
   | trm_tapp e1 V => (fv_tt V) \u (fv_te e1)
   end.
 
@@ -340,7 +343,7 @@ Fixpoint fv_ee (e : trm) {struct e} : vars :=
   | trm_fvar x    => \{x}
   | trm_abs V e1  => (fv_ee e1)
   | trm_app e1 e2 => (fv_ee e1) \u (fv_ee e2)
-  | trm_tabs e1   => (fv_ee e1)
+  | trm_tabs _ e1 => (fv_ee e1)
   | trm_tapp e1 V => (fv_ee e1)
   end.
 
@@ -351,9 +354,9 @@ Fixpoint subst_tt (Z : var) (U : typ) (T : typ) {struct T} : typ :=
   | typ_bvar J            => typ_bvar J
   | typ_base              => typ_base
   | typ_eff               => typ_eff
-  | typ_fvar X            => If X = Z then U else (typ_fvar X)
+  | typ_fvar b X          => If X = Z then U else (typ_fvar b X)
   | typ_stoic T1 T2       => typ_stoic (subst_tt Z U T1) (subst_tt Z U T2)
-  | typ_all T             => typ_all (subst_tt Z U T)
+  | typ_all b T           => typ_all b (subst_tt Z U T)
   end.
 
 (** Substitution for free type variables in terms. *)
@@ -364,7 +367,7 @@ Fixpoint subst_te (Z : var) (U : typ) (e : trm) {struct e} : trm :=
   | trm_fvar x    => trm_fvar x
   | trm_abs V e1  => trm_abs  (subst_tt Z U V)  (subst_te Z U e1)
   | trm_app e1 e2 => trm_app  (subst_te Z U e1) (subst_te Z U e2)
-  | trm_tabs e1   => trm_tabs (subst_te Z U e1)
+  | trm_tabs b e1 => trm_tabs b (subst_te Z U e1)
   | trm_tapp e1 V => trm_tapp (subst_te Z U e1) (subst_tt Z U V)
   end.
 
@@ -376,7 +379,7 @@ Fixpoint subst_ee (z : var) (u : trm) (e : trm) {struct e} : trm :=
   | trm_fvar x    => If x = z then u else (trm_fvar x)
   | trm_abs V e1  => trm_abs V (subst_ee z u e1)
   | trm_app e1 e2 => trm_app (subst_ee z u e1) (subst_ee z u e2)
-  | trm_tabs e1   => trm_tabs (subst_ee z u e1)
+  | trm_tabs b e1 => trm_tabs b (subst_ee z u e1)
   | trm_tapp e1 V => trm_tapp (subst_ee z u e1) V
   end.
 
@@ -384,7 +387,7 @@ Fixpoint subst_ee (z : var) (u : trm) (e : trm) {struct e} : trm :=
 
 Definition subst_tb (Z : var) (P : typ) (b : bind) : bind :=
   match b with
-  | bind_tvar => bind_tvar
+  | bind_tvar b => bind_tvar b
   | bind_typ T => bind_typ (subst_tt Z P T)
   end.
 
@@ -505,7 +508,7 @@ Lemma open_tt_rec_type : forall T U,
   type T -> forall k, T = open_tt_rec k U T.
 Proof.
   induction 1; intros; simpl; f_equal*. unfolds open_tt.
-  pick_fresh X. apply* (@open_tt_rec_type_core T2 0 (typ_fvar X)).
+  pick_fresh X. apply* (@open_tt_rec_type_core T2 0 (typ_fvar b X)).
 Qed.
 
 (** Substitution for a fresh name is identity. *)
@@ -538,8 +541,8 @@ Qed.
 
 (** Substitution and open_var for distinct names commute. *)
 
-Lemma subst_tt_open_tt_var : forall X Y U T, Y <> X -> type U ->
-  (subst_tt X U T) open_tt_var Y = subst_tt X U (T open_tt_var Y).
+Lemma subst_tt_open_tt_var : forall X Y U T b, Y <> X -> type U ->
+  (subst_tt X U T) open_tt_var b \with Y = subst_tt X U (T open_tt_var b \with Y).
 Proof.
   introv Neq Wu. rewrite* subst_tt_open_tt.
   simpl. case_var*.
@@ -548,9 +551,9 @@ Qed.
 (** Opening up a body t with a type u is the same as opening
   up the abstraction with a fresh name x and then substituting u for x. *)
 
-Lemma subst_tt_intro : forall X T2 U,
+Lemma subst_tt_intro : forall X T2 U b,
   X \notin fv_tt T2 -> type U ->
-  open_tt T2 U = subst_tt X U (T2 open_tt_var X).
+  open_tt T2 U = subst_tt X U (T2 open_tt_var b \with X).
 Proof.
   introv Fr Wu. rewrite* subst_tt_open_tt.
   rewrite* subst_tt_fresh. simpl. case_var*.
@@ -583,7 +586,7 @@ Proof.
   unfolds open_ee. pick_fresh x.
    apply* (@open_te_rec_term_core e1 0 (trm_fvar x)).
   unfolds open_te. pick_fresh X.
-   apply* (@open_te_rec_type_core e1 0 (typ_fvar X)).
+   apply* (@open_te_rec_type_core e1 0 (typ_fvar b X)).
 Qed.
 
 (** Substitution for a fresh name is identity. *)
@@ -607,8 +610,8 @@ Qed.
 
 (** Substitution and open_var for distinct names commute. *)
 
-Lemma subst_te_open_te_var : forall X Y U e, Y <> X -> type U ->
-  (subst_te X U e) open_te_var Y = subst_te X U (e open_te_var Y).
+Lemma subst_te_open_te_var : forall X Y U e b, Y <> X -> type U ->
+  (subst_te X U e) open_te_var b \with Y = subst_te X U (e open_te_var b \with Y).
 Proof.
   introv Neq Wu. rewrite* subst_te_open_te.
   simpl. case_var*.
@@ -617,9 +620,9 @@ Qed.
 (** Opening up a body t with a type u is the same as opening
   up the abstraction with a fresh name x and then substituting u for x. *)
 
-Lemma subst_te_intro : forall X U e,
+Lemma subst_te_intro : forall X U e b,
   X \notin fv_te e -> type U ->
-  open_te e U = subst_te X U (e open_te_var X).
+  open_te e U = subst_te X U (e open_te_var b \with X).
 Proof.
   introv Fr Wu. rewrite* subst_te_open_te.
   rewrite* subst_te_fresh. simpl. case_var*.
@@ -651,7 +654,7 @@ Proof.
   unfolds open_ee. pick_fresh x.
    apply* (@open_ee_rec_term_core e1 0 (trm_fvar x)).
   unfolds open_te. pick_fresh X.
-   apply* (@open_ee_rec_type_core e1 0 (typ_fvar X)).
+   apply* (@open_ee_rec_type_core e1 0 (typ_fvar b X)).
 Qed.
 
 (** Substitution for a fresh name is identity. *)
@@ -708,8 +711,8 @@ Qed.
 (** Interactions between term substitutions in terms and opening
   with type variables in terms. *)
 
-Lemma subst_ee_open_te_var : forall z u e X, term u ->
-  (subst_ee z u e) open_te_var X = subst_ee z u (e open_te_var X).
+Lemma subst_ee_open_te_var : forall z u e X b, term u ->
+  (subst_ee z u e) open_te_var b \with X = subst_ee z u (e open_te_var b \with X).
 Proof.
   introv. unfold open_te. generalize 0.
   induction e; intros; simpl; f_equal*.
@@ -726,9 +729,9 @@ Proof.
   apply_fresh* type_all as X. rewrite* subst_tt_open_tt_var.
 Qed.
 
-Lemma typ_all_open_tt_type: forall T U, type (typ_all T) -> type U -> type (open_tt T U).
+Lemma typ_all_open_tt_type: forall T U b, type (typ_all b T) -> type U -> type (open_tt T U).
 Proof. intros. inversions H. pick_fresh X. forwards~ : H2 X.
-  rewrite* (@subst_tt_intro X). apply* subst_tt_type.
+  rewrite* (@subst_tt_intro X T U b). apply* subst_tt_type.
 Qed.
 
 Lemma subst_te_term : forall e Z P,
@@ -797,25 +800,25 @@ Qed.
 
 (** Through type substitution *)
 
-Lemma wft_subst_tb : forall F E Z P T,
-  wft (E & [: Z :] & F) T ->
+Lemma wft_subst_tb : forall F E Z P T b,
+  wft (E & (Z \at b) & F) T ->
   wft E P ->
   ok (E & map (subst_tb Z P) F) ->
   wft (E & map (subst_tb Z P) F) (subst_tt Z P T).
 Proof.
-  introv WT WP. gen_eq G: (E & [: Z :] & F). gen F.
+  introv WT WP. gen_eq G: (E & (Z \at b) & F). gen F.
   induction WT; intros F EQ Ok; subst; simpl subst_tt; auto.
   case_var*. apply_empty* wft_weaken.
     destruct (binds_concat_inv H) as [?|[? ?]].
       apply wft_var.
        apply~ binds_concat_right.
-       replace bind_tvar with ((subst_tb Z P) bind_tvar) by reflexivity.
+       replace (bind_tvar b0) with ((subst_tb Z P) (bind_tvar b0)) by reflexivity.
        apply~ binds_map.
       destruct (binds_push_inv H1) as [[? ?]|[? ?]].
         subst. false~.
         applys wft_var. apply* binds_concat_left.
   apply_fresh* wft_all as Y.
-   unsimpl ((subst_tb Z P) bind_tvar).
+   unsimpl ((subst_tb Z P) (bind_tvar b0)).
    lets: wft_type.
    rewrite* subst_tt_open_tt_var.
    apply_ih_map_bind* H0.
@@ -823,14 +826,14 @@ Qed.
 
 (** Through type reduction *)
 
-Lemma wft_open : forall E U T,
+Lemma wft_open : forall E U T b,
   ok E ->
-  wft E (typ_all T) ->
+  wft E (typ_all b T) ->
   wft E U ->
   wft E (open_tt T U).
 Proof.
   introv Ok WA WU. inversions WA. pick_fresh X.
-  autos* wft_type. rewrite* (@subst_tt_intro X).
+  autos* wft_type. rewrite* (@subst_tt_intro X T U b).
   lets K: (@wft_subst_tb empty).
   specializes_vars K. clean_empty K. apply* K.
   (* todo: apply empty ? *)
@@ -903,16 +906,16 @@ Hint Resolve wft_subst_tb.
 (** Inversion lemma *)
 
 Lemma okt_push_inv : forall E X B,
-  okt (E & X ~ B) -> exists T, B = bind_tvar \/ B = bind_typ T.
+  okt (E & X ~ B) -> exists T b, B = bind_tvar b \/ B = bind_typ T.
 Proof.
   introv O. inverts O.
     false* empty_push_inv.
-    lets (?&?&?): (eq_push_inv H). subst. exists* (typ_fvar X).
-    lets (?&?&?): (eq_push_inv H). subst*.
+    lets (?&?&?): (eq_push_inv H). subst. exists* (typ_fvar b X).
+    lets (?&?&?): (eq_push_inv H). subst. exists* T false.
 Qed.
 
-Lemma okt_push_tvar_inv : forall E X,
-  okt (E & [: X :]) -> okt E /\ X # E.
+Lemma okt_push_tvar_inv : forall E X b,
+  okt (E & (X \at b)) -> okt E /\ X # E.
 Proof.
   introv O. inverts O.
     false* empty_push_inv.
@@ -944,7 +947,7 @@ Proof.
  introv O. induction F using env_ind.
   rewrite concat_empty_r in *. lets*: (okt_push_typ_inv O).
   rewrite concat_assoc in *.
-   lets (U&[?|?]): okt_push_inv O; subst.
+   lets (U&b&[?|?]): okt_push_inv O; subst.
       applys~ okt_tvar. apply IHF. applys* okt_push_tvar_inv.
       apply ok_from_okt in O.
       lets (? & H): (ok_push_inv O). eauto.
@@ -959,15 +962,15 @@ Lemma okt_weaken : forall E F,
   okt (E & F) -> okt E.
 Proof.
   induction F using env_ind; rew_env_concat; introv Okt. auto.
-  lets(T & [H | H]): (okt_push_inv Okt); subst.
+  lets(T & b & [H | H]): (okt_push_inv Okt); subst.
   apply IHF. lets*: okt_push_tvar_inv Okt.
   apply IHF. lets*: okt_push_typ_inv Okt.
 Qed.
 
 (** Through type substitution *)
 
-Lemma okt_subst_tb : forall Z P (E F:env),
-  okt (E & [: Z :] & F) ->
+Lemma okt_subst_tb : forall Z P (E F:env) b,
+  okt (E & (Z \at b) & F) ->
   wft E P ->
   okt (E & map (subst_tb Z P) F).
 Proof.
@@ -975,10 +978,10 @@ Proof.
   rewrite map_empty. rewrite concat_empty_r in *.
    lets*: (okt_push_tvar_inv O).
   rewrite map_push. rewrite concat_assoc in *.
-   lets (U&[?|?]): okt_push_inv O; subst.
-     lets*: (okt_push_tvar_inv O).
+   lets (U&b0&[?|?]): okt_push_inv O; subst.
+     lets*: (okt_push_tvar_inv O). simpls*.
      lets*: (okt_push_typ_inv O).
-      applys~ okt_typ; lets*: H.
+      applys~ okt_typ; autos*.
 Qed.
 
 (** Automation *)
@@ -990,8 +993,8 @@ Hint Immediate okt_strengthen.
 (* ********************************************************************** *)
 (** ** Environment is unchanged by substitution from a fresh name *)
 
-Lemma notin_fv_tt_open : forall Y X T,
-  X \notin fv_tt (T open_tt_var Y) ->
+Lemma notin_fv_tt_open : forall Y X T b,
+  X \notin fv_tt (T open_tt_var b \with Y) ->
   X \notin fv_tt T.
 Proof.
  introv. unfold open_tt. generalize 0.
