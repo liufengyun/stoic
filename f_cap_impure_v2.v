@@ -2480,10 +2480,6 @@ Proof. intros E H He. destruct He.
   lets*: healthy_env_term_capsafe H0. inversions H1.
 Qed.
 
-Axiom axiom_equiv_var : forall E S T t X,
-  typing E t (typ_stoic (typ_fvar X) (typ_arrow S T)) ->
-  typing E t (typ_stoic (typ_fvar X) (typ_stoic S T)).
-
 Axiom axiom_equiv_base : forall E S T t,
   typing E t (typ_stoic typ_base (typ_arrow S T)) ->
   typing E t (typ_stoic typ_base (typ_stoic S T)).
@@ -2519,7 +2515,7 @@ Proof. introv HL Pure Typ.  inductions Typ; auto.
   (* t = t1 t2 *)
   forwards~ : IHTyp1. destruct T0.
   lets Inv: typing_wft Typ2. inversion Inv.
-  forwards~ : axiom_equiv_var H. apply* typing_app. apply* typing_degen.
+  lets: healthy_env_term_capsafe HL Typ2. inversion H0.
   forwards~ : axiom_equiv_base H. apply* typing_app. apply* typing_degen.
   lets: healthy_env_term_capsafe HL Typ2. inversion H0.
   forwards~ : IHTyp2. apply* axiom_poly.
@@ -2528,14 +2524,14 @@ Proof. introv HL Pure Typ.  inductions Typ; auto.
 
   (* t = t [T] *)
   destruct T0; try solve [inversion x].
-  destruct n; unfolds open_tt, open_tt_rec; cases_if. subst.
+  destruct n; unfolds open_tt, open_tt_rec; cases_if. substs.
   assert (Err: typing E (trm_tapp e1 typ_eff) typ_eff).
     replace typ_eff with (open_tt (typ_bvar 0) typ_eff) at 2.
     apply* typing_tapp.
     unfold open_tt. simpl. cases_if*.
   lets: healthy_env_term_capsafe HL Err. inversion H0.
 
-  unfolds open_tt. simpl in x. inversions x.
+  unfolds open_tt. simpl in x. inversion x. substs.
   forwards~ AX: axiom_all_stoic Typ.
   change (typing E (trm_tapp e1 T) (open_tt (typ_stoic T0_1 T0_2) T)).
   apply* typing_tapp.
