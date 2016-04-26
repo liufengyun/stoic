@@ -2188,9 +2188,9 @@ Proof. introv HL Pure Typ.  inductions Typ; auto.
 
   (* t = t [T] *)
   destruct T0; try solve [inversion x]. destruct n; unfolds open_tt, open_tt_rec; cases_if.
-  subst. inversion H0.
+  substs. inversion H0.
 
-  unfolds open_tt. simpl in x. inversions x.
+  unfolds open_tt. simpl in x. inversion x. substs.
   forwards~ AX: axiom_all_stoic Typ.
   change (typing E (trm_tapp e1 T) (open_tt (typ_stoic T0_1 T0_2) T)).
   apply* typing_tapp.
