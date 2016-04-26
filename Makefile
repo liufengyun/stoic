@@ -24,29 +24,17 @@ COQDOC=$(COQBIN)coqdoc --quiet --utf8 --html
 ############################################################################
 # STABLE DEVELOPMENTS
 
-FILES=\
-	stlc_cfun \
-	stlc_cfun_ln \
-	f_cfun_ln \
-	f_cfun_ln_v2 \
-	fsub_cfuns_ln \
-	fsub_cfuns_ln_v2 \
-	stlc_cap_pure \
-	f_cap_pure \
-	f_cap_pure_v2
-
-ALL=$(FILES)
-
 ############################################################################
 
-ALL_SRC=$(ALL:=.v)
+ALL_SRC=$(wildcard *.v)
 TLC_SRC=$(wildcard $(TLC)/*.v)
 SF_SRC=$(wildcard $(SF)/*.v)
 
 .PHONY: all lib clean
 .SUFFIXES: .v .vo
 
-all: $(ALL:=.vo)
+all: $(ALL_SRC:.v:=.vo)
+	$(COQC) $^
 
 lib:
 	$(COQC) lib/sf/SfLib.v
