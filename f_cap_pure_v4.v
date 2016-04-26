@@ -274,6 +274,21 @@ Inductive inhabitable: env -> Prop :=
 
 (* capsafe types are not capability producing, i.e. capable of creating an instance of E *)
 
+Fixpoint degree_typ (T: typ) := match T with
+  | typ_stoic T1 T2 => max (degree_typ T1) (degree_typ T2)
+  | typ_all _ T => S (degree_typ T)
+  | _ => O
+  end.
+
+Fixpoint degree_trm (t: trm) := match t with
+  | trm_abs _ t1  => degree_trm t1
+  | trm_app t1 t2 => max (degree_trm t1) (degree_trm t2)
+  | trm_tabs _ t1   => S (degree_trm t1)
+  | trm_tapp t1 _ => degree_trm t1
+  | _ => O
+  end.
+
+
 Inductive capsafe: typ -> Prop :=
  | capsafe_base: capsafe typ_base
  | capsafe_var: forall X, capsafe (typ_fvar true X)
@@ -1635,20 +1650,6 @@ Qed.
 (* ********************************************************************** *)
 (** * Properties of Healthy Evnironment *)
 
-Fixpoint degree_typ (T: typ) := match T with
-  | typ_stoic T1 T2 => max (degree_typ T1) (degree_typ T2)
-  | typ_all _ T => S (degree_typ T)
-  | _ => O
-  end.
-
-Fixpoint degree_trm (t: trm) := match t with
-  | trm_abs _ t1  => degree_trm t1
-  | trm_app t1 t2 => max (degree_trm t1) (degree_trm t2)
-  | trm_tabs _ t1   => S (degree_trm t1)
-  | trm_tapp t1 _ => degree_trm t1
-  | _ => O
-  end.
-
 Lemma degree_typ_parent_zero: forall S T,
   degree_typ (typ_stoic S T) = 0 ->
   degree_typ S = 0 /\ degree_typ T = 0.
@@ -1918,13 +1919,26 @@ Lemma capsafe_subst_tt_capsafe: forall T Z P Q b,
   capsafe P -> capsafe Q -> capsafe (subst_tt Z b P T) -> capsafe (subst_tt Z b Q T).
 Proof.  intros. forwards~ : same_cap_subst_tt T Z P Q. unfolds*. destruct* H2. Qed.
 
-Lemma capsafe_all_open_tt: forall T U b, type U ->
+Lemma capsafe_all_open_tt: forall T U b, type U -> closed_typ U = b ->
   capsafe (typ_all b T) -> capsafe (open_tt T U).
-Proof. intros. inversions H0. destruct H3. destruct (capsafe_decidable H).
-  pick_fresh X. rewrite* (@subst_tt_intro X). eapply capsafe_subst_tt_capsafe.
-    apply capsafe_base. auto. rewrite* <- subst_tt_intro.
-  pick_fresh X.  rewrite* (@subst_tt_intro X). eapply capsafe_subst_tt_caprod.
-    apply caprod_eff.  auto. rewrite* <- subst_tt_intro.
+Proof. intros. inversions H1. destruct (capsafe_decidable H).
+    pick_fresh X. rewrite* (@subst_tt_intro X T U true). eapply capsafe_subst_tt_capsafe.
+      apply capsafe_base. auto. rewrite* <- subst_tt_intro.
+
+ (*    pick_fresh X. rewrite* (@subst_tt_intro X T U true). eapply capsafe_subst_tt_capsafe. *)
+ (*      apply capsafe_base. auto. rewrite* <- subst_tt_intro. *)
+ (*    pick_fresh X. rewrite* (@subst_tt_intro X T U true). eapply capsafe_subst_tt_caprod. *)
+ (*      apply caprod_safe_eff. apply capsafe_base. apply caprod_eff. auto. rewrite* <- subst_tt_intro. *)
+
+
+ (* destruct (capsafe_decidable H). *)
+ (*  lets: capsafe_closed_typ H2. rewrite H0 in H3. substs. rewrite H3 in H1. inversions H1. *)
+ (*    pick_fresh X. rewrite* (@subst_tt_intro X T U true). eapply capsafe_subst_tt_capsafe. *)
+ (*      apply capsafe_base. auto. rewrite* <- subst_tt_intro. *)
+ (*  lets: capsafe_closed_typ H2. rewrite H0 in H3. substs. rewrite H3 in H1. inversions H1. *)
+ (*    pick_fresh X.  rewrite* (@subst_tt_intro X T U true). eapply capsafe_subst_tt_capsafe. *)
+ (*      apply capsafe_base.  auto. rewrite* <- subst_tt_intro. *)
+ admit. admit.
 Qed.
 
 Lemma healthy_env_term_capsafe_0: forall E t T,
@@ -1945,7 +1959,7 @@ Proof. intros. inductions H1; intros; autos.
     forwards~ : IHtyping2. lets*: degree_trm_parent_zero H.
     inversions* H1. lets*: capsafe_not_caprod T1.
   simpl in H. inversions H.
-  simpl in H. forwards~ : IHtyping. apply* capsafe_all_open_tt. apply* wft_type.
+  simpl in H. forwards~ : IHtyping. apply* capsafe_all_open_tt. apply* wft_type. subst*.
 Qed.
 
 Lemma healthy_env_term_capsafe_k: forall E t T k,
@@ -1970,27 +1984,30 @@ Proof. intros. gen t E T. inductions k; intros.
     inversions* H1. lets*: capsafe_not_caprod T1.
   simpl in H. lets: le_S_n H.
     pick_fresh X. forwards~ : H2 X. rewrite (healthy_env_closed H0) in *.
-    assert (HI: typing E (open_te e1 typ_base) (open_tt T1 typ_base)).
-      rewrite <- (@concat_empty_r bind E). rewrite* (@subst_te_intro X).
-      rewrite* (@subst_tt_intro X).
-      replace empty with (map (subst_tb X typ_base) empty) by rewrite* map_empty.
-      apply* typing_through_subst_te. rewrite* concat_empty_r.
-    assert (HII: typing E (open_te e1 (typ_stoic typ_base typ_eff))
-                        (open_tt T1 (typ_stoic typ_base typ_eff))).
-      rewrite <- (@concat_empty_r bind E). rewrite* (@subst_te_intro X).
-      rewrite* (@subst_tt_intro X).
-      replace empty with (map (subst_tb X (typ_stoic typ_base typ_eff)) empty) by
-          rewrite* map_empty.
-      apply* typing_through_subst_te. rewrite* concat_empty_r.
-    assert (typing E (trm_tabs e1) (typ_all T1)).
+    assert (typing E (trm_tabs b e1) (typ_all b T1)).
       apply* (@typing_tabs L). rewrite* (healthy_env_closed H0).
+
+    cases b.
+
+    assert (HI: typing E (open_te e1 typ_base) (open_tt T1 typ_base)).
+      rewrite <- (@concat_empty_r bind E). rewrite* (@subst_te_intro X typ_base e1 true).
+      rewrite* (@subst_tt_intro X T1 typ_base true).
+      replace empty with (map (subst_tb X true typ_base) empty) by rewrite* map_empty.
+      apply* typing_through_subst_te. rewrite* concat_empty_r.
+
     forwards~ : IHk HI. rewrite* <- degree_trm_eq_open_te.
-    forwards~ : IHk HII. rewrite* <- degree_trm_eq_open_te.
-    apply capsafe_all. autos* wft_type typing_wft. splits*.
-    rewrite* (@subst_tt_intro X).
-      assert (caprod (typ_stoic typ_base typ_eff)) by apply* caprod_safe_eff.
-      eapply capsafe_subst_tt_caprod; eauto. rewrite* <- subst_tt_intro.
-  simpl in H. forwards~ : IHtyping. apply* capsafe_all_open_tt. apply* wft_type.
+    apply* capsafe_all_true. autos* wft_type typing_wft.
+
+    assert (HI: typing E (open_te e1 typ_eff) (open_tt T1 typ_eff)).
+      rewrite <- (@concat_empty_r bind E). rewrite* (@subst_te_intro X typ_eff e1 false).
+      rewrite* (@subst_tt_intro X T1 typ_eff false).
+      replace empty with (map (subst_tb X false typ_eff) empty) by rewrite* map_empty.
+      apply* typing_through_subst_te. rewrite* concat_empty_r.
+
+    forwards~ : IHk HI. rewrite* <- degree_trm_eq_open_te.
+    apply* capsafe_all_false. autos* wft_type typing_wft.
+
+  simpl in H. forwards~ : IHtyping. apply* capsafe_all_open_tt. apply* wft_type. subst*.
 Qed.
 
 Lemma healthy_env_term_capsafe: forall E t T,
@@ -2025,7 +2042,7 @@ Proof. introv Prim Bd. inductions Prim.
     inversions H0. auto.
     destructs (binds_single_inv H0). inversions H2. auto.
   binds_cases Bd. auto.
-  binds_cases Bd. auto. inversions EQ. auto.
+  binds_cases Bd. auto. inversions EQ. cases* b.
 Qed.
 
 Theorem primitive_pure_healthy: forall E,
@@ -2034,7 +2051,9 @@ Proof. introv Prim. inductions Prim.
   rewrite pure_dist, pure_single_true, pure_single_false, concat_empty_r; auto.
     rewrite <- concat_empty_l. apply* healthy_typ. apply healthy_empty.
   rewrite ?pure_dist, pure_single_tvar; auto. apply* healthy_tvar.
-  rewrite ?pure_dist, pure_single_true; auto. apply* healthy_typ.
+  rewrite ?pure_dist. cases* b.
+    rewrite pure_single_true; auto. apply* healthy_typ.
+    rewrite pure_single_false; auto. rewrite* concat_empty_r.
 Qed.
 
 Theorem inhabitable_capsafe: forall E t T,
@@ -2054,19 +2073,26 @@ Proof. introv Prim Typ Val. inductions Typ; auto.
     forwards~ Vcap : not_capsafe_caprod Case.
   inversion Val.
   pick_fresh X. forwards~ IH: H0 X.
-    assert (Typ: typing E (trm_tabs e1) (typ_all T1))
+    assert (Typ: typing E (trm_tabs b e1) (typ_all b T1))
       by apply* typing_tabs.
-    left. apply capsafe_all. apply (wft_type (typing_wft Typ)).
+    left.  cases b.
+
+    apply capsafe_all_true. apply (wft_type (typing_wft Typ)).
     rewrite <- concat_empty_r in IH at 1.
     forwards~ Typ1: typing_through_subst_te typ_base IH.
-    forwards~ Typ2: typing_through_subst_te (typ_stoic typ_base typ_eff) IH.
-    rewrite map_empty, concat_empty_r in Typ1, Typ2.
+    rewrite map_empty, concat_empty_r in Typ1.
     forwards~ Safe1 : healthy_env_term_capsafe Typ1. rewrite <- concat_empty_l.
       rewrite concat_empty_l. apply* primitive_pure_healthy.
-    forwards~ Safe2 : healthy_env_term_capsafe Typ2. rewrite <- concat_empty_l.
+    rewrite* (@subst_tt_intro X T1 typ_base true).
+
+    apply capsafe_all_false. apply (wft_type (typing_wft Typ)).
+    rewrite <- concat_empty_r in IH at 1.
+    forwards~ Typ1: typing_through_subst_te typ_eff IH.
+    rewrite map_empty, concat_empty_r in Typ1.
+    forwards~ Safe1 : healthy_env_term_capsafe Typ1. rewrite <- concat_empty_l.
       rewrite concat_empty_l. apply* primitive_pure_healthy.
-    split; rewrite* (@subst_tt_intro X).
-    applys~ capsafe_subst_tt_caprod (typ_stoic typ_base typ_eff).
+    rewrite* (@subst_tt_intro X T1 typ_eff false).
+
   inversion Val.
 Qed.
 
