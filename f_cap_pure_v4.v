@@ -296,6 +296,7 @@ Inductive capsafe: typ -> Prop :=
  | capsafe_any_safe: forall S T, type S -> capsafe T -> capsafe (typ_stoic S T)
  | capsafe_all_true: forall T, type (typ_all true T) ->
                                capsafe (open_tt T typ_base) ->
+                               capsafe (open_tt T (typ_stoic typ_base typ_eff)) ->
                                capsafe (typ_all true T)
  | capsafe_all_false: forall T, type (typ_all false T) ->
                                 capsafe (open_tt T typ_eff) ->
@@ -306,7 +307,8 @@ with caprod: typ -> Prop :=
  | caprod_var: forall X, caprod (typ_fvar false X)
  | caprod_safe_eff: forall S T, capsafe S -> caprod T -> caprod (typ_stoic S T)
  | caprod_all_true: forall T, type (typ_all true T) ->
-                              caprod (open_tt T typ_base) ->
+                              (caprod (open_tt T typ_base) \/
+                               caprod (open_tt T (typ_stoic typ_base typ_eff))) ->
                               caprod (typ_all true T)
  | caprod_all_false: forall T, type (typ_all false T) ->
                                caprod (open_tt T typ_eff) ->
@@ -1733,8 +1735,9 @@ Proof. intros. gen T. inductions k; intros.
         lets: Max.max_lub_r H. forwards~ : IHk T2.
           autos* PeanoNat.Nat.le_neq PeanoNat.Nat.lt_succ_r.
     inversions H0.
-      intros Hc. simpl in H. lets: le_S_n H. inversions Hc.
+      intros Hc. simpl in H. lets: le_S_n H. inversions Hc. destruct* H6.
         forwards~ : IHk (open_tt T typ_base). rewrite* <- degree_typ_eq_open_tt.
+        forwards~ : IHk (open_tt T (typ_stoic typ_base typ_eff)). rewrite* <- degree_typ_eq_open_tt.
       intros Hc. simpl in H. lets: le_S_n H. inversions Hc.
         forwards~ : IHk (open_tt T typ_eff). rewrite* <- degree_typ_eq_open_tt.
 Qed.
@@ -1762,7 +1765,11 @@ Proof. intros. gen T. inductions k; intros.
       destruct* H; destruct* H1.
     simpls. lets: le_S_n H0. cases b.
       forwards~ : IHk (open_tt T typ_base). apply* typ_all_open_tt_type.
-        rewrite* <- degree_typ_eq_open_tt. destruct* H2.
+        rewrite* <- degree_typ_eq_open_tt.
+      forwards~ : IHk (open_tt T (typ_stoic typ_base typ_eff)). apply* typ_all_open_tt_type.
+        rewrite* <- degree_typ_eq_open_tt.
+      destruct* H2; destruct* H3.
+
       forwards~ : IHk (open_tt T typ_eff). apply* typ_all_open_tt_type.
         rewrite* <- degree_typ_eq_open_tt. destruct* H2.
 Qed.
@@ -1881,9 +1888,16 @@ Proof. intros. gen T. inductions k; intros.
 
   split; intros. inversions H1; destruct (same_cap_regular H0).
     apply capsafe_all_true. unsimpl (subst_tt Z b Q (typ_all true T)).  autos* subst_tt_type_type.
-    lets: le_S_n H.
-      replace typ_base with (subst_tt Z b Q typ_base) by reflexivity.
+      lets: le_S_n H.
+        replace typ_base with (subst_tt Z b Q typ_base)  by reflexivity.
         replace typ_base with (subst_tt Z b P typ_base) in H5 by reflexivity.
+        unfolds open_tt. rewrite <- subst_tt_open_tt_rec in *; auto.
+        apply* IHk. rewrite* <- degree_typ_eq_open_tt_rec.
+      lets: le_S_n H.
+        replace (typ_stoic typ_base typ_eff) with (subst_tt Z b Q (typ_stoic typ_base typ_eff))
+          by reflexivity.
+        replace (typ_stoic typ_base typ_eff) with (subst_tt Z b P (typ_stoic typ_base typ_eff))
+          in H6 by reflexivity.
         unfolds open_tt. rewrite <- subst_tt_open_tt_rec in *; auto.
         apply* IHk. rewrite* <- degree_typ_eq_open_tt_rec.
     apply capsafe_all_false. unsimpl (subst_tt Z b Q (typ_all false T)).  autos* subst_tt_type_type.
@@ -1892,14 +1906,22 @@ Proof. intros. gen T. inductions k; intros.
         replace typ_eff with (subst_tt Z b P typ_eff) in H5 by reflexivity.
         unfolds open_tt. rewrite <- subst_tt_open_tt_rec in *; auto.
         apply* IHk. rewrite* <- degree_typ_eq_open_tt_rec.
-  inversions H1; destruct (same_cap_regular H0).
-    apply caprod_all_true. unsimpl (subst_tt Z b Q (typ_all true T)).  autos* subst_tt_type_type.
-    lets: le_S_n H.
-      replace typ_base with (subst_tt Z b Q typ_base) by reflexivity.
-        replace typ_base with (subst_tt Z b P typ_base) in H5 by reflexivity.
+  inversions H1. destruct H5; destruct (same_cap_regular H0);
+    apply caprod_all_true; unsimpl (subst_tt Z b Q (typ_all true T)); autos* subst_tt_type_type.
+      lets: le_S_n H. left.
+        replace typ_base with (subst_tt Z b Q typ_base) by reflexivity.
+        replace typ_base with (subst_tt Z b P typ_base) in H1 by reflexivity.
         unfolds open_tt. rewrite <- subst_tt_open_tt_rec in *; auto.
         apply* IHk. rewrite* <- degree_typ_eq_open_tt_rec.
-    apply caprod_all_false. unsimpl (subst_tt Z b Q (typ_all false T)).  autos* subst_tt_type_type.
+      lets: le_S_n H. right.
+        replace (typ_stoic typ_base typ_eff) with (subst_tt Z b Q (typ_stoic typ_base typ_eff))
+          by reflexivity.
+        replace (typ_stoic typ_base typ_eff) with (subst_tt Z b P (typ_stoic typ_base typ_eff))
+          in H1 by reflexivity.
+        unfolds open_tt. rewrite <- subst_tt_open_tt_rec in *; auto.
+        apply* IHk. rewrite* <- degree_typ_eq_open_tt_rec.
+    destruct (same_cap_regular H0). apply caprod_all_false.
+      unsimpl (subst_tt Z b Q (typ_all false T)). autos* subst_tt_type_type.
     lets: le_S_n H.
       replace typ_eff with (subst_tt Z b Q typ_eff) by reflexivity.
         replace typ_eff with (subst_tt Z b P typ_eff) in H5 by reflexivity.
@@ -1921,24 +1943,16 @@ Proof.  intros. forwards~ : same_cap_subst_tt T Z P Q. unfolds*. destruct* H2. Q
 
 Lemma capsafe_all_open_tt: forall T U b, type U -> closed_typ U = b ->
   capsafe (typ_all b T) -> capsafe (open_tt T U).
-Proof. intros. inversions H1. destruct (capsafe_decidable H).
+Proof. intros. inversions H1.
+  destruct (capsafe_decidable H).
     pick_fresh X. rewrite* (@subst_tt_intro X T U true). eapply capsafe_subst_tt_capsafe.
       apply capsafe_base. auto. rewrite* <- subst_tt_intro.
-
- (*    pick_fresh X. rewrite* (@subst_tt_intro X T U true). eapply capsafe_subst_tt_capsafe. *)
- (*      apply capsafe_base. auto. rewrite* <- subst_tt_intro. *)
- (*    pick_fresh X. rewrite* (@subst_tt_intro X T U true). eapply capsafe_subst_tt_caprod. *)
- (*      apply caprod_safe_eff. apply capsafe_base. apply caprod_eff. auto. rewrite* <- subst_tt_intro. *)
-
-
- (* destruct (capsafe_decidable H). *)
- (*  lets: capsafe_closed_typ H2. rewrite H0 in H3. substs. rewrite H3 in H1. inversions H1. *)
- (*    pick_fresh X. rewrite* (@subst_tt_intro X T U true). eapply capsafe_subst_tt_capsafe. *)
- (*      apply capsafe_base. auto. rewrite* <- subst_tt_intro. *)
- (*  lets: capsafe_closed_typ H2. rewrite H0 in H3. substs. rewrite H3 in H1. inversions H1. *)
- (*    pick_fresh X.  rewrite* (@subst_tt_intro X T U true). eapply capsafe_subst_tt_capsafe. *)
- (*      apply capsafe_base.  auto. rewrite* <- subst_tt_intro. *)
- admit. admit.
+    pick_fresh X. rewrite* (@subst_tt_intro X T U true). eapply capsafe_subst_tt_caprod.
+      applys~ caprod_safe_eff typ_base typ_eff. auto. rewrite* <- subst_tt_intro.
+ destruct (capsafe_decidable H).
+  lets: capsafe_closed_typ H0. rewrite H1 in H2. inversions H2.
+  pick_fresh X. rewrite* (@subst_tt_intro X T U false). eapply capsafe_subst_tt_caprod.
+    apply caprod_eff. auto. rewrite* <- subst_tt_intro.
 Qed.
 
 Lemma healthy_env_term_capsafe_0: forall E t T,
@@ -1995,7 +2009,17 @@ Proof. intros. gen t E T. inductions k; intros.
       replace empty with (map (subst_tb X true typ_base) empty) by rewrite* map_empty.
       apply* typing_through_subst_te. rewrite* concat_empty_r.
 
+    assert (HII: typing E (open_te e1 (typ_stoic typ_base typ_eff))
+                          (open_tt T1 (typ_stoic typ_base typ_eff))).
+      rewrite <- (@concat_empty_r bind E).
+      rewrite* (@subst_te_intro X (typ_stoic typ_base typ_eff) e1 true).
+      rewrite* (@subst_tt_intro X T1 (typ_stoic typ_base typ_eff) true).
+      replace empty with (map (subst_tb X true (typ_stoic typ_base typ_eff)) empty)
+        by rewrite* map_empty.
+      apply* typing_through_subst_te. rewrite* concat_empty_r.
+
     forwards~ : IHk HI. rewrite* <- degree_trm_eq_open_te.
+    forwards~ : IHk HII. rewrite* <- degree_trm_eq_open_te.
     apply* capsafe_all_true. autos* wft_type typing_wft.
 
     assert (HI: typing E (open_te e1 typ_eff) (open_tt T1 typ_eff)).
@@ -2079,11 +2103,17 @@ Proof. introv Prim Typ Val. inductions Typ; auto.
 
     apply capsafe_all_true. apply (wft_type (typing_wft Typ)).
     rewrite <- concat_empty_r in IH at 1.
-    forwards~ Typ1: typing_through_subst_te typ_base IH.
-    rewrite map_empty, concat_empty_r in Typ1.
-    forwards~ Safe1 : healthy_env_term_capsafe Typ1. rewrite <- concat_empty_l.
-      rewrite concat_empty_l. apply* primitive_pure_healthy.
-    rewrite* (@subst_tt_intro X T1 typ_base true).
+      forwards~ Typ1: typing_through_subst_te typ_base IH.
+      rewrite map_empty, concat_empty_r in Typ1.
+      forwards~ Safe1 : healthy_env_term_capsafe Typ1. rewrite <- concat_empty_l.
+        rewrite concat_empty_l. apply* primitive_pure_healthy.
+      rewrite* (@subst_tt_intro X T1 typ_base true).
+    rewrite <- concat_empty_r in IH at 1.
+      forwards~ Typ1: typing_through_subst_te (typ_stoic typ_base typ_eff) IH.
+      rewrite map_empty, concat_empty_r in Typ1.
+      forwards~ Safe1 : healthy_env_term_capsafe Typ1. rewrite <- concat_empty_l.
+        rewrite concat_empty_l. apply* primitive_pure_healthy.
+      rewrite* (@subst_tt_intro X T1 (typ_stoic typ_base typ_eff) true).
 
     apply capsafe_all_false. apply (wft_type (typing_wft Typ)).
     rewrite <- concat_empty_r in IH at 1.
