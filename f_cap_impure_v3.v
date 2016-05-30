@@ -510,7 +510,7 @@ Definition subst_tb (Z : var) (P : typ) (b : bind) : bind :=
 Hint Constructors type term wft ok okt value red subseq sub.
 
 Hint Resolve
-  typing_var typing_app typing_tapp.
+  typing_var typing_app typing_tapp sub_refl sub_top sub_trans.
 
 (** Gathering free names already used in the proofs *)
 
@@ -1666,7 +1666,90 @@ Proof. intros. inductions E.
 Qed.
 
 (* ********************************************************************** *)
+(** * Properties of Subtyping *)
+
+
+Lemma sub_stoic_inv: forall E T U1 U2,
+  sub E T (typ_stoic U1 U2) ->
+  exists S1 S2, T = typ_stoic S1 S2 /\ sub E U1 S1 /\ sub E S2 U2.
+Proof. intros. gen_eq S: (typ_stoic U1 U2). gen U1 U2.
+  inductions H; intros; substs; tryfalse; iauto.
+  inversions H0. jauto.
+  forwards~ : IHsub2 U1 U2. destruct H2 as [M1 [M2 Ha]].
+    forwards~ : IHsub1 M1 M2; jauto.
+  inversions* H1.
+Qed.
+
+Lemma sub_arrow_inv: forall E T U1 U2,
+  sub E T (typ_arrow U1 U2) ->
+  exists S1 S2, (T = typ_arrow S1 S2 \/ T = typ_stoic S1 S2) /\ sub E U1 S1 /\ sub E S2 U2.
+Proof. intros.
+  gen_eq S: (typ_arrow U1 U2).  gen U1 U2.
+  inductions H; intros; substs; tryfalse; jauto.
+  inversions H0. jauto.
+  forwards~ : IHsub2 U1 U2. destruct* H2 as [M1 [M2 [Ha [Hb Hc]]]]. destruct* Ha.
+    substs. forwards~ : IHsub1 M1 M2. forwards~ : IHsub2 U1 U2. jauto.
+    substs. lets*: sub_stoic_inv H0. jauto.
+  inversions H2. jauto.
+  inversions H1. jauto.
+Qed.
+
+Lemma sub_all_inv: forall E T S L,
+  sub E S (typ_all T) ->
+  exists U, S = typ_all U /\
+            (forall X, X \notin L -> sub (E & [: X :])
+                                         (U open_tt_var X)
+                                         (T open_tt_var X)).
+Proof. admit. Qed.
+
+Lemma sub_arrow_inv_sub: forall E S1 S2 U1 U2,
+  sub E (typ_arrow S1 S2) (typ_arrow U1 U2) ->
+  sub E U1 S1 /\ sub E S2 U2.
+Proof. intros. lets: sub_arrow_inv H. destruct H0 as [S3 [S4 [H1 [H2 H3]]]].
+  destruct H1 as [H4 | H4]; inversion* H4.
+Qed.
+
+Lemma sub_stoic_inv_sub: forall E S1 S2 U1 U2,
+  sub E (typ_stoic S1 S2) (typ_stoic U1 U2) ->
+  sub E U1 S1 /\ sub E S2 U2.
+Proof. intros. lets: sub_stoic_inv H. destruct H0 as [S3 [S4 [H1 [H2 H3]]]].
+  inversions* H1.
+Qed.
+
+Lemma sub_degen_inv_sub: forall E S1 S2 U1 U2,
+  sub E (typ_stoic S1 S2) (typ_arrow U1 U2) ->
+  sub E U1 S1 /\ sub E S2 U2.
+Proof. intros. lets: sub_arrow_inv H. destruct H0 as [S3 [S4 [H1 [H2 H3]]]].
+  destruct H1 as [H1 | H1]; inversions* H1.
+Qed.
+
+Lemma sub_degen_inv_false: forall E S1 S2 U1 U2,
+  sub E (typ_arrow S1 S2) (typ_stoic U1 U2) -> False.
+Proof. intros. lets: sub_stoic_inv H. false* H0. Qed.
+
+Lemma sub_base_eq: forall E S, sub E S typ_base -> S = typ_base.
+Proof. intros. inductions H; auto. Qed.
+
+Lemma sub_top_eq: forall E S, sub E typ_top S -> S = typ_top.
+Proof. intros. inductions H; auto. Qed.
+
+Lemma sub_top_neq: forall E S T, sub E S T -> T <> typ_top -> S <> typ_top.
+Proof. intros. inductions H; try solve [intros Hc; false]; auto. Qed.
+
+Lemma sub_closed: forall E S T, sub E S T -> T <> typ_top ->
+  closed_typ T = true -> closed_typ S = true.
+Proof. intros. destruct T; auto.
+  lets: sub_base_eq H. substs*.
+  lets: sub_stoic_inv H. destruct H2 as [S1 [S2 [H2 _]]]. substs*.
+  let L := gather_vars in lets: sub_all_inv L H.
+    destruct H2 as [U [Ha _]]. substs*.
+Qed.
+
+Hint Resolve sub_degen_inv_false sub_base_eq.
+
+(* ********************************************************************** *)
 (** * Properties of Typing *)
+
 
 (* ********************************************************************** *)
 (** Weakening (5) *)
