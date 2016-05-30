@@ -115,10 +115,10 @@ Inductive term : trm -> Prop :=
   | term_top : term trm_top
   | term_var : forall x,
       term (trm_fvar x)
-  | term_abs : forall L V e1,
-      type V ->
+  | term_abs : forall L T e1,
+      type T ->
       (forall x, x \notin L -> term (e1 open_ee_var x)) ->
-      term (trm_abs V e1)
+      term (trm_abs T e1)
   | term_app : forall e1 e2,
       term e1 ->
       term e2 ->
@@ -126,10 +126,10 @@ Inductive term : trm -> Prop :=
   | term_tabs : forall L e1,
       (forall X, X \notin L -> term (e1 open_te_var X)) ->
       term (trm_tabs e1)
-  | term_tapp : forall e1 V,
+  | term_tapp : forall e1 T,
       term e1 ->
-      type V ->
-      term (trm_tapp e1 V).
+      type T ->
+      term (trm_tapp e1 T).
 
 (** Environment is an associative list of bindings. *)
 
@@ -215,6 +215,7 @@ Inductive sub : env -> typ -> typ -> Prop :=
       sub E S typ_top
   | sub_refl: forall E S,
       okt E ->
+      wft E S ->
       sub E S S
   | sub_trans : forall E S T U,
       okt E ->
@@ -245,7 +246,7 @@ Reserved Notation "E |= t -: T" (at level 69).
 
 Inductive typing : env -> trm -> typ -> Prop :=
   | typing_top : forall E,
-      ok E ->
+      okt E ->
       E |= trm_top -: typ_top
   | typing_var : forall E x T,
       okt E ->
@@ -401,7 +402,7 @@ Inductive healthy: env -> Prop :=
 Definition inhabitable_pure_healthy_statement := forall E,
   inhabitable E -> pure E = E -> healthy E.
 
-(* effect safety : it's impossible to construct a term of typ_eff in pure environment  *)
+(* effect safety : it's impossible to construct a term of typ_eff in healthy environment  *)
 Definition effect_safety_1 := forall E, healthy E ->
   ~exists e, E |= e -: typ_eff.
 
@@ -506,7 +507,7 @@ Definition subst_tb (Z : var) (P : typ) (b : bind) : bind :=
 
 (** Constructors as hints. *)
 
-Hint Constructors type term wft ok okt value red subseq.
+Hint Constructors type term wft ok okt value red subseq sub.
 
 Hint Resolve
   typing_var typing_app typing_tapp.
@@ -1133,12 +1134,21 @@ Qed.
 
 (* ********************************************************************** *)
 (** ** Regularity of relations *)
+
+Lemma sub_regular : forall E S T,
+  sub E S T -> okt E /\ wft E S /\ wft E T.
+Proof.
+  induction 1; autos*.
+  split. pick_fresh X. forwards~: (H0 X). autos* okt_weaken.
+  split; apply_fresh* wft_all as Y; forwards~: (H0 Y); iauto.
+Qed.
+
 (** The typing relation is restricted to well-formed objects. *)
 
 Lemma typing_regular : forall E e T,
   typing E e T -> okt E /\ term e.
 Proof.
-  induction 1; auto.
+  induction 1; iauto.
   splits.
     pick_fresh y. specializes H0 y. destructs~ H0. destruct* (okt_push_typ_inv H0).
     apply_fresh* term_abs as y.
@@ -1151,7 +1161,6 @@ Proof.
       pick_fresh y. specializes H1 y. destructs~ H1.
         forwards*: okt_push_typ_inv.
       specializes H1 y. destructs~ H1.
-  splits*.
   splits*.
     apply term_tabs with L. intros.
     specializes H1 X. destructs~ H1.
@@ -1173,6 +1182,7 @@ Lemma red_regular : forall t t',
   red t t' -> term t /\ term t'.
 Proof.
   induction 1; split; autos* value_regular.
+  inversions H. pick_fresh y. rewrite* (@subst_ee_intro y).
   inversions H. pick_fresh y. rewrite* (@subst_ee_intro y).
   inversions H. pick_fresh Y. rewrite* (@subst_te_intro Y).
 Qed.
