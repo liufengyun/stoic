@@ -23,11 +23,13 @@ Inductive typ       : Set   :=
   | typ_eff         : typ
   | typ_arrow       : typ -> typ -> typ
   | typ_stoic       : typ -> typ -> typ
-  | typ_all         : typ -> typ.
+  | typ_all         : typ -> typ
+  | typ_top         : typ.
 
 (** Representation of pre-terms *)
 
 Inductive trm : Set :=
+  | trm_top  : trm
   | trm_bvar : nat -> trm
   | trm_fvar : var -> trm
   | trm_abs  : typ -> trm -> trm
@@ -43,6 +45,7 @@ Fixpoint open_tt_rec (K : nat) (U : typ) (T : typ) {struct T} : typ :=
   | typ_fvar X            => typ_fvar X
   | typ_base              => typ_base
   | typ_eff               => typ_eff
+  | typ_top               => typ_top
   | typ_arrow T1 T2       => typ_arrow (open_tt_rec K U T1) (open_tt_rec K U T2)
   | typ_stoic T1 T2       => typ_stoic (open_tt_rec K U T1) (open_tt_rec K U T2)
   | typ_all T1            => typ_all (open_tt_rec (S K) U T1)
@@ -54,6 +57,7 @@ Definition open_tt T U := open_tt_rec 0 U T.
 
 Fixpoint open_te_rec (K : nat) (U : typ) (e : trm) {struct e} : trm :=
   match e with
+  | trm_top       => trm_top
   | trm_bvar i    => trm_bvar i
   | trm_fvar x    => trm_fvar x
   | trm_abs V e1  => trm_abs  (open_tt_rec K U V)  (open_te_rec K U e1)
@@ -68,6 +72,7 @@ Definition open_te t U := open_te_rec 0 U t.
 
 Fixpoint open_ee_rec (k : nat) (f : trm) (e : trm) {struct e} : trm :=
   match e with
+  | trm_top       => trm_top
   | trm_bvar i    => If k = i then f else (trm_bvar i)
   | trm_fvar x    => trm_fvar x
   | trm_abs V e1  => trm_abs V (open_ee_rec (S k) f e1)
@@ -87,6 +92,7 @@ Notation "t 'open_ee_var' x" := (open_ee t (trm_fvar x)) (at level 67).
 (** Types as locally closeded pre-types *)
 
 Inductive type : typ -> Prop :=
+  | type_top : type typ_top
   | type_var : forall X,
       type (typ_fvar X)
   | type_base: type typ_base
@@ -106,6 +112,7 @@ Inductive type : typ -> Prop :=
 (** Terms as locally closeded pre-terms *)
 
 Inductive term : trm -> Prop :=
+  | term_top : term trm_top
   | term_var : forall x,
       term (trm_fvar x)
   | term_abs : forall L V e1,
@@ -146,6 +153,7 @@ Definition env := LibEnv.env bind.
   implies that T is a type *)
 
 Inductive wft : env -> typ -> Prop :=
+  | wft_top: forall E, wft E typ_top
   | wft_base: forall E, wft E typ_base
   | wft_eff: forall E, wft E typ_eff
   | wft_var : forall E X,
@@ -178,6 +186,7 @@ Inductive okt : env -> Prop :=
 
 (* closed rules *)
 Fixpoint closed_typ(t: typ) := match t with
+  | typ_top             => true
   | typ_bvar _          => false  (* impossible, ill-formed *)
   | typ_fvar _          => false  (* could be E or => *)
   | typ_base            => true
@@ -197,42 +206,84 @@ Fixpoint pure(E: env) := match E with
     end.
 
 
+(** Subtyping relation *)
+
+Inductive sub : env -> typ -> typ -> Prop :=
+  | sub_top: forall E S,
+      okt E ->
+      wft E S ->
+      sub E S typ_top
+  | sub_refl: forall E S,
+      okt E ->
+      sub E S S
+  | sub_trans : forall E S T U,
+      okt E ->
+      sub E S T ->
+      sub E T U ->
+      sub E S U
+  | sub_degen: forall E S T,
+      okt E ->
+      wft E S ->
+      wft E T ->
+      sub E (typ_stoic S T) (typ_arrow S T)
+  | sub_arrow: forall E S1 S2 T1 T2,
+      sub E T1 S1 ->
+      sub E S2 T2 ->
+      sub E (typ_arrow S1 S2) (typ_arrow T1 T2)
+  | sub_stoic: forall E S1 S2 T1 T2,
+      sub E T1 S1 ->
+      sub E S2 T2 ->
+      sub E (typ_stoic S1 S2) (typ_stoic T1 T2)
+  | sub_all : forall L E S1 S2,
+      (forall X, X \notin L ->
+          sub (E & [:X:]) (S1 open_tt_var X) (S2 open_tt_var X)) ->
+      sub E (typ_all S1) (typ_all S2).
+
 (** Typing relation *)
 
+Reserved Notation "E |= t -: T" (at level 69).
+
 Inductive typing : env -> trm -> typ -> Prop :=
+  | typing_top : forall E,
+      ok E ->
+      E |= trm_top -: typ_top
   | typing_var : forall E x T,
       okt E ->
       binds x (bind_typ T) E ->
-      typing E (trm_fvar x) T
+      E |= (trm_fvar x) -: T
   | typing_abs : forall L E V e1 T1,
       (forall x, x \notin L ->
-        typing (E & x ~: V) (e1 open_ee_var x) T1) ->
-      typing E (trm_abs V e1) (typ_arrow V T1)
+        (E & x ~: V) |= (e1 open_ee_var x) -: T1) ->
+      E |= (trm_abs V e1) -: (typ_arrow V T1)
   | typing_stoic : forall L E V e1 T1,
       okt E ->
       (forall x, x \notin L ->
-        typing ((pure E) & x ~: V) (e1 open_ee_var x) T1) ->
-      typing E (trm_abs V e1) (typ_stoic V T1)
-  | typing_degen : forall E t S T,
-     typing E t (typ_stoic S T) ->
-     typing E t (typ_arrow S T)
+        ((pure E) & x ~: V) |= (e1 open_ee_var x) -: T1) ->
+      E |= (trm_abs V e1) -: (typ_stoic V T1)
+  | typing_sub : forall S E e T,
+      E |= e -: S ->
+      sub E S T ->
+      E |= e -: T
   | typing_app : forall T1 E e1 e2 T2,
-      typing E e1 (typ_arrow T1 T2) ->
-      typing E e2 T1 ->
-      typing E (trm_app e1 e2) T2
+      E |= e1 -: (typ_arrow T1 T2) ->
+      E |= e2 -: T1 ->
+      E |= (trm_app e1 e2) -: T2
   | typing_tabs : forall L E e1 T1,
       okt E ->
       (forall X, X \notin L ->
-        typing ((pure E) & [: X :]) (e1 open_te_var X) (T1 open_tt_var X)) ->
-      typing E (trm_tabs e1) (typ_all T1)
+        ((pure E) & [: X :]) |= (e1 open_te_var X) -: (T1 open_tt_var X)) ->
+      E |= (trm_tabs e1) -: (typ_all T1)
   | typing_tapp : forall T1 E e1 T,
       wft E T ->
-      typing E e1 (typ_all T1) ->
-      typing E (trm_tapp e1 T) (open_tt T1 T).
+      E |= e1 -: (typ_all T1) ->
+      E |= (trm_tapp e1 T) -: (open_tt T1 T)
+
+where "E |= t -: T" := (typing E t T).
 
 (** Values *)
 
 Inductive value : trm -> Prop :=
+  | value_top : value trm_top
   | value_abs  : forall V e1, term (trm_abs V e1) ->
                  value (trm_abs V e1)
   | value_tabs : forall e1, term (trm_tabs e1) ->
@@ -241,27 +292,37 @@ Inductive value : trm -> Prop :=
 
 (** One-step reduction *)
 
+Reserved Notation "t --> t'" (at level 68).
+
 Inductive red : trm -> trm -> Prop :=
   | red_app_1 : forall e1 e1' e2,
       term e2 ->
-      red e1 e1' ->
-      red (trm_app e1 e2) (trm_app e1' e2)
+      e1 --> e1' ->
+      (trm_app e1 e2) --> (trm_app e1' e2)
   | red_app_2 : forall e1 e2 e2',
       value e1 ->
-      red e2 e2' ->
-      red (trm_app e1 e2) (trm_app e1 e2')
-  | red_tapp : forall e1 e1' V,
-      type V ->
-      red e1 e1' ->
-      red (trm_tapp e1 V) (trm_tapp e1' V)
-  | red_abs : forall V e1 v2,
-      term (trm_abs V e1) ->
+      e2 --> e2' ->
+      (trm_app e1 e2) --> (trm_app e1 e2')
+  | red_tapp : forall e1 e1' T,
+      type T ->
+      e1 --> e1' ->
+      (trm_tapp e1 T) --> (trm_tapp e1' T)
+  | red_abs : forall T e1 v2,
+      term (trm_abs T e1) ->
+      T <> typ_top ->
       value v2 ->
-      red (trm_app (trm_abs V e1) v2) (open_ee e1 v2)
-  | red_tabs : forall e1 V,
+      (trm_app (trm_abs T e1) v2) --> (open_ee e1 v2)
+  | red_top : forall T e1 e2,
+      term (trm_abs T e1) ->
+      T = typ_top ->
+      value e2 ->
+      (trm_app (trm_abs T e1) e2) --> (open_ee e1 trm_top)
+  | red_tabs : forall e1 T,
       term (trm_tabs e1) ->
-      type V ->
-      red (trm_tapp (trm_tabs e1) V) (open_te e1 V).
+      type T ->
+      red (trm_tapp (trm_tabs e1) T) (open_te e1 T)
+
+where "t --> t'" := (red t t').
 
 (* get environment for type vars *)
 Fixpoint tvar_env (E: env) := match E with
@@ -280,14 +341,14 @@ Inductive subseq : env -> env -> Prop :=
 (** Our goal is to prove preservation and progress *)
 
 Definition preservation := forall E e e' T,
-  typing E e T ->
-  red e e' ->
-  typing E e' T.
+  E |= e -: T ->
+  e --> e' ->
+  E |= e' -: T.
 
 Definition progress := forall e T,
-  typing empty e T ->
+  empty |= e -: T ->
      value e
-  \/ exists e', red e e'.
+  \/ exists e', e --> e'.
 
 (* inhabitable environment *)
 Inductive primitive: env -> Prop :=
@@ -304,12 +365,13 @@ Inductive inhabitable: env -> Prop :=
                         inhabitable E ->
                         primitive F ->
                         value t ->
-                        typing F t T ->
+                        F |= t -: T ->
                         inhabitable (E & z ~: T).
 
 (* capsafe types are not capability producing, i.e. capable of creating an instance of E *)
 
 Inductive capsafe: typ -> Prop :=
+ | capsafe_top: capsafe typ_top
  | capsafe_base: capsafe typ_base
  | capsafe_eff_any_free: forall S T, type T -> caprod S -> capsafe (typ_arrow S T)
  | capsafe_any_safe_free: forall S T, type S -> capsafe T -> capsafe (typ_arrow S T)
@@ -341,12 +403,12 @@ Definition inhabitable_pure_healthy_statement := forall E,
 
 (* effect safety : it's impossible to construct a term of typ_eff in pure environment  *)
 Definition effect_safety_1 := forall E, healthy E ->
-  ~exists e, typing E e typ_eff.
+  ~exists e, E |= e -: typ_eff.
 
 Definition effect_safety_2 := forall E t1 t2 T, healthy E ->
   pure E = E ->
-  typing E (trm_app t1 t2) T  ->
-  exists S1 S2, typing E t1 (typ_stoic S1 S2).
+  E |= (trm_app t1 t2) -: T  ->
+  exists S1 S2, E |= t1 -: (typ_stoic S1 S2).
 
 (* ********************************************************************** *)
 (** * Additional Definitions Used in the Proofs *)
@@ -356,6 +418,7 @@ Definition effect_safety_2 := forall E t1 t2 T, healthy E ->
 Fixpoint fv_tt (T : typ) {struct T} : vars :=
   match T with
   | typ_bvar J            => \{}
+  | typ_top               => \{}
   | typ_base              => \{}
   | typ_eff               => \{}
   | typ_fvar X            => \{X}
@@ -368,6 +431,7 @@ Fixpoint fv_tt (T : typ) {struct T} : vars :=
 
 Fixpoint fv_te (e : trm) {struct e} : vars :=
   match e with
+  | trm_top       => \{}
   | trm_bvar i    => \{}
   | trm_fvar x    => \{}
   | trm_abs V e1  => (fv_tt V) \u (fv_te e1)
@@ -380,6 +444,7 @@ Fixpoint fv_te (e : trm) {struct e} : vars :=
 
 Fixpoint fv_ee (e : trm) {struct e} : vars :=
   match e with
+  | trm_top       => \{}
   | trm_bvar i    => \{}
   | trm_fvar x    => \{x}
   | trm_abs V e1  => (fv_ee e1)
@@ -392,6 +457,7 @@ Fixpoint fv_ee (e : trm) {struct e} : vars :=
 
 Fixpoint subst_tt (Z : var) (U : typ) (T : typ) {struct T} : typ :=
   match T with
+  | typ_top               => typ_top
   | typ_bvar J            => typ_bvar J
   | typ_base              => typ_base
   | typ_eff               => typ_eff
@@ -405,6 +471,7 @@ Fixpoint subst_tt (Z : var) (U : typ) (T : typ) {struct T} : typ :=
 
 Fixpoint subst_te (Z : var) (U : typ) (e : trm) {struct e} : trm :=
   match e with
+  | trm_top       => trm_top
   | trm_bvar i    => trm_bvar i
   | trm_fvar x    => trm_fvar x
   | trm_abs V e1  => trm_abs  (subst_tt Z U V)  (subst_te Z U e1)
@@ -417,6 +484,7 @@ Fixpoint subst_te (Z : var) (U : typ) (e : trm) {struct e} : trm :=
 
 Fixpoint subst_ee (z : var) (u : trm) (e : trm) {struct e} : trm :=
   match e with
+  | trm_top       => trm_top
   | trm_bvar i    => trm_bvar i
   | trm_fvar x    => If x = z then u else (trm_fvar x)
   | trm_abs V e1  => trm_abs V (subst_ee z u e1)
