@@ -544,6 +544,7 @@ Ltac get_env :=
   match goal with
   | |- wft ?E _ => E
   | |- typing ?E _ _ => E
+  | |- sub ?E _ _ => E
   end.
 
 Tactic Notation "apply_empty_bis" tactic(get_env) constr(lemma) :=
@@ -1668,6 +1669,100 @@ Qed.
 (* ********************************************************************** *)
 (** * Properties of Subtyping *)
 
+(** okt properties *)
+
+Lemma okt_pure : forall E,
+  okt E -> okt (pure E).
+Proof. intros. induction* E.
+  destruct a. destruct b; simpl; rewrite cons_to_push in *.
+  apply okt_tvar. apply IHE. lets*: okt_push_tvar_inv H.
+    lets(HI & HII): okt_push_tvar_inv H.
+    lets: pure_dom_subset E.
+    intros Ha. apply HII. autos.
+
+  lets(H1 & H2 & H3): okt_push_typ_inv H. cases_if*.
+  apply okt_typ. auto. apply* pure_wft_reverse.
+    lets: pure_dom_subset E.
+    intros Hc. apply* H3.
+Qed.
+
+Lemma okt_subseq : forall E F, okt F -> subseq E F -> okt E.
+Proof. introv Ok Seq. inductions Seq; auto.
+  destruct* (okt_push_typ_inv Ok).
+  destruct b.
+    destructs (okt_push_tvar_inv Ok). apply okt_tvar. auto.
+      apply subseq_fresh with F; auto.
+    destructs (okt_push_typ_inv Ok). apply okt_typ. auto.
+      apply tvar_wft with F; auto. apply subseq_fresh with F; auto.
+Qed.
+
+
+Lemma sub_tvar : forall E F T1 T2, okt E -> okt F ->
+  tvar_env E = tvar_env F ->
+  sub E T1 T2 -> sub F T1 T2.
+Proof. introv OkE OkF Tv Sub. gen F. inductions Sub; intros; autos.
+  apply* sub_top. forwards~ : tvar_wft Tv H0.
+  apply* sub_refl. forwards~ : tvar_wft Tv H0.
+  apply* sub_trans.
+  apply* sub_degen. forwards~ : tvar_wft Tv H0. forwards~ : tvar_wft Tv H1.
+  apply_fresh sub_all as X. apply* H0.
+    rewrite <- ?cons_to_push. simpl. rewrite* Tv.
+Qed.
+
+Lemma sub_pure : forall E P Q, sub E P Q -> sub (pure E) P Q.
+Proof. introv Sub. destructs (sub_regular Sub).
+  eapply sub_tvar; eauto. apply* okt_pure. apply tvar_pure.
+Qed.
+
+Lemma sub_weakening : forall E F G S T,
+  sub (E & G) S T ->
+  okt (E & F & G) ->
+  sub (E & F & G) S T.
+Proof.
+  introv Typ. gen F. inductions Typ; introv Ok; auto.
+  (* case: fvar trans *)
+  apply* sub_trans.
+  (* case: all *)
+  apply_fresh* sub_all as Y. apply_ih_bind* H0.
+Qed.
+
+Lemma sub_weakening_env : forall E F G S T,
+   sub (E & pure F & G) S T ->
+   okt (E & F & G) ->
+   sub (E & F & G) S T.
+Proof. intros. inductions H; eauto.
+  apply* sub_top. apply* pure_wft_weaken.
+  apply* sub_refl. apply* pure_wft_weaken.
+  apply* sub_degen; apply* pure_wft_weaken.
+  apply_fresh* sub_all as X. lets: H X.
+    rewrite <- concat_assoc.
+    apply* H0. rewrite* concat_assoc.
+    rewrite* concat_assoc.
+Qed.
+
+Lemma sub_strengthening : forall x U E F S T,
+  sub (E & x ~: U & F) S T ->
+  sub (E & F) S T.
+Proof.
+  intros x U E F S T SsubT.
+  inductions SsubT; introv; autos* wft_strengthen.
+  apply_fresh* sub_all as X. apply_ih_bind* H0.
+Qed.
+
+Lemma sub_strengthening_env : forall E S T,
+  sub E S T -> sub (pure E) S T.
+Proof. introv Sub. destructs (sub_regular Sub).
+  apply sub_tvar with E; auto. apply* pure_okt. apply tvar_pure.
+Qed.
+
+Lemma sub_subseq : forall E F T1 T2, okt F ->
+  subseq E F -> sub E T1 T2 -> sub F T1 T2.
+Proof. introv Ok Seq Sub. inductions Seq; auto.
+  destructs (okt_push_typ_inv Ok). apply_empty* sub_weakening.
+  apply sub_tvar with (E & x ~ b); auto. apply* okt_subseq.
+    rewrite <- ?cons_to_push. destruct b; simpl; rewrite* H.
+Qed.
+
 
 Lemma sub_stoic_inv: forall E T U1 U2,
   sub E T (typ_stoic U1 U2) ->
@@ -1760,6 +1855,7 @@ Lemma typing_weakening : forall E F G e T,
    typing (E & F & G) e T.
 Proof.
   introv Typ. gen F. inductions Typ; introv Ok.
+  apply* typing_top.
   apply* typing_var. apply* binds_weaken.
   apply_fresh* typing_abs as x. forwards~ K: (H x).
    apply_ih_bind (H0 x); eauto.
@@ -1775,7 +1871,7 @@ Proof.
      branch 1. lets*: pure_dom_subset E.
      branch 2. lets*: pure_dom_subset F.
      branch 3. lets*: pure_dom_subset G.
-  apply* typing_degen.
+  apply* typing_sub. apply* sub_weakening.
   apply* typing_app.
   apply_fresh* typing_tabs as X.
     repeat(rewrite pure_dist in *). rewrite <- concat_assoc.
@@ -1793,7 +1889,7 @@ Qed.
 
 Lemma typing_wft: forall E e T, typing E e T -> wft E T.
 Proof.
-  intros. induction H. applys~ wft_from_env_has_typ x.
+  intros. induction* H. (* applys~ wft_from_env_has_typ x. *)
   pick_fresh x. forwards~ K: (H x). destructs (typing_regular K).
     apply* wft_arrow. forwards~ : H0 x. apply_empty* wft_strengthen.
   apply wft_stoic. pick_fresh x. forwards~: (H0 x).
@@ -1803,7 +1899,7 @@ Proof.
     pick_fresh x. forwards~: (H1 x).
     rewrite <- (@concat_empty_r bind (x ~: V) ) in H2. rewrite concat_assoc in H2.
     lets: wft_strengthen H2. rewrite concat_empty_r in H3. apply* pure_wft.
-  inverts* IHtyping.
+  lets*: sub_regular H0.
   inverts* IHtyping1.
   let L := gather_vars in (apply* (@wft_all L)). intros.
     forwards~: (H1 X). rewrite <- (@concat_empty_l bind E).
@@ -1816,6 +1912,7 @@ Lemma typing_weakening_env : forall E F G e T,
   okt (E & F & G) ->
   typing (E & F & G) e T.
 Proof. intros. inductions H.
+  apply* typing_top.
   apply* typing_var. binds_cases H0; autos.
     apply* binds_weaken. apply* binds_concat_left.
     apply binds_concat_right. apply* pure_binds.
@@ -1826,7 +1923,7 @@ Proof. intros. inductions H.
   apply_fresh typing_stoic as x. auto.
     repeat(rewrite pure_dist in *). rewrite pure_eq in *.
     apply_ih_bind* H1. rewrite* pure_eq. forwards~ : H0 x.
-  apply* typing_degen.
+  apply* typing_sub. apply* sub_weakening_env.
   apply* typing_app.
   apply_fresh typing_tabs as X; auto.
     repeat(rewrite pure_dist in *). rewrite pure_eq in *.
@@ -1834,11 +1931,18 @@ Proof. intros. inductions H.
   apply typing_tapp; auto. apply* pure_wft_weaken.
 Qed.
 
-Lemma typing_strengthen_env: forall E u U, value u -> typing E u U ->
-  closed_typ U = true -> typing (pure E) u U.
-Proof. intros. induction H0; simpls; inversion H1.
+Lemma typing_strengthening_env: forall E u U,
+  value u ->
+  typing E u U ->
+  U <> typ_top ->
+  closed_typ U = true ->
+   typing (pure E) u U.
+Proof. intros. induction H0; simpls; tryfalse.
   apply typing_var. apply* pure_okt. apply* pure_binds_in.
   apply_fresh* typing_stoic as y. apply* pure_okt. rewrite* pure_eq.
+  apply typing_sub with S; auto. apply IHtyping; auto.
+    forwards~ : sub_top_neq H3 H1. forwards~ : sub_closed H3 H1 H2.
+    apply* sub_strengthening_env.
   inversion H.
   apply_fresh* typing_tabs as y. apply* pure_okt. rewrite* pure_eq.
   inversion H.
