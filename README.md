@@ -155,26 +155,6 @@ Prerequisite: the code is developed with Coq 8.5pl1.
 - compile project: `make`
 - clean project: `make clean`
 
-### Compile Locally Nameless
-
-The locally-nameless project under `lib/ln/ln` is not compiled by default,
-as it's not required for compiling current project. Follow the steps below
-to compile the project if needed:
-
-First, put a `settings.sh` file under `lib/ln/ln`:
-
-``` shell
-TLC=../../tlc/src/
-COQBIN=/path/to/coq/bin/
-```
-
-Then, run `make`.
-
-If you want to play with `locally-nameless` interactively in emacs,
-put a `.dir-locals.el` file under `lib/ln/ln`:
-
-    ((coq-mode . ((coq-prog-args . ("-emacs-U" "-R" "../tlc/src" "TLC")))))
-
 ## Reference
 
 1. [Spores](http://infoscience.epfl.ch/record/191239)  *Heather Miller et al*, 2014
