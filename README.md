@@ -1,29 +1,33 @@
 # Stoic
 
 The purpose of this project is to explore the theoretical foundation
-as well as conceptual possibilities of *capability-based effect
-systems*.
+as well as conceptual possibilities of *capability-based systems*.
 
-The core idea is that capabilities are required to make side effects,
+A main trait of the calculi under study is the introduction of
+_stoic functions_. Compare to normal functions which can capture
+anything from the environment, _stoic functions_ don't capture
+capabilities or _non-stoic functions_.
+
+There are two major applications of the calculus:
+
+- capability-based effect systems
+- capability-based security
+
+## Capability-based Effect System
+
+The core idea is that capabilities are required to produce side effects,
 thus by tracking capabilities in the type system it's possible to
 track side effects in the type system. To make sure capabilities are
 passed by function parameters instead of being captured from the
-environment, we need to introduce *stoic functions*, which can't
-capture variables of capability types in the environment.
-
-## Motivation
+environment, we need to resort to *stoic functions*.
 
 Compared to existing type-and-effect systems(Gifford and Lucassen,
 [1986](http://dl.acm.org/citation.cfm?id=319848),
 [1988](http://dl.acm.org/citation.cfm?id=73564)) and monad-based
 effect systems, capability-based effect systems have the advantage of
-more succinct syntax and better handling of effect polymorphism. Thus
-capability-based effect systems stand a better chance to be adopted by
-programmers.
-
-In a capability-based effect system, we need to introduce *stoic
-functions*, which can't capture variables of capability types in the
-environment.
+more succinct syntax and lower cognitive load in handling of effect
+polymorphism. Thus capability-based effect systems stand a better
+chance to be adopted by programmers.
 
 For example, in the following example, the type system would report an
 error on `foo`, as it's not allowed to capture any capability
@@ -60,6 +64,31 @@ def foo(xs: List[Int])(implicit c: IO) = {
 
 This way, the designers of APIs can strictly control what side effects
 a passed in function can have.
+
+## Capability-base Security
+
+_Stoic functions_ lend itself as a powerful conceptual tool in
+designing and reasoning protection in capability-based security systems.
+
+For example, KeyKos is the first capability-based operating system
+that implements _confinement_. Roughly speaking, _confinement_ means a
+user is able to use a potentially malicious program from an unknown
+source to process his sensitive data without worrying that the
+malicious program will leak the data.
+
+While KeyKos is a very powerful and secure system
+(UNIX/Linux/Windows/OSX will never match), the concepts in KeyKos are
+not easy to understand, for instance it has concepts like _factory_,
+_discreet_ and _sensory capabilities_, to name just a few. _Stoic
+functions_ help clarify the concepts and reason the design of the
+system. It is our hypothesis that any capability-based operating
+system has to implement a primitive similar to _stoic functions_ in
+order to enable useful security patterns.
+
+We also believe _stoic functions_ will be useful in designing security
+protection in open ecosystems, like
+[Caja](https://developers.google.com/caja/), cloud-based computing
+platforms and app security in mobile phones.
 
 ## Concepts
 
@@ -108,36 +137,9 @@ safety. The intended relation between "pure", "inhabited" and
 - [F-Pure](f_cap_pure_v2.v)
 - [F-Impure](f_cap_impure.v)
 
-## Steps
-
-| Milestones                                |          Description                                   |         status      |
-| ----------------------------------------- | ------------------------------------------------------ | --------------------|
-|  **Phase 1**                              |    **Warm Up**                                         |                     |
-|  [stlc_cfun_ln.v](stlc_cfun_ln.v)         |    STLC + closed functions                             |      Finished       |
-|  [f_cfun_ln.v](f_cfun_ln.v)               |    F + closed functions                                |      Finished       |
-|  [f_cfun_ln_v2.v](f_cfun_ln_v2.v)         |    F + closed functions(type variable capture)         |      Finished       |
-|  [fsub_cfuns_ln.v](fsub_cfuns_ln.v)       |    F<: + closed functions                              |      Finished       |
-|  [fsub_cfuns_ln_v2.v](fsub_cfuns_ln_v2.v) |    F<: + closed functions(type variable capture)       |      Finished       |
-|  **Phase 2**                              |    **Pure Capability**                                 |                     |
-|  [stlc_cap_pure.v](stlc_cap_pure.v)       |    STLC + capabilities                                 |      Finished       |
-|  [f_cap_pure.v](f_cap_pure.v)             |    F + capabilities                                    |      Finished       |
-|  [f_cap_pure_v2.v](f_cap_pure_v2.v)       |    F + capabilities(allow B->E to type app)            |      Finished       |
-|  [f_cap_pure_v3.v](f_cap_pure_v3.v)       |    F + capabilities(allow E to type app)               |      Finished       |
-|  **Phase 3**                              |    **Pure Capability + Subtyping**                     |                     |
-|  [stlc_cap_sub_pure.v](stlc_cap_sub_pure.v) |    STLC + capabilities + subtyping                   |      Finished       |
-|  [fsub_cap_pure.v](fsub_cap_pure.v)       |    F<: + capabilities                                  |      N/A            |
-|  **Phase 4**                              |    **Impure Capability**                               |                     |
-|  [stlc_cap_impure.v](stlc_cap_impure.v)   |    STLC + capabilities + =>                            |      Finished       |
-|  [stlc_cap_impure_top.v](stlc_cap_impure_top.v)   |    STLC + capabilities + =>(two `Top`)         |      Finished       |
-|  [f_cap_impure.v](f_cap_impure.v)         |    F + capabilities + =>                               |      Finished       |
-|  fsub_cap_impure.v                        |    F<: + capabilities + =>                             |      N/A            |
-|  **Phase 5**                              |    **Two Universe**                                    |                     |
-|  [f_cap_pure_v4.v](f_cap_pure_v4.v)       |    F + capabilities(allow E to type app)               |      Working        |
-
-
 ## Development
 
-Prerequisite: Install Coq v8.5 or above.
+Prerequisite: the code is developed with Coq 8.5pl1.
 
 ### Get Started
 
@@ -148,18 +150,10 @@ Prerequisite: Install Coq v8.5 or above.
 
 ### Makefile Tasks
 
-- compile project: `make`
-- clean project: `make clean`
 - compile libs: `make lib`
 - clean lib: `make libclean`
-
-### Tips about Coq Version
-
-A `settings.sh` file can be used to specify the version of Coq to use:
-
-    COQBIN=/path/to/coq/bin/
-
-If you do this, please also put a copy of `settings.sh` under `lib/tlc/src/`.
+- compile project: `make`
+- clean project: `make clean`
 
 ### Compile Locally Nameless
 
