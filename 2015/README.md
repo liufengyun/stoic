@@ -11,7 +11,7 @@ Prerequisite: the code is developed with Coq 8.5.
 
 ### Get Started
 
-1. clone the repo: `git clone git@github.com:liufengyun/typed-closure.git`
+1. clone the repo: `git clone git@github.com:liufengyun/stoic.git`
 1. init submodules: `git submodule init`
 1. compile libs: `make lib`
 1. compile project: `make`
