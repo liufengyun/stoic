@@ -4,9 +4,10 @@ The purpose of this project is to explore the theoretical foundation
 as well as conceptual possibilities of *capability-based systems*.
 
 A main trait of the calculi under study is the introduction of
-_stoic functions_. Compare to normal functions which can capture
+_stoic functions_. Compared to normal functions which can capture
 anything from the environment, _stoic functions_ don't capture
-capabilities or _non-stoic functions_.
+capabilities or _non-stoic functions_ from the environment. In
+this sense, they are capbility-disciplined.
 
 There are two major applications of the calculus:
 
@@ -68,7 +69,7 @@ a passed in function can have.
 ## Capability-base Security
 
 _Stoic functions_ lend itself as a powerful conceptual tool in
-designing and reasoning protection in capability-based security systems.
+designing and reasoning security protection in capability-based systems.
 
 For example, KeyKos is the first capability-based operating system
 that implements _confinement_. Roughly speaking, _confinement_ means a
@@ -128,32 +129,6 @@ safety. The intended relation between "pure", "inhabited" and
 
 > A pure and inhabited environment is also a capsafe (and pure)
 > environment.
-
-
-## Highlights
-
-- [STLC-Pure](stlc_cap_pure.v)
-- [STLC-Impure](stlc_cap_impure.v)
-- [F-Pure](f_cap_pure_v2.v)
-- [F-Impure](f_cap_impure.v)
-
-## Development
-
-Prerequisite: the code is developed with Coq 8.5pl1.
-
-### Get Started
-
-1. clone the repo: `git clone git@github.com:liufengyun/typed-closure.git`
-1. init submodules: `git submodule init`
-1. compile libs: `make lib`
-1. compile project: `make`
-
-### Makefile Tasks
-
-- compile libs: `make lib`
-- clean lib: `make libclean`
-- compile project: `make`
-- clean project: `make clean`
 
 ## Reference
 

@@ -6,6 +6,8 @@
 * (based on the F<: implementation in locally-nameless project)            *
 ***************************************************************************)
 
+(* Stackoverflow with Coq 8.5, disable for now *)
+
 Set Implicit Arguments.
 Require Import LibLN.
 Implicit Types x : var.
@@ -2038,6 +2040,8 @@ Ltac splits_solve_subsets := splits*; try solve_subsets.
 Lemma typing_env_fv : forall E e T,
   typing E e T -> fv_te e \c dom E /\ fv_ee e \c dom E /\ fv_tt T \c dom E.
 Proof. intros. inductions H; auto.
+  (* top *)
+  splits; simpl;
   (* var *)
   simpls. splits; try solve [autos* subset_empty_l wft_fv_tt].
     forwards~ K:  get_some_inv (binds_get H0). unfolds subset.

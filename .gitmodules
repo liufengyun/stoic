@@ -1,3 +1,9 @@
-[submodule "lib/tlc"]
-	path = lib/tlc
+[submodule "2015/lib/tlc"]
+	path = 2015/lib/tlc
+	url = https://gforge.inria.fr/git/tlc/tlc.git
+[submodule "2016/lib/tlc"]
+	path = 2016/lib/tlc
+	url = https://gforge.inria.fr/git/tlc/tlc.git
+[submodule "2017/lib/tlc"]
+	path = 2017/lib/tlc
 	url = https://gforge.inria.fr/git/tlc/tlc.git

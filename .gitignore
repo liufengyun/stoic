@@ -3,3 +3,4 @@
 *.v.d
 *.aux
 settings.sh
+*.cache

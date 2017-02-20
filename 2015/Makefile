@@ -9,14 +9,13 @@
 
 COQBIN=
 TLC=./lib/tlc/src/
-SF=./lib/sf/
 
 -include settings.sh
 
 
 ############################################################################
 
-INCLUDES=-R $(TLC) TLC -R $(SF) SF
+INCLUDES=-R $(TLC) TLC
 
 COQC=$(COQBIN)coqc $(INCLUDES)
 COQDOC=$(COQBIN)coqdoc --quiet --utf8 --html
@@ -28,7 +27,6 @@ COQDOC=$(COQBIN)coqdoc --quiet --utf8 --html
 
 ALL_SRC=$(wildcard *.v)
 TLC_SRC=$(wildcard $(TLC)/*.v)
-SF_SRC=$(wildcard $(SF)/*.v)
 
 .PHONY: all lib clean
 .SUFFIXES: .v .vo
@@ -37,11 +35,9 @@ all: $(ALL_SRC:.v:=.vo)
 	$(COQC) $^
 
 lib:
-	$(COQC) lib/sf/SfLib.v
 	make -C $(TLC)
 
 libclean:
-	rm -f $(SF)*.vo $(SF)*.glob $(SF)*.v.d
 	make -C $(TLC) clean
 
 .v.vo :
