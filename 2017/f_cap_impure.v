@@ -2480,26 +2480,59 @@ Proof. intros E H He. destruct He.
   lets*: healthy_env_term_capsafe H0. inversions H1.
 Qed.
 
-Axiom axiom_equiv_base : forall E S T t,
-  typing E t (typ_stoic typ_base (typ_arrow S T)) ->
-  typing E t (typ_stoic typ_base (typ_stoic S T)).
+Axiom axiom_eta_equiv : forall E B S T t,
+  typing E (trm_abs B (trm_abs S (trm_app (trm_app t (trm_bvar 1)) (trm_bvar 0)))) T ->
+  typing E t T.
 
-Axiom axiom_equiv_stoic : forall E U V S T t,
+Lemma stoic_equiv_base : forall E S T t,
+  typing (pure E) t (typ_stoic typ_base (typ_arrow S T)) ->
+  typing (pure E) t (typ_stoic typ_base (typ_stoic S T)).
+Proof.
+  intros. destruct (typing_regular H).
+  assert (Heta: typing (pure E) (trm_abs typ_base (trm_abs S (trm_app (trm_app t (trm_bvar 1)) (trm_bvar 0))))
+                       (typ_stoic typ_base (typ_stoic S T))).
+    apply_fresh* typing_stoic as b. destruct (notin_union_inv Frb).
+      unfold open_ee. unfold open_ee_rec. rewrite* If_l. rewrite* If_r.
+    apply_fresh* typing_stoic as s.
+      apply* okt_typ. apply* pure_okt. rewrite pure_eq.
+      intro. apply H3. autos* (pure_dom_subset E).
+    destruct (notin_union_inv Frs).
+    assert (okt1: okt (pure E & b ~: typ_base)).
+      apply* okt_typ. intro. apply H3. autos* (pure_dom_subset E).
+    assert (okt2: okt (pure E & b ~: typ_base & s ~: S)).
+      apply* okt_typ. apply_empty* wft_weaken. lets Wft: (typing_wft H). inversions* Wft. inversions* H10.
+      admit.
+    fold open_ee_rec. rewrite* <- (open_ee_rec_term (trm_fvar b) H1 1).
+    unfold open_ee. simpl. rewrite* If_l. rewrite* <- (open_ee_rec_term (trm_fvar s) H1 0).
+    rewrite* pure_dist. rewrite? pure_eq. rewrite* pure_single_true.
+    apply typing_app with S. apply typing_app with typ_base. apply* typing_degen.
+      apply_empty* typing_weakening.
+      apply_empty* typing_weakening.
+      apply* typing_var.
+      apply* typing_var.
+   apply axiom_eta_equiv with typ_base S. auto.
+Qed.
+
+Lemma stoic_equiv_stoic : forall E U V S T t,
   typing E t (typ_stoic (typ_stoic U V) (typ_arrow S T)) ->
   typing E t (typ_stoic (typ_stoic U V) (typ_stoic S T)).
+Proof. admit. Qed.
 
-Axiom axiom_equiv_all : forall E U S T t,
+Lemma stoic_equiv_all : forall E U S T t,
   typing E t (typ_stoic (typ_all U) (typ_arrow S T)) ->
   typing E t (typ_stoic (typ_all U) (typ_stoic S T)).
+Proof. admit. Qed.
 
-Axiom axiom_poly : forall E U V S T t1 t2,
+Lemma stoic_equiv_poly : forall E U V S T t1 t2,
   typing E t1 (typ_stoic (typ_arrow U V) (typ_arrow S T)) ->
   typing E t2 (typ_stoic U V) ->
   typing E (trm_app t1 t2) (typ_stoic S T).
+Proof. admit. Qed.
 
-Axiom axiom_all_stoic : forall E T1 T2 t,
+Lemma all_equiv_stoic : forall E T1 T2 t,
   typing E t (typ_all (typ_arrow T1 T2)) ->
   typing E t (typ_all (typ_stoic T1 T2)).
+Proof. admit. Qed.
 
 Lemma effect_polymorphism: forall E t T1 T2,
   healthy E -> pure E = E ->
@@ -2513,14 +2546,14 @@ Proof. introv HL Pure Typ.  inductions Typ; auto.
     rewrite* Pure.
 
   (* t = t1 t2 *)
-  forwards~ : IHTyp1. destruct T0.
+  forwards~ : IHTyp1. rewrite <- Pure in *. destruct T0.
   lets Inv: typing_wft Typ2. inversion Inv.
   lets: healthy_env_term_capsafe HL Typ2. inversion H0.
-  forwards~ : axiom_equiv_base H. apply* typing_app. apply* typing_degen.
+  forwards~ : stoic_equiv_base H. apply* typing_app. apply* typing_degen.
   lets: healthy_env_term_capsafe HL Typ2. inversion H0.
-  forwards~ : IHTyp2. apply* axiom_poly.
-  forwards~ : axiom_equiv_stoic H. apply* typing_app. apply* typing_degen.
-  forwards~ : axiom_equiv_all H. apply* typing_app. apply* typing_degen.
+  forwards~ : IHTyp2. rewrite* pure_eq. apply* stoic_equiv_poly.
+  forwards~ : stoic_equiv_stoic H. apply* typing_app. apply* typing_degen.
+  forwards~ : stoic_equiv_all H. apply* typing_app. apply* typing_degen.
 
   (* t = t [T] *)
   destruct T0; try solve [inversion x].
@@ -2532,7 +2565,7 @@ Proof. introv HL Pure Typ.  inductions Typ; auto.
   lets: healthy_env_term_capsafe HL Err. inversion H0.
 
   unfolds open_tt. simpl in x. inversion x. substs.
-  forwards~ AX: axiom_all_stoic Typ.
+  forwards~ AX: all_equiv_stoic Typ.
   change (typing E (trm_tapp e1 T) (open_tt (typ_stoic T0_1 T0_2) T)).
   apply* typing_tapp.
 Qed.
