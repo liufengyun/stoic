@@ -2480,15 +2480,11 @@ Proof. intros E H He. destruct He.
   lets*: healthy_env_term_capsafe H0. inversions H1.
 Qed.
 
-Axiom axiom_eta_equiv_one_level : forall E S T t,
+Axiom axiom_eta_equiv_term : forall E S T t,
   typing E (trm_abs S (trm_app t (trm_bvar 0)) ) T ->
   typing E t T.
 
-Axiom axiom_eta_equiv_two_level : forall E B S T t,
-  typing E (trm_abs B (trm_abs S (trm_app (trm_app t (trm_bvar 1)) (trm_bvar 0)))) T ->
-  typing E t T.
-
-Axiom axiom_eta_equiv_tabs : forall E T t,
+Axiom axiom_eta_equiv_type : forall E T t,
   typing E (trm_tabs (trm_tapp t (typ_bvar 0)) ) T ->
   typing E t T.
 
@@ -2497,30 +2493,30 @@ Lemma stoic_equiv_base : forall E S T t,
   typing (pure E) t (typ_stoic typ_base (typ_stoic S T)).
 Proof.
   intros. destruct (typing_regular H).
-  assert (Heta: typing (pure E) (trm_abs typ_base (trm_abs S (trm_app (trm_app t (trm_bvar 1)) (trm_bvar 0))))
-                       (typ_stoic typ_base (typ_stoic S T))).
-    apply_fresh* typing_stoic as b. destruct (notin_union_inv Frb).
-      unfold open_ee. unfold open_ee_rec. rewrite* If_l. rewrite* If_r.
-    apply_fresh* typing_stoic as s.
-      apply* okt_typ. apply* pure_okt. rewrite pure_eq.
-      intro. apply H3. autos* (pure_dom_subset E).
-    destruct (notin_union_inv Frs).
-    assert (okt1: okt (pure E & b ~: typ_base)).
-      apply* okt_typ. intro. apply H3. autos* (pure_dom_subset E).
-    assert (okt2: okt (pure E & b ~: typ_base & s ~: S)).
-      apply* okt_typ. apply_empty* wft_weaken. lets Wft: (typing_wft H). inversions* Wft. inversions* H10.
-      intro. rewrite dom_concat, dom_single, in_union, in_singleton in H6. destruct H6.
-      apply H5. autos* (pure_dom_subset E).
-      apply H4. repeat(rewrite in_union; left). rewrite H6, in_singleton. reflexivity.
-    fold open_ee_rec. rewrite* <- (open_ee_rec_term (trm_fvar b) H1 1).
-    unfold open_ee. simpl. rewrite* If_l. rewrite* <- (open_ee_rec_term (trm_fvar s) H1 0).
-    rewrite* pure_dist. rewrite? pure_eq. rewrite* pure_single_true.
-    apply typing_app with S. apply typing_app with typ_base. apply* typing_degen.
-      apply_empty* typing_weakening.
-      apply_empty* typing_weakening.
-      apply* typing_var.
-      apply* typing_var.
-   apply axiom_eta_equiv_two_level with typ_base S. auto.
+
+  apply axiom_eta_equiv_term with typ_base.
+  apply_fresh* typing_stoic as b. destruct (notin_union_inv Frb).
+  unfold open_ee. simpl. rewrite* If_l. rewrite pure_eq.
+  rewrite* <- (open_ee_rec_term (trm_fvar b) H1 0).
+  assert (okt1: okt (pure E & b ~: typ_base)).
+    apply* okt_typ. intro. apply H3. autos* (pure_dom_subset E).
+
+  apply axiom_eta_equiv_term with S.
+  apply_fresh* typing_stoic as s. destruct (notin_union_inv Frs).
+  unfold open_ee. simpl. rewrite* If_l. rewrite pure_dist, pure_eq, pure_single_true; auto.
+  rewrite* <- (open_ee_rec_term (trm_fvar s) H1 0).
+
+  assert (okt2: okt (pure E & b ~: typ_base & s ~: S)).
+    apply* okt_typ. apply_empty* wft_weaken. lets Wft: (typing_wft H). inversions* Wft. inversions* H10.
+    intro. rewrite dom_concat, dom_single, in_union, in_singleton in H6. destruct H6.
+    apply H5. autos* (pure_dom_subset E).
+    apply H4. repeat(rewrite in_union; left). rewrite H6, in_singleton. reflexivity.
+
+  apply typing_app with S; auto.
+  apply typing_app with typ_base; auto.
+  apply* typing_degen.
+  apply_empty* typing_weakening.
+  apply_empty* typing_weakening.
 Qed.
 
 Lemma stoic_equiv_stoic : forall E U V S T t,
@@ -2532,26 +2528,30 @@ Proof.
     lets Wft: typing_wft H. inversion* Wft.
   assert (Wft2: wft (pure E) S).
     lets Wft: typing_wft H. inversion* Wft. inversion* H6.
-  apply axiom_eta_equiv_two_level with (typ_stoic U V) S.
+
+  apply axiom_eta_equiv_term with (typ_stoic U V).
   apply_fresh* typing_stoic as f. rewrite pure_eq.
   destruct (notin_union_inv Frf).
+  unfold open_ee. simpl. rewrite* If_l.
+  rewrite* <- (open_ee_rec_term (trm_fvar f) H1 0).
   assert (okt1: okt (pure E & f ~: (typ_stoic U V))).
     apply* okt_typ. intro. apply H3. autos* (pure_dom_subset E).
+
+  apply axiom_eta_equiv_term with S.
   apply_fresh* typing_stoic as s.
   destruct (notin_union_inv Frs).
+  rewrite pure_dist, pure_eq, pure_single_true; auto.
+  unfold open_ee. simpl. rewrite* If_l.
+  rewrite* <- (open_ee_rec_term (trm_fvar s) H1 0).
+
   assert (okt2: okt (pure E & f ~: (typ_stoic U V) & s ~: S)).
     apply* okt_typ.
     intro. rewrite dom_concat, dom_single, in_union, in_singleton in H6. destruct H6.
       apply H5. autos* (pure_dom_subset E).
       apply H4. repeat(rewrite in_union; left). rewrite H6, in_singleton. reflexivity.
 
-  rewrite* If_l. rewrite* If_r. fold open_ee_rec.
-  rewrite* <- (open_ee_rec_term (trm_fvar f) H1 1).
-  unfold open_ee. simpl. rewrite* If_l. rewrite* <- (open_ee_rec_term (trm_fvar s) H1 0).
-  rewrite ?pure_dist, ?pure_eq. rewrite* pure_single_true.
-  apply typing_app with S; auto. apply typing_app with (typ_stoic U V).
-    apply* typing_degen. repeat(apply_empty* typing_weakening).
-    repeat(apply* typing_var).
+  apply typing_app with S; auto. apply typing_app with (typ_stoic U V); auto.
+  apply* typing_degen. repeat(apply_empty* typing_weakening).
 Qed.
 
 Lemma stoic_equiv_all : forall E U S T t,
@@ -2559,30 +2559,35 @@ Lemma stoic_equiv_all : forall E U S T t,
   typing (pure E) t (typ_stoic (typ_all U) (typ_stoic S T)).
 Proof.
   intros. destruct (typing_regular H).
+
   assert (Wft1: wft (pure E) (typ_all U)).
     lets Wft: typing_wft H. inversion* Wft.
   assert (Wft2: wft (pure E) S).
     lets Wft: typing_wft H. inversion* Wft. inversion* H6.
-  apply axiom_eta_equiv_two_level with (typ_all U) S.
+
+  apply axiom_eta_equiv_term with (typ_all U).
   apply_fresh* typing_stoic as a. rewrite pure_eq.
   destruct (notin_union_inv Fra).
+  unfold open_ee. simpl. rewrite* If_l.
+  rewrite* <- (open_ee_rec_term (trm_fvar a) H1 0).
   assert (okt1: okt (pure E & a ~: (typ_all U))).
     apply* okt_typ. intro. apply H3. autos* (pure_dom_subset E).
+
+  apply axiom_eta_equiv_term with S.
   apply_fresh* typing_stoic as s.
   destruct (notin_union_inv Frs).
+  rewrite pure_dist, pure_eq, pure_single_true; auto.
+  unfold open_ee. simpl. rewrite* If_l.
+  rewrite* <- (open_ee_rec_term (trm_fvar s) H1 0).
+
   assert (okt2: okt (pure E & a ~: (typ_all U) & s ~: S)).
     apply* okt_typ.
     intro. rewrite dom_concat, dom_single, in_union, in_singleton in H6. destruct H6.
       apply H5. autos* (pure_dom_subset E).
       apply H4. repeat(rewrite in_union; left). rewrite H6, in_singleton. reflexivity.
 
-  rewrite* If_l. rewrite* If_r. fold open_ee_rec.
-  rewrite* <- (open_ee_rec_term (trm_fvar a) H1 1).
-  unfold open_ee. simpl. rewrite* If_l. rewrite* <- (open_ee_rec_term (trm_fvar s) H1 0).
-  rewrite ?pure_dist, ?pure_eq. rewrite* pure_single_true.
-  apply typing_app with S; auto. apply typing_app with (typ_all U).
-    apply* typing_degen. repeat(apply_empty* typing_weakening).
-    repeat(apply* typing_var).
+  apply typing_app with S; auto. apply typing_app with (typ_all U); auto.
+  apply* typing_degen. repeat(apply_empty* typing_weakening).
 Qed.
 
 Lemma stoic_equiv_poly : forall E U V S T t1 t2,
@@ -2596,7 +2601,7 @@ Proof.
   assert (Wft2: wft (pure E) S).
     lets Wft: typing_wft H. inversion* Wft. inversion* H9.
 
-  apply axiom_eta_equiv_one_level with S.
+  apply axiom_eta_equiv_term with S.
   apply_fresh* typing_stoic as s.
   destruct (notin_union_inv Frs).
   assert (okt1: okt (pure E & s ~: S)).
@@ -2618,7 +2623,7 @@ Lemma all_equiv_stoic : forall E T1 T2 t,
 Proof.
   intros. destruct (typing_regular H).
   lets Wft: typing_wft H. inversion* Wft. substs.
-  apply axiom_eta_equiv_tabs.
+  apply axiom_eta_equiv_type.
   apply_fresh* typing_tabs as X.
 
   destruct (notin_union_inv FrX).
@@ -2631,7 +2636,7 @@ Proof.
   unfold open_te. simpl. rewrite* If_l.
   rewrite* <- (open_te_rec_term (typ_fvar X) H1 0).
 
-  apply axiom_eta_equiv_one_level with (open_tt_rec 0 (typ_fvar X) T1).
+  apply axiom_eta_equiv_term with (open_tt_rec 0 (typ_fvar X) T1).
   apply_fresh* typing_stoic as s. rewrite pure_dist, pure_eq, pure_single_tvar.
   fold open_tt_rec.
 
