@@ -2488,6 +2488,10 @@ Axiom axiom_eta_equiv_two_level : forall E B S T t,
   typing E (trm_abs B (trm_abs S (trm_app (trm_app t (trm_bvar 1)) (trm_bvar 0)))) T ->
   typing E t T.
 
+Axiom axiom_eta_equiv_tabs : forall E T t,
+  typing E (trm_tabs (trm_tapp t (typ_bvar 0)) ) T ->
+  typing E t T.
+
 Lemma stoic_equiv_base : forall E S T t,
   typing (pure E) t (typ_stoic typ_base (typ_arrow S T)) ->
   typing (pure E) t (typ_stoic typ_base (typ_stoic S T)).
@@ -2611,7 +2615,49 @@ Qed.
 Lemma all_equiv_stoic : forall E T1 T2 t,
   typing (pure E) t (typ_all (typ_arrow T1 T2)) ->
   typing (pure E) t (typ_all (typ_stoic T1 T2)).
-Proof. admit. Qed.
+Proof.
+  intros. destruct (typing_regular H).
+  lets Wft: typing_wft H. inversion* Wft. substs.
+  apply axiom_eta_equiv_tabs.
+  apply_fresh* typing_tabs as X.
+
+  destruct (notin_union_inv FrX).
+  assert (Wft1: wft (pure E & [:X:]) (T1 open_tt_var X)).
+    forwards*: H4 X. inversion* H5.
+  assert (okt1: okt (pure E & [:X:])).
+    apply* okt_tvar. intro. apply H3. autos* (pure_dom_subset E).
+
+  rewrite ?pure_dist, ?pure_eq.
+  unfold open_te. simpl. rewrite* If_l.
+  rewrite* <- (open_te_rec_term (typ_fvar X) H1 0).
+
+  apply axiom_eta_equiv_one_level with (open_tt_rec 0 (typ_fvar X) T1).
+  apply_fresh* typing_stoic as s. rewrite pure_dist, pure_eq, pure_single_tvar.
+  fold open_tt_rec.
+
+  destruct (notin_union_inv Frs).
+  assert (okt2: okt (pure E & [:X:] & s ~: open_tt_rec 0 (typ_fvar X) T1)).
+    apply* okt_typ. intro.
+    rewrite dom_concat, dom_single, in_union, in_singleton in H7. destruct H7.
+      apply H6. autos* (pure_dom_subset E).
+      apply H5. substs.
+        rewrite in_union; left.
+        rewrite in_union; left.
+        rewrite in_union; left.
+        rewrite in_union; left.
+        rewrite in_union; right.
+        rewrite* in_singleton.
+
+  unfold open_ee. simpl. rewrite* If_l.
+  rewrite* <- (open_ee_rec_term (trm_fvar s) H1 0).
+
+  apply typing_app with (open_tt_rec 0 (typ_fvar X) T1); auto.
+  replace (typ_arrow (open_tt_rec 0 (typ_fvar X) T1) (open_tt_rec 0 (typ_fvar X) T2))
+          with ((typ_arrow T1 T2) open_tt_var X); auto.
+  apply typing_tapp. apply* wft_var.
+  apply_empty* typing_weakening.
+  apply_empty* typing_weakening.
+Qed.
 
 Lemma effect_polymorphism: forall E t T1 T2,
   healthy E -> pure E = E ->
