@@ -19,8 +19,8 @@ Inductive typ       : Set   :=
   | typ_base        : typ
   | typ_eff         : typ
   | typ_arrow       : typ -> typ -> typ
-  | typ_stoic       : typ -> typ -> typ       (* effect closeded term abstraction *)
-  | typ_all         : typ -> typ.             (* effect closeded type abstraction *)
+  | typ_stoic       : typ -> typ -> typ       (* stoic term abstraction *)
+  | typ_all         : typ -> typ.             (* stoic type abstraction *)
 
 (** Representation of pre-terms *)
 
@@ -2480,7 +2480,11 @@ Proof. intros E H He. destruct He.
   lets*: healthy_env_term_capsafe H0. inversions H1.
 Qed.
 
-Axiom axiom_eta_equiv : forall E B S T t,
+Axiom axiom_eta_equiv_one_level : forall E S T t,
+  typing E (trm_abs S (trm_app t (trm_bvar 0)) ) T ->
+  typing E t T.
+
+Axiom axiom_eta_equiv_two_level : forall E B S T t,
   typing E (trm_abs B (trm_abs S (trm_app (trm_app t (trm_bvar 1)) (trm_bvar 0)))) T ->
   typing E t T.
 
@@ -2512,7 +2516,7 @@ Proof.
       apply_empty* typing_weakening.
       apply* typing_var.
       apply* typing_var.
-   apply axiom_eta_equiv with typ_base S. auto.
+   apply axiom_eta_equiv_two_level with typ_base S. auto.
 Qed.
 
 Lemma stoic_equiv_stoic : forall E U V S T t,
@@ -2524,7 +2528,7 @@ Proof.
     lets Wft: typing_wft H. inversion* Wft.
   assert (Wft2: wft (pure E) S).
     lets Wft: typing_wft H. inversion* Wft. inversion* H6.
-  apply axiom_eta_equiv with (typ_stoic U V) S.
+  apply axiom_eta_equiv_two_level with (typ_stoic U V) S.
   apply_fresh* typing_stoic as f. rewrite pure_eq.
   destruct (notin_union_inv Frf).
   assert (okt1: okt (pure E & f ~: (typ_stoic U V))).
@@ -2555,7 +2559,7 @@ Proof.
     lets Wft: typing_wft H. inversion* Wft.
   assert (Wft2: wft (pure E) S).
     lets Wft: typing_wft H. inversion* Wft. inversion* H6.
-  apply axiom_eta_equiv with (typ_all U) S.
+  apply axiom_eta_equiv_two_level with (typ_all U) S.
   apply_fresh* typing_stoic as a. rewrite pure_eq.
   destruct (notin_union_inv Fra).
   assert (okt1: okt (pure E & a ~: (typ_all U))).
@@ -2581,7 +2585,28 @@ Lemma stoic_equiv_poly : forall E U V S T t1 t2,
   typing (pure E) t1 (typ_stoic (typ_arrow U V) (typ_arrow S T)) ->
   typing (pure E) t2 (typ_stoic U V) ->
   typing (pure E) (trm_app t1 t2) (typ_stoic S T).
-Proof. admit. Qed.
+Proof.
+  intros. destruct (typing_regular H). destruct (typing_regular H0).
+  assert (Wft1: wft (pure E) (typ_arrow U V)).
+    lets Wft: typing_wft H. inversion* Wft.
+  assert (Wft2: wft (pure E) S).
+    lets Wft: typing_wft H. inversion* Wft. inversion* H9.
+
+  apply axiom_eta_equiv_one_level with S.
+  apply_fresh* typing_stoic as s.
+  destruct (notin_union_inv Frs).
+  assert (okt1: okt (pure E & s ~: S)).
+    apply* okt_typ. intro. apply H6. autos* (pure_dom_subset E).
+
+  rewrite ?pure_dist, ?pure_eq.
+  unfold open_ee. simpl. rewrite* If_l.
+  rewrite* <- (open_ee_rec_term (trm_fvar s) H2 0).
+  rewrite* <- (open_ee_rec_term (trm_fvar s) H4 0).
+
+  apply typing_app with S; auto.
+  apply typing_app with (typ_arrow U V); auto;
+    apply_empty* typing_weakening; apply* typing_degen.
+Qed.
 
 Lemma all_equiv_stoic : forall E T1 T2 t,
   typing (pure E) t (typ_all (typ_arrow T1 T2)) ->
