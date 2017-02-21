@@ -2549,7 +2549,33 @@ Qed.
 Lemma stoic_equiv_all : forall E U S T t,
   typing (pure E) t (typ_stoic (typ_all U) (typ_arrow S T)) ->
   typing (pure E) t (typ_stoic (typ_all U) (typ_stoic S T)).
-Proof. admit. Qed.
+Proof.
+  intros. destruct (typing_regular H).
+  assert (Wft1: wft (pure E) (typ_all U)).
+    lets Wft: typing_wft H. inversion* Wft.
+  assert (Wft2: wft (pure E) S).
+    lets Wft: typing_wft H. inversion* Wft. inversion* H6.
+  apply axiom_eta_equiv with (typ_all U) S.
+  apply_fresh* typing_stoic as a. rewrite pure_eq.
+  destruct (notin_union_inv Fra).
+  assert (okt1: okt (pure E & a ~: (typ_all U))).
+    apply* okt_typ. intro. apply H3. autos* (pure_dom_subset E).
+  apply_fresh* typing_stoic as s.
+  destruct (notin_union_inv Frs).
+  assert (okt2: okt (pure E & a ~: (typ_all U) & s ~: S)).
+    apply* okt_typ.
+    intro. rewrite dom_concat, dom_single, in_union, in_singleton in H6. destruct H6.
+      apply H5. autos* (pure_dom_subset E).
+      apply H4. repeat(rewrite in_union; left). rewrite H6, in_singleton. reflexivity.
+
+  rewrite* If_l. rewrite* If_r. fold open_ee_rec.
+  rewrite* <- (open_ee_rec_term (trm_fvar a) H1 1).
+  unfold open_ee. simpl. rewrite* If_l. rewrite* <- (open_ee_rec_term (trm_fvar s) H1 0).
+  rewrite ?pure_dist, ?pure_eq. rewrite* pure_single_true.
+  apply typing_app with S; auto. apply typing_app with (typ_all U).
+    apply* typing_degen. repeat(apply_empty* typing_weakening).
+    repeat(apply* typing_var).
+Qed.
 
 Lemma stoic_equiv_poly : forall E U V S T t1 t2,
   typing (pure E) t1 (typ_stoic (typ_arrow U V) (typ_arrow S T)) ->
