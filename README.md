@@ -118,10 +118,15 @@ values).
 An **inhabited environment** is an environment with only variables
 of inhabitable types.
 
-A capability-based effect system is **effect-safe** if from a **pure**
-and **inhabited** environment (1) it’s impossible to construct a
-term of type `E`; (2) it's impossible to construct an application
-where the first term is not stoic.
+A capability-based system is **cpability-safe** if a stoic function
+can only use explicitly or implicitly (via free functions) given
+capabilities. It cannot use any other capabilities directly or
+indirectly.
+
+This guarantee is the same as that in a **pure** and **inhabited**
+environment (1) it’s impossible to construct a term of capability
+type `E`; (2) it's impossible to construct an application where
+the first term is not stoic.
 
 A **capsafe environment** is a construct to help prove effect
 safety. The intended relation between "pure", "inhabited" and

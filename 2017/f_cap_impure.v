@@ -336,11 +336,11 @@ Inductive healthy: env -> Prop :=
 Definition inhabitable_pure_healthy_statement := forall E,
   inhabitable E -> pure E = E -> healthy E.
 
-(* effect safety : it's impossible to construct a term of typ_eff in pure environment  *)
-Definition effect_safety_1 := forall E, healthy E ->
+(* capability safety : it's impossible to construct a term of typ_eff in pure environment  *)
+Definition capability_safety_1 := forall E, healthy E ->
   ~exists e, typing E e typ_eff.
 
-Definition effect_safety_2 := forall E t1 t2 T, healthy E ->
+Definition capability_safety_2 := forall E t1 t2 T, healthy E ->
   pure E = E ->
   typing E (trm_app t1 t2) T  ->
   exists S1 S2, typing E t1 (typ_stoic S1 S2).
@@ -2044,7 +2044,7 @@ Proof.
 Qed.
 
 (* ********************************************************************** *)
-(** * effect safety *)
+(** * capability safety *)
 
 (* ********************************************************************** *)
 (** * Properties of Healthy Evnironment *)
@@ -2475,7 +2475,7 @@ Lemma healthy_env_term_capsafe: forall E t T,
   capsafe T.
 Proof. intros. apply* healthy_env_term_capsafe_k. Qed.
 
-Lemma effect_safety_result_1 : effect_safety_1.
+Lemma capability_safety_result_1 : capability_safety_1.
 Proof. intros E H He. destruct He.
   lets*: healthy_env_term_capsafe H0. inversions H1.
 Qed.
@@ -2664,7 +2664,7 @@ Proof.
   apply_empty* typing_weakening.
 Qed.
 
-Lemma effect_polymorphism: forall E t T1 T2,
+Lemma capability_polymorphism: forall E t T1 T2,
   healthy E -> pure E = E ->
   typing E t (typ_arrow T1 T2) ->
   typing E t (typ_stoic T1 T2).
@@ -2701,11 +2701,11 @@ Proof. introv HL Pure Typ.  inductions Typ; auto.
   apply* typing_tapp.
 Qed.
 
-Lemma effect_safety_result_2 : effect_safety_2.
+Lemma capability_safety_result_2 : capability_safety_2.
 Proof. introv HL Pure Typ. inductions Typ; auto.
   apply* IHTyp.
 
-  forwards~ : effect_polymorphism E t1 T1 T2. iauto.
+  forwards~ : capability_polymorphism E t1 T1 T2. iauto.
 Qed.
 
 (* This proof ensures that all inhabitable types are capsafe, thus
