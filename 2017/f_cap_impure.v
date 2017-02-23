@@ -2664,6 +2664,37 @@ Proof.
   apply_empty* typing_weakening.
 Qed.
 
+Lemma pure_env_stoic: forall E t T1 T2,
+  pure E = E ->
+  typing E t (typ_arrow T1 T2) ->
+  typing E t (typ_stoic T1 T2).
+Proof.
+  introv Pure Typ. destruct t; simpl in *; inversion* Typ; substs.
+  - rewrite <- Pure in H2. lets: pure_regular H2. false.
+  - apply_fresh* typing_stoic as x.
+    assert (Typ2: typing E (trm_abs T1 t0) (typ_arrow T1 T2)) by apply* typing_abs.
+    rewrite* Pure.
+  - apply axiom_eta_equiv_term with T1.
+    apply_fresh* typing_stoic as x.
+    unfold open_ee. simpl. rewrite* If_l.
+    destruct (typing_regular Typ). inversion H0. substs.
+    rewrite* <- (open_ee_rec_term (trm_fvar x) H5 0).
+    rewrite* <- (open_ee_rec_term (trm_fvar x) H6 0).
+    assert (okt1: okt (E & x ~: T1)).
+      apply* okt_typ. lets*: typing_wft Typ. inversion* H1.
+    rewrite Pure. apply typing_app with T1; auto.
+    apply_empty* typing_weakening.
+  - apply axiom_eta_equiv_term with T1.
+    apply_fresh* typing_stoic as x.
+    unfold open_ee. simpl. rewrite* If_l.
+    destruct (typing_regular Typ). inversion H0. substs.
+    rewrite* <- (open_ee_rec_term (trm_fvar x) H6 0).
+    assert (okt1: okt (E & x ~: T1)).
+      apply* okt_typ. lets*: typing_wft Typ. inversion* H1.
+    rewrite Pure. apply typing_app with T1; auto.
+    apply_empty* typing_weakening.
+Qed.
+
 Lemma capability_polymorphism: forall E t T1 T2,
   healthy E -> pure E = E ->
   typing E t (typ_arrow T1 T2) ->
@@ -2705,7 +2736,7 @@ Lemma capability_safety_result_2 : capability_safety_2.
 Proof. introv HL Pure Typ. inductions Typ; auto.
   apply* IHTyp.
 
-  forwards~ : capability_polymorphism E t1 T1 T2. iauto.
+  forwards~ : pure_env_stoic E t1 T1 T2. iauto.
 Qed.
 
 (* This proof ensures that all inhabitable types are capsafe, thus
