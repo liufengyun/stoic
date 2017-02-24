@@ -2481,10 +2481,12 @@ Proof. intros E H He. destruct He.
 Qed.
 
 Axiom axiom_eta_equiv_term : forall E S T t,
-  typing E (trm_abs S (trm_app t (trm_bvar 0)) ) T ->
-  typing E t T.
+  term t ->
+  typing E (trm_abs S (trm_app t (trm_bvar 0)) ) (typ_stoic S T) ->
+  typing E t (typ_stoic S T).
 
 Axiom axiom_eta_equiv_type : forall E T t,
+  term t ->
   typing E (trm_tabs (trm_tapp t (typ_bvar 0)) ) T ->
   typing E t T.
 
@@ -2494,20 +2496,20 @@ Lemma stoic_equiv_base : forall E S T t,
 Proof.
   intros. destruct (typing_regular H).
 
-  apply axiom_eta_equiv_term with typ_base.
+  apply* axiom_eta_equiv_term.
   apply_fresh* typing_stoic as b. destruct (notin_union_inv Frb).
   unfold open_ee. simpl. rewrite* If_l. rewrite pure_eq.
   rewrite* <- (open_ee_rec_term (trm_fvar b) H1 0).
   assert (okt1: okt (pure E & b ~: typ_base)).
-    apply* okt_typ. intro. apply H3. autos* (pure_dom_subset E).
+    apply okt_typ; auto. intro. apply H3. autos* (pure_dom_subset E).
 
-  apply axiom_eta_equiv_term with S.
+  apply* axiom_eta_equiv_term.
   apply_fresh* typing_stoic as s. destruct (notin_union_inv Frs).
   unfold open_ee. simpl. rewrite* If_l. rewrite pure_dist, pure_eq, pure_single_true; auto.
   rewrite* <- (open_ee_rec_term (trm_fvar s) H1 0).
 
   assert (okt2: okt (pure E & b ~: typ_base & s ~: S)).
-    apply* okt_typ. apply_empty* wft_weaken. lets Wft: (typing_wft H). inversions* Wft. inversions* H10.
+    apply okt_typ; auto. apply_empty* wft_weaken. lets Wft: (typing_wft H). inversions* Wft. inversions* H10.
     intro. rewrite dom_concat, dom_single, in_union, in_singleton in H6. destruct H6.
     apply H5. autos* (pure_dom_subset E).
     apply H4. repeat(rewrite in_union; left). rewrite H6, in_singleton. reflexivity.
@@ -2529,15 +2531,15 @@ Proof.
   assert (Wft2: wft (pure E) S).
     lets Wft: typing_wft H. inversion* Wft. inversion* H6.
 
-  apply axiom_eta_equiv_term with (typ_stoic U V).
+  apply* axiom_eta_equiv_term.
   apply_fresh* typing_stoic as f. rewrite pure_eq.
   destruct (notin_union_inv Frf).
   unfold open_ee. simpl. rewrite* If_l.
   rewrite* <- (open_ee_rec_term (trm_fvar f) H1 0).
   assert (okt1: okt (pure E & f ~: (typ_stoic U V))).
-    apply* okt_typ. intro. apply H3. autos* (pure_dom_subset E).
+    apply okt_typ; auto. intro. apply H3. autos* (pure_dom_subset E).
 
-  apply axiom_eta_equiv_term with S.
+  apply* axiom_eta_equiv_term.
   apply_fresh* typing_stoic as s.
   destruct (notin_union_inv Frs).
   rewrite pure_dist, pure_eq, pure_single_true; auto.
@@ -2545,7 +2547,7 @@ Proof.
   rewrite* <- (open_ee_rec_term (trm_fvar s) H1 0).
 
   assert (okt2: okt (pure E & f ~: (typ_stoic U V) & s ~: S)).
-    apply* okt_typ.
+    apply okt_typ; auto.
     intro. rewrite dom_concat, dom_single, in_union, in_singleton in H6. destruct H6.
       apply H5. autos* (pure_dom_subset E).
       apply H4. repeat(rewrite in_union; left). rewrite H6, in_singleton. reflexivity.
@@ -2565,15 +2567,15 @@ Proof.
   assert (Wft2: wft (pure E) S).
     lets Wft: typing_wft H. inversion* Wft. inversion* H6.
 
-  apply axiom_eta_equiv_term with (typ_all U).
+  apply* axiom_eta_equiv_term.
   apply_fresh* typing_stoic as a. rewrite pure_eq.
   destruct (notin_union_inv Fra).
   unfold open_ee. simpl. rewrite* If_l.
   rewrite* <- (open_ee_rec_term (trm_fvar a) H1 0).
   assert (okt1: okt (pure E & a ~: (typ_all U))).
-    apply* okt_typ. intro. apply H3. autos* (pure_dom_subset E).
+    apply okt_typ; auto. intro. apply H3. autos* (pure_dom_subset E).
 
-  apply axiom_eta_equiv_term with S.
+  apply* axiom_eta_equiv_term.
   apply_fresh* typing_stoic as s.
   destruct (notin_union_inv Frs).
   rewrite pure_dist, pure_eq, pure_single_true; auto.
@@ -2581,7 +2583,7 @@ Proof.
   rewrite* <- (open_ee_rec_term (trm_fvar s) H1 0).
 
   assert (okt2: okt (pure E & a ~: (typ_all U) & s ~: S)).
-    apply* okt_typ.
+    apply okt_typ; auto.
     intro. rewrite dom_concat, dom_single, in_union, in_singleton in H6. destruct H6.
       apply H5. autos* (pure_dom_subset E).
       apply H4. repeat(rewrite in_union; left). rewrite H6, in_singleton. reflexivity.
@@ -2601,11 +2603,11 @@ Proof.
   assert (Wft2: wft (pure E) S).
     lets Wft: typing_wft H. inversion* Wft. inversion* H9.
 
-  apply axiom_eta_equiv_term with S.
+  apply* axiom_eta_equiv_term.
   apply_fresh* typing_stoic as s.
   destruct (notin_union_inv Frs).
   assert (okt1: okt (pure E & s ~: S)).
-    apply* okt_typ. intro. apply H6. autos* (pure_dom_subset E).
+    apply okt_typ; auto. intro. apply H6. autos* (pure_dom_subset E).
 
   rewrite ?pure_dist, ?pure_eq.
   unfold open_ee. simpl. rewrite* If_l.
@@ -2623,26 +2625,26 @@ Lemma all_equiv_stoic : forall E T1 T2 t,
 Proof.
   intros. destruct (typing_regular H).
   lets Wft: typing_wft H. inversion* Wft. substs.
-  apply axiom_eta_equiv_type.
+  apply* axiom_eta_equiv_type.
   apply_fresh* typing_tabs as X.
 
   destruct (notin_union_inv FrX).
   assert (Wft1: wft (pure E & [:X:]) (T1 open_tt_var X)).
     forwards*: H4 X. inversion* H5.
   assert (okt1: okt (pure E & [:X:])).
-    apply* okt_tvar. intro. apply H3. autos* (pure_dom_subset E).
+    apply okt_tvar; auto. intro. apply H3. autos* (pure_dom_subset E).
 
   rewrite ?pure_dist, ?pure_eq.
   unfold open_te. simpl. rewrite* If_l.
   rewrite* <- (open_te_rec_term (typ_fvar X) H1 0).
 
-  apply axiom_eta_equiv_term with (open_tt_rec 0 (typ_fvar X) T1).
+  apply* axiom_eta_equiv_term.
   apply_fresh* typing_stoic as s. rewrite pure_dist, pure_eq, pure_single_tvar.
   fold open_tt_rec.
 
   destruct (notin_union_inv Frs).
   assert (okt2: okt (pure E & [:X:] & s ~: open_tt_rec 0 (typ_fvar X) T1)).
-    apply* okt_typ. intro.
+    apply okt_typ; auto. intro.
     rewrite dom_concat, dom_single, in_union, in_singleton in H7. destruct H7.
       apply H6. autos* (pure_dom_subset E).
       apply H5. substs.
@@ -2674,7 +2676,7 @@ Proof.
   - apply_fresh* typing_stoic as x.
     assert (Typ2: typing E (trm_abs T1 t0) (typ_arrow T1 T2)) by apply* typing_abs.
     rewrite* Pure.
-  - apply axiom_eta_equiv_term with T1.
+  - apply axiom_eta_equiv_term. lets*: typing_regular Typ.
     apply_fresh* typing_stoic as x.
     unfold open_ee. simpl. rewrite* If_l.
     destruct (typing_regular Typ). inversion H0. substs.
@@ -2684,7 +2686,7 @@ Proof.
       apply* okt_typ. lets*: typing_wft Typ. inversion* H1.
     rewrite Pure. apply typing_app with T1; auto.
     apply_empty* typing_weakening.
-  - apply axiom_eta_equiv_term with T1.
+  - apply axiom_eta_equiv_term. lets*: typing_regular Typ.
     apply_fresh* typing_stoic as x.
     unfold open_ee. simpl. rewrite* If_l.
     destruct (typing_regular Typ). inversion H0. substs.
