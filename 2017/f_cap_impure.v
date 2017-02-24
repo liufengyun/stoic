@@ -2485,10 +2485,16 @@ Axiom axiom_eta_equiv_term : forall E S T t,
   typing E (trm_abs S (trm_app t (trm_bvar 0)) ) (typ_stoic S T) ->
   typing E t (typ_stoic S T).
 
+(* This axiom is not used to prove safety 2. It's only used to show
+   the following type equivalence:
+      \forall X. S => T     ==     \forall X. S -> T
+*)
 Axiom axiom_eta_equiv_type : forall E T t,
   term t ->
   typing E (trm_tabs (trm_tapp t (typ_bvar 0)) ) T ->
   typing E t T.
+
+(* Interesting type equivalences *)
 
 Lemma stoic_equiv_base : forall E S T t,
   typing (pure E) t (typ_stoic typ_base (typ_arrow S T)) ->
@@ -2695,43 +2701,6 @@ Proof.
       apply* okt_typ. lets*: typing_wft Typ. inversion* H1.
     rewrite Pure. apply typing_app with T1; auto.
     apply_empty* typing_weakening.
-Qed.
-
-Lemma capability_polymorphism: forall E t T1 T2,
-  healthy E -> pure E = E ->
-  typing E t (typ_arrow T1 T2) ->
-  typing E t (typ_stoic T1 T2).
-Proof. introv HL Pure Typ.  inductions Typ; auto.
-  rewrite <- Pure in H0. lets: pure_regular H0. false.
-  apply* typing_stoic.
-    assert (Typ: typing E (trm_abs T1 e1) (typ_arrow T1 T2)) by apply* typing_abs.
-    destruct* (typing_regular Typ).
-    rewrite* Pure.
-
-  (* t = t1 t2 *)
-  forwards~ : IHTyp1. rewrite <- Pure in *. destruct T0.
-  lets Inv: typing_wft Typ2. inversion Inv.
-  lets: healthy_env_term_capsafe HL Typ2. inversion H0.
-  forwards~ : stoic_equiv_base H. apply* typing_app. apply* typing_degen.
-  lets: healthy_env_term_capsafe HL Typ2. inversion H0.
-  forwards~ : IHTyp2. rewrite* pure_eq. apply* stoic_equiv_poly.
-  forwards~ : stoic_equiv_stoic H. apply* typing_app. apply* typing_degen.
-  forwards~ : stoic_equiv_all H. apply* typing_app. apply* typing_degen.
-
-  (* t = t [T] *)
-  destruct T0; try solve [inversion x].
-  destruct n; unfolds open_tt, open_tt_rec; cases_if. substs.
-  assert (Err: typing E (trm_tapp e1 typ_eff) typ_eff).
-    replace typ_eff with (open_tt (typ_bvar 0) typ_eff) at 2.
-    apply* typing_tapp.
-    unfold open_tt. simpl. cases_if*.
-  lets: healthy_env_term_capsafe HL Err. inversion H0.
-
-  unfolds open_tt. simpl in x. inversion x. substs.
-  rewrite <- Pure in *.
-  forwards~ AX: all_equiv_stoic Typ.
-  change (typing (pure E) (trm_tapp e1 T) (open_tt (typ_stoic T0_1 T0_2) T)).
-  apply* typing_tapp.
 Qed.
 
 Lemma capability_safety_result_2 : capability_safety_2.
