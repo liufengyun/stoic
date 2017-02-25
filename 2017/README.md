@@ -1,6 +1,7 @@
 ## What's New
 
 - Reduce typing axioms to just one about eta-equivalence
+- Prove a version without axioms by adding typing rule T-Purify
 
 ## Development
 

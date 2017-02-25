@@ -1,6 +1,21 @@
 (***************************************************************************
 * System-F impure with capabilities and abstraction over E and =>          *
 * (based on the F<: implementation in locally-nameless project)            *
+*                                                                          *
+* main changes: previous we've five axioms to prove 2nd cap-safety, now    *
+* we only assume the following axiom about typing preservation under       *
+* eta-contraction:                                                         *
+*                                                                          *
+*        E |- \x: S. t : S -> T                                            *
+*        ----------------------                                            *
+*           E |- t : S -> T                                                *
+*                                                                          *
+* The original axioms can be poved using the axiom above, except one that  *
+* depends on the following eta-contraction axiom on types                  *
+*                                                                          *
+*        E |- \X. t [X]: T                                                 *
+*        ------------------                                                *
+*           E |- t : T                                                     *
 ***************************************************************************)
 
 Set Implicit Arguments.
