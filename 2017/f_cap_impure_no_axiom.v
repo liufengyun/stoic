@@ -1,6 +1,15 @@
 (***************************************************************************
 * System-F impure with capabilities and abstraction over E and =>          *
 * (based on the F<: implementation in locally-nameless project)            *
+*                                                                          *
+* main changes:                                                            *
+*  - add the rule T-Purify and remove axiom in proving cap-safety          *
+*                                                                          *
+*        pure E |- t : S => T                                              *
+*        --------------------                                              *
+*          E  |- t : S -> T                                                *
+*                                                                          *
+*                                                                          *
 ***************************************************************************)
 
 Set Implicit Arguments.
@@ -226,9 +235,9 @@ Inductive typing : env -> trm -> typ -> Prop :=
       wft E T ->
       typing E e1 (typ_all T1) ->
       typing E (trm_tapp e1 T) (open_tt T1 T)
-  | typing_eta_term : forall E S T t,
-      term t ->
-      typing E (trm_abs S (trm_app t (trm_bvar 0)) ) (typ_stoic S T) ->
+  | typing_purify : forall E S T t,
+      okt E ->
+      typing (pure E) t (typ_arrow S T) ->
       typing E t (typ_stoic S T).
 
 (** Values *)
@@ -1630,7 +1639,9 @@ Proof.
      branch 2. lets*: pure_dom_subset F.
      branch 3. lets*: pure_dom_subset G.
   apply* typing_tapp.
-  apply* typing_eta_term.
+  forwards*: IHTyp (pure E) (pure G) (pure F). rewrite* pure_dist.
+    rewrite <- ?pure_dist. apply* pure_okt.
+    rewrite <- ?pure_dist in H0. apply* typing_purify.
 Qed.
 
 Lemma typing_wft: forall E e T, typing E e T -> wft E T.
@@ -1651,6 +1662,7 @@ Proof.
     forwards~: (H1 X). rewrite <- (@concat_empty_l bind E).
     apply pure_wft_weaken; rewrite* concat_empty_l.
   apply* wft_open.
+  inversion IHtyping. apply* pure_wft.
 Qed.
 
 Lemma typing_weakening_env : forall E F G e T,
@@ -1674,8 +1686,9 @@ Proof. intros. inductions H.
     repeat(rewrite pure_dist in *). rewrite pure_eq in *.
     apply_ih_bind* H1. rewrite* pure_eq. forwards~ : H0 X.
   apply typing_tapp; auto. apply* pure_wft_weaken.
-  apply* typing_eta_term.
+  apply* typing_purify. rewrite ?pure_dist, ?pure_eq in *. auto.
 Qed.
+
 
 Lemma typing_strengthen_env: forall E u U, value u -> typing E u U ->
   pure_typ U = true -> typing (pure E) u U.
@@ -1685,8 +1698,7 @@ Proof. intros. induction H0; simpls; inversion H1.
   inversion H.
   apply_fresh* typing_tabs as y. apply* pure_okt. rewrite* pure_eq.
   inversion H.
-  apply* typing_eta_term. apply* IHtyping. apply* value_abs.
-    lets*: typing_regular H2.
+  apply* typing_purify. rewrite* pure_eq.
 Qed.
 
 
@@ -1813,8 +1825,7 @@ Proof. intros. inductions H; auto.
   destructs IHtyping. simpls. lets: wft_fv_tt H. splits_solve_subsets.
   eapply subset_trans. apply open_tt_tt_fv_subset. solve_subsets.
   (* eta term *)
-  destructs IHtyping. simpls. destruct (subset_union H2).
-  destruct (subset_union H1). destruct (subset_union H7).
+  destructs IHtyping. simpls. destruct (subset_union H3).
   splits_solve_subsets.
 Qed.
 
@@ -1872,8 +1883,19 @@ Proof.
         rewrite in_singleton in H9. substs. apply* FrY. repeat(rewrite in_union).
           autos* in_singleton_self.
   apply* typing_tapp.
-  apply* typing_eta_term. apply* subst_ee_term.
-    lets*: typing_regular TypU. simpl in IHTypT. apply* IHTypT.
+  apply* typing_purify. rewrite ?pure_dist in *. remember (pure_typ U) as b. destruct b.
+    (* pure_typ U = true, use IH *)
+    symmetry in Heqb. rewrite pure_single_true in *; auto.
+    apply* IHTypT.
+    apply* typing_strengthen_env.
+    (* pure_typ U = false, x is free in t *)
+    symmetry in Heqb. rewrite pure_single_false in *; auto.
+    rewrite concat_empty_r in *. rewrite* subst_ee_fresh.
+    destructs (typing_env_fv TypT). destruct  (ok_middle_inv (ok_from_okt H)).
+    intro HI. assert (HII: x \in dom (pure E & pure F)) by unfolds* subset.
+    rewrite ?dom_concat, in_union in HII. destruct HII.
+      apply* H3. lets*: pure_dom_subset E.
+      apply* H4. lets*: pure_dom_subset F.
 Qed.
 
 
@@ -1953,7 +1975,14 @@ Proof.
   rewrite* subst_tt_open_tt; eauto using wft_type. apply* typing_tapp.
     apply* wft_subst_tb. apply tvar_wft with (E & [:Z:] & F); auto.
     rewrite ?tvar_dist, (subseq_tvar Seq). auto.
-  apply* typing_eta_term. apply* subst_te_term. lets*: wft_type Wf.
+  apply* typing_purify.
+    lets Map: pure_map_eq G Z P. destruct Map as [M Map]. destructs Map.
+    rewrite pure_dist, H0. applys~ IHTyp (pure E) (pure F) Z.
+      rewrite ?pure_dist, pure_single_tvar; auto.
+      apply* pure_wft_reverse.
+      apply subseq_trans with (pure G); auto. apply* subseq_pure_dist.
+      apply subseq_okt with (E & [:Z:] & G); auto.
+        apply* subseq_concat. apply* subseq_concat. apply* subseq_pure.
 Qed.
 
 Lemma typing_through_subst_te : forall E F Z e T P,
@@ -1963,6 +1992,78 @@ Lemma typing_through_subst_te : forall E F Z e T P,
 Proof.
   introv Typ Wft. destructs (typing_regular Typ).
   forwards~ : typing_through_subst_te_general P (subseq_refl F) Typ.
+Qed.
+
+(* ********************************************************************** *)
+(** * typing properties for term shapes *)
+
+(* ********************************************************************** *)
+
+Lemma typing_abs_inv: forall t E S T U V,
+  typing E (trm_abs V t) U ->
+  U = (typ_arrow S T) \/ U = (typ_stoic S T) ->
+  (exists L, forall x, x \notin L -> typing (E & x ~: S) (t open_ee_var x) T).
+Proof.
+  introv Typ. remember (trm_abs V t) as func.
+  induction* Typ; intros; substs; tryfalse.
+
+  inversions Heqfunc. destruct H1.
+    inversions H1. exists L. intros. forwards*: H.
+    inversions H1.
+
+  inversions Heqfunc. destruct H2.
+    inversion H2.
+    inversions H2. let L2 := gather_vars in exists L2.
+      intros. forwards*: H0 x.
+      rewrite <- (concat_empty_l E). apply* typing_weakening_env.
+      rewrite* concat_empty_l. rewrite concat_empty_l.
+      destruct (typing_regular H3). destructs (okt_push_typ_inv H4).
+      apply okt_typ; auto. apply* pure_wft.
+
+  destruct H. inversions H. apply* IHTyp. inversion H.
+
+  destruct H0. inversion H0. inversions H0.
+  forwards*: IHTyp. destruct H0 as [L H0].
+    let L2 := gather_vars in exists L2. intros.
+    forwards*: H0 x. rewrite <- (concat_empty_l E).
+    apply* typing_weakening_env. rewrite* concat_empty_l.
+    rewrite* concat_empty_l. apply* okt_typ.
+    apply* pure_wft.
+Qed.
+
+Lemma typing_abs_regular: forall t E S T U V,
+    typing E (trm_abs V t) U ->
+    U = (typ_arrow S T) \/ U = (typ_stoic S T) ->
+    V = S.
+Proof.
+  introv Typ. remember (trm_abs V t) as func.
+  induction* Typ; intros; substs; tryfalse.
+  inversions* Heqfunc. destruct H1; inversion* H1.
+  inversions* Heqfunc. destruct H2; inversion* H2.
+  destruct H; inversions* H.
+  destruct H0; inversions* H0.
+Qed.
+
+Lemma typing_tabs_regular: forall t T,
+  typing empty (trm_tabs t) T ->
+  exists U, T = typ_all U.
+Proof.
+  introv Typ. remember empty as E.
+  remember (trm_tabs t) as e. induction* Typ; inversion* Heqe; substs.
+
+  forwards*: IHTyp. destruct H0. false.
+  forwards*: IHTyp. rewrite* pure_empty. destruct H1. false.
+Qed.
+
+Lemma typing_fvar_empty_false: forall x T,
+  typing empty (trm_fvar x) T -> False.
+Proof.
+  introv Typ. remember empty as E.
+  remember (trm_fvar x) as t.
+  induction* Typ; inversion* Heqt; substs.
+
+  false* binds_empty_inv.
+  apply* IHTyp. rewrite* pure_empty.
 Qed.
 
 (* ********************************************************************** *)
@@ -1977,20 +2078,14 @@ Proof.
   apply* typing_degen.
   (* case: app *)
   inversions Red; try solve [ apply* typing_app ].
-  inversions Typ1. pick_fresh x. forwards~ K: (H2 x).
+  forwards*: typing_abs_inv Typ1.
+  forwards*: typing_abs_regular Typ1. substs.
+  destruct H as [L H]. pick_fresh x. forwards*: H x.
+
   rewrite* (@subst_ee_intro x).
     apply_empty typing_through_subst_ee; substs*.
     lets*: typing_regular Typ2.
 
-  inversions H4. pick_fresh x. forwards~ K: (H8 x).
-  rewrite* (@subst_ee_intro x).
-    apply_empty typing_through_subst_ee; substs*.
-    rewrite <- concat_empty_l at 1. rewrite concat_assoc.
-    apply typing_weakening_env; rewrite* concat_empty_l.
-    apply* okt_typ. apply* pure_wft.
-    lets*: typing_regular Typ2.
-
-  admit.
   (* case: tapp *)
   inversions Red. try solve [ apply* typing_tapp ].
   inversions Typ. pick_fresh X. forwards~ : H6 X.
@@ -2002,8 +2097,8 @@ Proof.
   rewrite <- (@concat_empty_l bind E).
   apply typing_weakening_env. rewrite* concat_empty_l.
   rewrite concat_empty_l. apply* okt_tvar.
-  (* eta term *)
-  apply* typing_eta_term. admit. (* requires eta reduction *)
+  (* case: purify *)
+  apply* typing_purify.
 Qed.
 
 (* ********************************************************************** *)
@@ -2022,8 +2117,8 @@ Proof.
    try solve [ inversion Val | inversion EQT | eauto ].
   subst. false* binds_empty_inv.
 
-  subst. inversions EQT. inversions* Val. inversions* Typ. admit.
-  inversions Typ. false* binds_empty_inv. admit.
+  subst. inversions EQT. inversions* Val. lets*: typing_tabs_regular Typ. false H0.
+  false (typing_fvar_empty_false Typ).
 Qed.
 
 Lemma canonical_form_tabs : forall t U1,
@@ -2061,8 +2156,8 @@ Proof.
       subst. exists* (open_te e T). apply* red_tabs. lets*: typing_regular Typ.
       autos* wft_type.
     exists (trm_tapp e1' T). apply* red_tapp. autos* wft_type.
-  (* case: eta *)
-  admit. (* requires eta reduction *)
+  (* case: purify *)
+  forwards~: IHTyp. rewrite* pure_empty.
 Qed.
 
 (* ********************************************************************** *)
@@ -2436,7 +2531,7 @@ Proof. introv Deg H Typ. inductions Typ; intros; autos.
     inversions* H2. false. autos* capsafe_not_caprod.
   simpl in Deg. inversions Deg.
   simpl in Deg. forwards~ : IHTyp. apply* capsafe_all_open_tt. apply* wft_type.
-  admit.
+  forwards~: IHTyp. apply* healthy_pure. inversion* H1.
 Qed.
 
 Lemma healthy_env_term_capsafe_k: forall E t T k,
@@ -2490,7 +2585,7 @@ Proof. introv Deg H Typ. gen t E T. inductions k; intros.
       assert (caprod (typ_stoic typ_base typ_eff)) by apply* caprod_safe_eff.
       eapply capsafe_subst_tt_caprod; eauto. rewrite* <- subst_tt_intro.
   simpl in H. forwards~ : IHTyp. apply* capsafe_all_open_tt. apply* wft_type.
-  admit.
+  forwards~: IHTyp. apply* healthy_pure. inversion* H1.
 Qed.
 
 Lemma healthy_env_term_capsafe: forall E t T,
@@ -2504,185 +2599,6 @@ Proof. intros E H He. destruct He.
   lets*: healthy_env_term_capsafe H0. inversions H1.
 Qed.
 
-Lemma stoic_equiv_base : forall E S T t,
-  typing (pure E) t (typ_stoic typ_base (typ_arrow S T)) ->
-  typing (pure E) t (typ_stoic typ_base (typ_stoic S T)).
-Proof.
-  intros. destruct (typing_regular H).
-
-  apply* typing_eta_term.
-  apply_fresh* typing_stoic as b. destruct (notin_union_inv Frb).
-  unfold open_ee. simpl. rewrite* If_l. rewrite pure_eq.
-  rewrite* <- (open_ee_rec_term (trm_fvar b) H1 0).
-  assert (okt1: okt (pure E & b ~: typ_base)).
-    apply okt_typ; auto. intro. apply H3. autos* (pure_dom_subset E).
-
-  apply* typing_eta_term.
-  apply_fresh* typing_stoic as s. destruct (notin_union_inv Frs).
-  unfold open_ee. simpl. rewrite* If_l. rewrite pure_dist, pure_eq, pure_single_true; auto.
-  rewrite* <- (open_ee_rec_term (trm_fvar s) H1 0).
-
-  assert (okt2: okt (pure E & b ~: typ_base & s ~: S)).
-    apply okt_typ; auto. apply_empty* wft_weaken. lets Wft: (typing_wft H). inversions* Wft. inversions* H10.
-    intro. rewrite dom_concat, dom_single, in_union, in_singleton in H6. destruct H6.
-    apply H5. autos* (pure_dom_subset E).
-    apply H4. repeat(rewrite in_union; left). rewrite H6, in_singleton. reflexivity.
-
-  apply typing_app with S; auto.
-  apply typing_app with typ_base; auto.
-  apply* typing_degen.
-  apply_empty* typing_weakening.
-  apply_empty* typing_weakening.
-Qed.
-
-Lemma stoic_equiv_stoic : forall E U V S T t,
-  typing (pure E) t (typ_stoic (typ_stoic U V) (typ_arrow S T)) ->
-  typing (pure E) t (typ_stoic (typ_stoic U V) (typ_stoic S T)).
-Proof.
-  intros. destruct (typing_regular H).
-  assert (Wft1: wft (pure E) (typ_stoic U V)).
-    lets Wft: typing_wft H. inversion* Wft.
-  assert (Wft2: wft (pure E) S).
-    lets Wft: typing_wft H. inversion* Wft. inversion* H6.
-
-  apply* typing_eta_term.
-  apply_fresh* typing_stoic as f. rewrite pure_eq.
-  destruct (notin_union_inv Frf).
-  unfold open_ee. simpl. rewrite* If_l.
-  rewrite* <- (open_ee_rec_term (trm_fvar f) H1 0).
-  assert (okt1: okt (pure E & f ~: (typ_stoic U V))).
-    apply* okt_typ. intro. apply H3. autos* (pure_dom_subset E).
-
-  apply* typing_eta_term.
-  apply_fresh* typing_stoic as s.
-  destruct (notin_union_inv Frs).
-  rewrite pure_dist, pure_eq, pure_single_true; auto.
-  unfold open_ee. simpl. rewrite* If_l.
-  rewrite* <- (open_ee_rec_term (trm_fvar s) H1 0).
-
-  assert (okt2: okt (pure E & f ~: (typ_stoic U V) & s ~: S)).
-    apply okt_typ; auto.
-    intro. rewrite dom_concat, dom_single, in_union, in_singleton in H6. destruct H6.
-      apply H5. autos* (pure_dom_subset E).
-      apply H4. repeat(rewrite in_union; left). rewrite H6, in_singleton. reflexivity.
-
-  apply typing_app with S; auto. apply typing_app with (typ_stoic U V); auto.
-  apply* typing_degen. repeat(apply_empty* typing_weakening).
-Qed.
-
-Lemma stoic_equiv_all : forall E U S T t,
-  typing (pure E) t (typ_stoic (typ_all U) (typ_arrow S T)) ->
-  typing (pure E) t (typ_stoic (typ_all U) (typ_stoic S T)).
-Proof.
-  intros. destruct (typing_regular H).
-
-  assert (Wft1: wft (pure E) (typ_all U)).
-    lets Wft: typing_wft H. inversion* Wft.
-  assert (Wft2: wft (pure E) S).
-    lets Wft: typing_wft H. inversion* Wft. inversion* H6.
-
-  apply* typing_eta_term.
-  apply_fresh* typing_stoic as a. rewrite pure_eq.
-  destruct (notin_union_inv Fra).
-  unfold open_ee. simpl. rewrite* If_l.
-  rewrite* <- (open_ee_rec_term (trm_fvar a) H1 0).
-  assert (okt1: okt (pure E & a ~: (typ_all U))).
-    apply okt_typ; auto. intro. apply H3. autos* (pure_dom_subset E).
-
-  apply* typing_eta_term.
-  apply_fresh* typing_stoic as s.
-  destruct (notin_union_inv Frs).
-  rewrite pure_dist, pure_eq, pure_single_true; auto.
-  unfold open_ee. simpl. rewrite* If_l.
-  rewrite* <- (open_ee_rec_term (trm_fvar s) H1 0).
-
-  assert (okt2: okt (pure E & a ~: (typ_all U) & s ~: S)).
-    apply okt_typ; auto.
-    intro. rewrite dom_concat, dom_single, in_union, in_singleton in H6. destruct H6.
-      apply H5. autos* (pure_dom_subset E).
-      apply H4. repeat(rewrite in_union; left). rewrite H6, in_singleton. reflexivity.
-
-  apply typing_app with S; auto. apply typing_app with (typ_all U); auto.
-  apply* typing_degen. repeat(apply_empty* typing_weakening).
-Qed.
-
-Lemma stoic_equiv_poly : forall E U V S T t1 t2,
-  typing (pure E) t1 (typ_stoic (typ_arrow U V) (typ_arrow S T)) ->
-  typing (pure E) t2 (typ_stoic U V) ->
-  typing (pure E) (trm_app t1 t2) (typ_stoic S T).
-Proof.
-  intros. destruct (typing_regular H). destruct (typing_regular H0).
-  assert (Wft1: wft (pure E) (typ_arrow U V)).
-    lets Wft: typing_wft H. inversion* Wft.
-  assert (Wft2: wft (pure E) S).
-    lets Wft: typing_wft H. inversion* Wft. inversion* H9.
-
-  apply* typing_eta_term.
-  apply_fresh* typing_stoic as s.
-  destruct (notin_union_inv Frs).
-  assert (okt1: okt (pure E & s ~: S)).
-    apply okt_typ; auto. intro. apply H6. autos* (pure_dom_subset E).
-
-  rewrite ?pure_dist, ?pure_eq.
-  unfold open_ee. simpl. rewrite* If_l.
-  rewrite* <- (open_ee_rec_term (trm_fvar s) H2 0).
-  rewrite* <- (open_ee_rec_term (trm_fvar s) H4 0).
-
-  apply typing_app with S; auto.
-  apply typing_app with (typ_arrow U V); auto;
-    apply_empty* typing_weakening; apply* typing_degen.
-Qed.
-
-Lemma all_equiv_stoic : forall E T1 T2 t,
-  typing (pure E) t (typ_all (typ_arrow T1 T2)) ->
-  typing (pure E) t (typ_all (typ_stoic T1 T2)).
-Proof.
-  intros. destruct (typing_regular H).
-  lets Wft: typing_wft H. inversion* Wft. substs.
-  assert (EtaT: forall E T t,
-             term t -> typing E (trm_tabs (trm_tapp t (typ_bvar 0)) ) T ->
-             typing E t T) by admit.
-  apply* EtaT.
-  apply_fresh* typing_tabs as X.
-
-  destruct (notin_union_inv FrX).
-  assert (Wft1: wft (pure E & [:X:]) (T1 open_tt_var X)).
-    forwards*: H4 X. inversion* H5.
-  assert (okt1: okt (pure E & [:X:])).
-    apply okt_tvar; auto. intro. apply H3. autos* (pure_dom_subset E).
-
-  rewrite ?pure_dist, ?pure_eq.
-  unfold open_te. simpl. rewrite* If_l.
-  rewrite* <- (open_te_rec_term (typ_fvar X) H1 0).
-
-  apply* typing_eta_term.
-  apply_fresh* typing_stoic as s. rewrite pure_dist, pure_eq, pure_single_tvar.
-  fold open_tt_rec.
-
-  destruct (notin_union_inv Frs).
-  assert (okt2: okt (pure E & [:X:] & s ~: open_tt_rec 0 (typ_fvar X) T1)).
-    apply okt_typ; auto. intro.
-    rewrite dom_concat, dom_single, in_union, in_singleton in H7. destruct H7.
-      apply H6. autos* (pure_dom_subset E).
-      apply H5. substs.
-        rewrite in_union; left.
-        rewrite in_union; left.
-        rewrite in_union; left.
-        rewrite in_union; left.
-        rewrite in_union; right.
-        rewrite* in_singleton.
-
-  unfold open_ee. simpl. rewrite* If_l.
-  rewrite* <- (open_ee_rec_term (trm_fvar s) H1 0).
-
-  apply typing_app with (open_tt_rec 0 (typ_fvar X) T1); auto.
-  replace (typ_arrow (open_tt_rec 0 (typ_fvar X) T1) (open_tt_rec 0 (typ_fvar X) T2))
-          with ((typ_arrow T1 T2) open_tt_var X); auto.
-  apply typing_tapp. apply* wft_var.
-  apply_empty* typing_weakening.
-  apply_empty* typing_weakening.
-Qed.
-
 Lemma pure_env_stoic: forall E t T1 T2,
   pure E = E ->
   typing E t (typ_arrow T1 T2) ->
@@ -2694,24 +2610,9 @@ Proof.
     assert (Typ2: typing E (trm_abs T1 t0) (typ_arrow T1 T2)) by apply* typing_abs.
     rewrite* Pure.
   - destruct (typing_regular Typ). inversion H0. substs.
-    apply* typing_eta_term.
-    apply_fresh* typing_stoic as x.
-    unfold open_ee. simpl. rewrite* If_l.
-    rewrite* <- (open_ee_rec_term (trm_fvar x) H5 0).
-    rewrite* <- (open_ee_rec_term (trm_fvar x) H6 0).
-    assert (okt1: okt (E & x ~: T1)).
-      apply okt_typ; auto. lets*: typing_wft Typ. inversion* H1.
-    rewrite Pure. apply typing_app with T1; auto.
-    apply_empty* typing_weakening.
+    apply* typing_purify. rewrite* Pure.
   - destruct (typing_regular Typ). inversion H0. substs.
-    apply* typing_eta_term.
-    apply_fresh* typing_stoic as x.
-    unfold open_ee. simpl. rewrite* If_l.
-    rewrite* <- (open_ee_rec_term (trm_fvar x) H6 0).
-    assert (okt1: okt (E & x ~: T1)).
-      apply okt_typ; auto. lets*: typing_wft Typ. inversion* H1.
-    rewrite Pure. apply typing_app with T1; auto.
-    apply_empty* typing_weakening.
+    apply* typing_purify. rewrite* Pure.
 Qed.
 
 Lemma capability_safety_result_2 : capability_safety_2.
@@ -2719,7 +2620,7 @@ Proof. introv HL Pure Typ. inductions Typ; auto.
   apply* IHTyp.
 
   forwards~ : pure_env_stoic E t1 T1 T2. iauto.
-  exists S T. inversion H. substs. apply* typing_eta_term. admit.
+  rewrite <- Pure. apply* IHTyp. apply* healthy_pure. rewrite* pure_eq.
 Qed.
 
 (* This proof ensures that all inhabitable types are capsafe, thus
@@ -2734,7 +2635,7 @@ Qed.
 
 *)
 
-Theorem primitive_capsafe: forall E x T,
+Theorem primitive_regular: forall E x T,
   primitive E ->
   binds x (bind_typ T) E ->
   capsafe T \/ pure_typ T = false.
@@ -2755,12 +2656,12 @@ Proof. introv Prim. inductions Prim.
   rewrite ?pure_dist, pure_single_false; auto. rewrite* concat_empty_r.
 Qed.
 
-Theorem inhabitable_capsafe: forall E t T,
+Theorem primitive_capsafe: forall E t T,
   primitive E ->
   typing E t T -> value t ->
   capsafe T \/ pure_typ T = false.
 Proof. introv Prim Typ Val. inductions Typ; auto.
-  apply* primitive_capsafe.
+  apply* primitive_regular.
   pick_fresh z. forwards~ IH: H0 z.
     lets (Ok&_): (typing_regular IH). lets (_&Wf&_): (okt_push_typ_inv Ok).
     lets TypV: wft_type Wf. lets TypT1: wft_type (typing_wft IH).
@@ -2786,7 +2687,10 @@ Proof. introv Prim Typ Val. inductions Typ; auto.
     split; rewrite* (@subst_tt_intro X).
     applys~ capsafe_subst_tt_caprod (typ_stoic typ_base typ_eff).
   inversion Val.
+  lets: primitive_pure_healthy Prim. lets*: healthy_env_term_capsafe Typ.
+    inversion* H1.
 Qed.
+
 
 Theorem inhabitable_pure_healthy: inhabitable_pure_healthy_statement.
 Proof. introv In Pure. inductions In.
@@ -2796,7 +2700,7 @@ Proof. introv In Pure. inductions In.
   assert (TPure: pure_typ T = true).
     applys~ pure_regular (E & z ~: T) z.
     rewrite Pure. apply binds_tail.
-  forwards~ IH: inhabitable_capsafe H1. destruct IH.
+  forwards~ IH: primitive_capsafe H1. destruct IH.
     rewrite pure_dist, pure_single_true in Pure; auto.
       rewrite <- ?cons_to_push in Pure. inversion Pure. rewrite H4.
       apply* healthy_typ.
