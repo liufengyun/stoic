@@ -2599,27 +2599,11 @@ Proof. intros E H He. destruct He.
   lets*: healthy_env_term_capsafe H0. inversions H1.
 Qed.
 
-Lemma pure_env_stoic: forall E t T1 T2,
-  pure E = E ->
-  typing E t (typ_arrow T1 T2) ->
-  typing E t (typ_stoic T1 T2).
-Proof.
-  introv Pure Typ. destruct t; simpl in *; inversion* Typ; substs.
-  - rewrite <- Pure in H2. lets: pure_regular H2. false.
-  - apply_fresh* typing_stoic as x.
-    assert (Typ2: typing E (trm_abs T1 t0) (typ_arrow T1 T2)) by apply* typing_abs.
-    rewrite* Pure.
-  - destruct (typing_regular Typ). inversion H0. substs.
-    apply* typing_purify. rewrite* Pure.
-  - destruct (typing_regular Typ). inversion H0. substs.
-    apply* typing_purify. rewrite* Pure.
-Qed.
-
 Lemma capability_safety_result_2 : capability_safety_2.
 Proof. introv HL Pure Typ. inductions Typ; auto.
   apply* IHTyp.
 
-  forwards~ : pure_env_stoic E t1 T1 T2. iauto.
+  exists T1 T2. apply* typing_purify. rewrite* Pure.
   rewrite <- Pure. apply* IHTyp. apply* healthy_pure. rewrite* pure_eq.
 Qed.
 
