@@ -10,8 +10,9 @@
 *        ----------------------                                            *
 *           E |- t : S -> T                                                *
 *                                                                          *
-* The original axioms can be poved using the axiom above, except one that  *
-* depends on the following eta-contraction axiom on types                  *
+* A weaker version of the original axioms (in pure environment instead of  *
+* arbitrary environment) can be poved using the axiom above, except one    *
+* that depends on the following eta-contraction axiom on types:            *
 *                                                                          *
 *        E |- \X. t [X]: T                                                 *
 *        ------------------                                                *
