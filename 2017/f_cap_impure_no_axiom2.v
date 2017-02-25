@@ -2626,7 +2626,7 @@ Qed.
 
 *)
 
-Theorem primitive_capsafe: forall E x T,
+Theorem primitive_regular: forall E x T,
   primitive E ->
   binds x (bind_typ T) E ->
   capsafe T \/ pure_typ T = false.
@@ -2647,15 +2647,12 @@ Proof. introv Prim. inductions Prim.
   rewrite ?pure_dist, pure_single_false; auto. rewrite* concat_empty_r.
 Qed.
 
-Lemma primitive_pure: forall E, primitive E -> primitive (pure E).
-Proof. admit. Qed.
-
-Theorem inhabitable_capsafe: forall E t T,
+Theorem primitive_capsafe: forall E t T,
   primitive E ->
   typing E t T -> value t ->
   capsafe T \/ pure_typ T = false.
 Proof. introv Prim Typ Val. inductions Typ; auto.
-  apply* primitive_capsafe.
+  apply* primitive_regular.
   pick_fresh z. forwards~ IH: H0 z.
     lets (Ok&_): (typing_regular IH). lets (_&Wf&_): (okt_push_typ_inv Ok).
     lets TypV: wft_type Wf. lets TypT1: wft_type (typing_wft IH).
@@ -2694,7 +2691,7 @@ Proof. introv In Pure. inductions In.
   assert (TPure: pure_typ T = true).
     applys~ pure_regular (E & z ~: T) z.
     rewrite Pure. apply binds_tail.
-  forwards~ IH: inhabitable_capsafe H1. destruct IH.
+  forwards~ IH: primitive_capsafe H1. destruct IH.
     rewrite pure_dist, pure_single_true in Pure; auto.
       rewrite <- ?cons_to_push in Pure. inversion Pure. rewrite H4.
       apply* healthy_typ.
