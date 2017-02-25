@@ -1986,7 +1986,7 @@ Proof.
 Qed.
 
 (* ********************************************************************** *)
-(** * Preservation *)
+(** * typing properties for term shapes *)
 
 (* ********************************************************************** *)
 
@@ -2035,6 +2035,33 @@ Proof.
   destruct H0; inversions* H0.
 Qed.
 
+Lemma typing_tabs_regular: forall t T,
+  typing empty (trm_tabs t) T ->
+  exists U, T = typ_all U.
+Proof.
+  introv Typ. remember empty as E.
+  remember (trm_tabs t) as e. induction* Typ; inversion* Heqe; substs.
+
+  forwards*: IHTyp. destruct H0. false.
+  forwards*: IHTyp. rewrite* pure_empty. destruct H1. false.
+Qed.
+
+Lemma typing_fvar_empty_false: forall x T,
+  typing empty (trm_fvar x) T -> False.
+Proof.
+  introv Typ. remember empty as E.
+  remember (trm_fvar x) as t.
+  induction* Typ; inversion* Heqt; substs.
+
+  false* binds_empty_inv.
+  apply* IHTyp. rewrite* pure_empty.
+Qed.
+
+(* ********************************************************************** *)
+(** * Preservation *)
+
+(* ********************************************************************** *)
+
 Lemma preservation_result : preservation.
 Proof.
   introv Typ. gen e'. induction Typ; introv Red;
@@ -2070,19 +2097,6 @@ Qed.
 
 (* ********************************************************************** *)
 (** Canonical Forms (14) *)
-
-Lemma typing_tabs_regular: forall t T,
-  typing empty (trm_tabs t) T ->
-  exists U, T = typ_all U.
-Proof.
-  admit.
-Qed.
-
-Lemma typing_fvar_empty_false: forall x T,
-  typing empty (trm_fvar x) T -> False.
-Proof.
-  admit.
-Qed.
 
 Lemma canonical_form_abs : forall t U1 U2,
   value t -> typing empty t (typ_arrow U1 U2) ->
