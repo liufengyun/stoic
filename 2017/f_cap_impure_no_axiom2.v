@@ -1,6 +1,15 @@
 (***************************************************************************
 * System-F impure with capabilities and abstraction over E and =>          *
 * (based on the F<: implementation in locally-nameless project)            *
+*                                                                          *
+* main changes:                                                            *
+*  - add the rule T-Purify and remove axiom in proving cap-safety          *
+*                                                                          *
+*        pure E |- t : S => T                                              *
+*        --------------------                                              *
+*          E  |- t : S -> T                                                *
+*                                                                          *
+*                                                                          *
 ***************************************************************************)
 
 Set Implicit Arguments.
