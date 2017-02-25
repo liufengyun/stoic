@@ -1990,6 +1990,51 @@ Qed.
 
 (* ********************************************************************** *)
 
+Lemma typing_abs_inv: forall t E S T U V,
+  typing E (trm_abs V t) U ->
+  U = (typ_arrow S T) \/ U = (typ_stoic S T) ->
+  (exists L, forall x, x \notin L -> typing (E & x ~: S) (t open_ee_var x) T).
+Proof.
+  introv Typ. remember (trm_abs V t) as func.
+  induction* Typ; intros; substs; tryfalse.
+
+  inversions Heqfunc. destruct H1.
+    inversions H1. exists L. intros. forwards*: H.
+    inversions H1.
+
+  inversions Heqfunc. destruct H2.
+    inversion H2.
+    inversions H2. let L2 := gather_vars in exists L2.
+      intros. forwards*: H0 x.
+      rewrite <- (concat_empty_l E). apply* typing_weakening_env.
+      rewrite* concat_empty_l. rewrite concat_empty_l.
+      destruct (typing_regular H3). destructs (okt_push_typ_inv H4).
+      apply okt_typ; auto. apply* pure_wft.
+
+  destruct H. inversions H. apply* IHTyp. inversion H.
+
+  destruct H0. inversion H0. inversions H0.
+  forwards*: IHTyp. destruct H0 as [L H0].
+    let L2 := gather_vars in exists L2. intros.
+    forwards*: H0 x. rewrite <- (concat_empty_l E).
+    apply* typing_weakening_env. rewrite* concat_empty_l.
+    rewrite* concat_empty_l. apply* okt_typ.
+    apply* pure_wft.
+Qed.
+
+Lemma typing_abs_regular: forall t E S T U V,
+    typing E (trm_abs V t) U ->
+    U = (typ_arrow S T) \/ U = (typ_stoic S T) ->
+    V = S.
+Proof.
+  introv Typ. remember (trm_abs V t) as func.
+  induction* Typ; intros; substs; tryfalse.
+  inversions* Heqfunc. destruct H1; inversion* H1.
+  inversions* Heqfunc. destruct H2; inversion* H2.
+  destruct H; inversions* H.
+  destruct H0; inversions* H0.
+Qed.
+
 Lemma preservation_result : preservation.
 Proof.
   introv Typ. gen e'. induction Typ; introv Red;
@@ -1997,21 +2042,14 @@ Proof.
   apply* typing_degen.
   (* case: app *)
   inversions Red; try solve [ apply* typing_app ].
+  forwards*: typing_abs_inv Typ1.
+  forwards*: typing_abs_regular Typ1. substs.
+  destruct H as [L H]. pick_fresh x. forwards*: H x.
 
-  inversions Typ1. pick_fresh x. forwards~ K: (H2 x).
   rewrite* (@subst_ee_intro x).
     apply_empty typing_through_subst_ee; substs*.
     lets*: typing_regular Typ2.
 
-  inversions H4. pick_fresh x. forwards~ K: (H8 x).
-  rewrite* (@subst_ee_intro x).
-    apply_empty typing_through_subst_ee; substs*.
-    rewrite <- concat_empty_l at 1. rewrite concat_assoc.
-    apply typing_weakening_env; rewrite* concat_empty_l.
-    apply* okt_typ. apply* pure_wft.
-    lets*: typing_regular Typ2.
-
-  admit.
   (* case: tapp *)
   inversions Red. try solve [ apply* typing_tapp ].
   inversions Typ. pick_fresh X. forwards~ : H6 X.
