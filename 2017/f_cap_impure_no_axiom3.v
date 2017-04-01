@@ -5,9 +5,9 @@
 * main changes:                                                            *
 *  - add T-Poly                                                            *
 *                                                                          *
-*        E |- t1 : U -> S => T    E |- t2 : U   U is pure                  *
+*              E |- t1 : U -> S => T     U is pure                         *
 *        ------------------------------------------------                  *
-*                      E  |- t1 t2 : S -> T                                *
+*                 E  |- t : U -> S -> T                                    *
 *  - add T-Sub                                                             *
 *                                                                          *
 *                 E |- t : (U => V) -> S => T                              *
