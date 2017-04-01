@@ -8,6 +8,11 @@
 *        E |- t1 : U -> S => T    E |- t2 : U   U is pure                  *
 *        ------------------------------------------------                  *
 *                      E  |- t1 t2 : S -> T                                *
+*  - add T-Sub                                                             *
+*                                                                          *
+*                 E |- t : (U => V) -> S => T                              *
+*        ------------------------------------------------                  *
+*                 E |- t : (U -> V) -> S => T                              *
 *                                                                          *
 *                                                                          *
 ***************************************************************************)
@@ -232,13 +237,15 @@ Inductive typing : env -> trm -> typ -> Prop :=
       typing E (trm_tapp e1 T) (open_tt T1 T)
   | typing_stoic : forall E S T t,
       okt E ->
-      typing (pure E) t (typ_arrow S T) ->
-      typing E t (typ_stoic S T)
-  | typing_poly : forall E U S T t1 t2,
+      typing (pure E) (trm_abs S t) (typ_arrow S T) ->
+      typing E (trm_abs S t) (typ_stoic S T)
+  | typing_poly : forall E U S T t,
       pure_typ U = true ->
-      typing E t1 (typ_stoic U (typ_arrow S T)) ->
-      typing E t2 U ->
-      typing E (trm_app t1 t2) (typ_stoic S T).
+      typing E t (typ_stoic U (typ_arrow S T)) ->
+      typing E t (typ_stoic U (typ_stoic S T))
+  | typing_sub : forall E U V S T t,                  (* no need in a system with subtyping *)
+      typing E t (typ_stoic (typ_arrow U V) (typ_arrow S T)) ->
+      typing E t (typ_stoic (typ_stoic U V) (typ_arrow S T)).
 
 (** Values *)
 
@@ -1094,7 +1101,6 @@ Proof.
   splits*. destructs IHtyping.
      apply* term_tapp. apply* wft_type.
   splits*.
-  splits*.
 Qed.
 
 (** The value relation is restricted to well-formed objects. *)
@@ -1626,6 +1632,7 @@ Proof.
     rewrite <- ?pure_dist. apply* pure_okt.
     rewrite <- ?pure_dist in H0. apply* typing_stoic.
   apply* typing_poly.
+  apply* typing_sub.
 Qed.
 
 Lemma typing_wft: forall E e T, typing E e T -> wft E T.
@@ -1639,8 +1646,9 @@ Proof.
     forwards~: (H1 X). rewrite <- (@concat_empty_l bind E).
     apply pure_wft_weaken; rewrite* concat_empty_l.
   apply* wft_open.
-  inversion IHtyping. apply* pure_wft.
-  inversion IHtyping1. subst. inversions H6. auto.
+  inversions IHtyping. apply* pure_wft.
+  inversions IHtyping. inversions H5. auto.
+  inversions IHtyping. inversions H3. auto.
 Qed.
 
 Lemma typing_weakening_env : forall E F G e T,
@@ -1663,6 +1671,7 @@ Proof. intros. inductions H.
   apply typing_tapp; auto. apply* pure_wft_weaken.
   apply* typing_stoic. rewrite ?pure_dist, ?pure_eq in *. auto.
   apply* typing_poly.
+  apply* typing_sub.
 Qed.
 
 
@@ -1674,7 +1683,8 @@ Proof. intros. induction H0; simpls; inversion H1.
   apply_fresh* typing_tabs as y. apply* pure_okt. rewrite* pure_eq.
   inversion H.
   apply* typing_stoic. rewrite* pure_eq.
-  inversion H.
+  apply* typing_poly.
+  apply* typing_sub.
 Qed.
 
 
@@ -1795,9 +1805,6 @@ Proof. intros. inductions H; auto.
   (* stoic *)
   destructs IHtyping. simpls. destruct (subset_union H3).
   splits_solve_subsets.
-  (* poly *)
-  destructs IHtyping1. simpls. destruct (subset_union H4). destructs IHtyping2.
-  splits_solve_subsets.
 Qed.
 
 Lemma typing_through_subst_ee : forall U E F x T e u,
@@ -1849,6 +1856,7 @@ Proof.
       apply* H3. lets*: pure_dom_subset E.
       apply* H4. lets*: pure_dom_subset F.
   apply* typing_poly.
+  apply* typing_sub.
 Qed.
 
 
@@ -1911,8 +1919,8 @@ Proof.
       apply subseq_trans with (pure G); auto. apply* subseq_pure_dist.
       apply subseq_okt with (E & [:Z:] & G); auto.
         apply* subseq_concat. apply* subseq_concat. apply* subseq_pure.
-  apply typing_poly with ((subst_tt Z P U)). apply* pure_subst_tt.
-    apply* IHTyp1. apply* IHTyp2.
+  apply* typing_poly. apply* pure_subst_tt.
+  apply* typing_sub.
 Qed.
 
 Lemma typing_through_subst_te : forall E F Z e T P,
@@ -1929,19 +1937,20 @@ Qed.
 
 (* ********************************************************************** *)
 
-Lemma typing_abs_inv: forall t E S T U V,
+Definition subtype (S T: typ) := forall E t, typing E t S -> typing E t T.
+
+Lemma typing_abs_inv: forall t E U V S T,
   typing E (trm_abs V t) U ->
   U = (typ_arrow S T) \/ U = (typ_stoic S T) ->
   (exists L, forall x, x \notin L -> typing (E & x ~: S) (t open_ee_var x) T).
 Proof.
-  introv Typ. remember (trm_abs V t) as func.
+  introv Typ.  remember (trm_abs V t) as func.
   induction* Typ; intros; substs; tryfalse.
 
   inversions Heqfunc. destruct H1.
-    inversions H1. exists L. intros. forwards*: H.
-    inversions H1.
+    inversions H1. iauto. inversion H1.
 
-  destruct H. inversions H. apply* IHTyp. inversion H.
+  destruct H. inversions H. iauto. inversion H.
 
   destruct H0. inversion H0. inversions H0.
   forwards*: IHTyp. destruct H0 as [L H0].
@@ -1950,6 +1959,8 @@ Proof.
     apply* typing_weakening_env. rewrite* concat_empty_l.
     rewrite* concat_empty_l. apply* okt_typ.
     apply* pure_wft.
+
+  admit.
 Qed.
 
 Lemma typing_stoic_inv: forall t E S T,
