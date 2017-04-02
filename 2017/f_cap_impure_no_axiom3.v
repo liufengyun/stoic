@@ -3,17 +3,11 @@
 * (based on the F<: implementation in locally-nameless project)            *
 *                                                                          *
 * main changes:                                                            *
-*  - add T-Poly                                                            *
+*  - add subtyping with S-Poly                                             *
 *                                                                          *
-*              E |- t1 : U -> S => T     U is pure                         *
+*                         U is pure                                        *
 *        ------------------------------------------------                  *
-*                 E  |- t : U -> S -> T                                    *
-*  - add T-Sub                                                             *
-*                                                                          *
-*                 E |- t : (U => V) -> S => T                              *
-*        ------------------------------------------------                  *
-*                 E |- t : (U -> V) -> S => T                              *
-*                                                                          *
+*                 U -> S => T   <:   U -> S -> T                           *
 *                                                                          *
 ***************************************************************************)
 
@@ -208,6 +202,38 @@ Fixpoint pure(E: env) := match E with
     end.
 
 
+(** Subtyping relation *)
+
+Inductive sub : typ -> typ -> Prop :=
+  | sub_refl: forall S,
+      type S ->
+      sub S S
+  | sub_trans : forall S T U,
+      sub S T ->
+      sub T U ->
+      sub S U
+  | sub_degen: forall S T,
+      type S ->
+      type T ->
+      sub (typ_stoic S T) (typ_arrow S T)
+  | sub_arrow: forall S1 S2 T1 T2,
+      sub T1 S1 ->
+      sub S2 T2 ->
+      sub (typ_arrow S1 S2) (typ_arrow T1 T2)
+  | sub_stoic: forall S1 S2 T1 T2,
+      sub T1 S1 ->
+      sub S2 T2 ->
+      sub (typ_stoic S1 S2) (typ_stoic T1 T2)
+  | sub_all : forall L S1 S2,
+      (forall X, X \notin L ->
+          sub (S1 open_tt_var X) (S2 open_tt_var X)) ->
+      sub (typ_all S1) (typ_all S2)
+  | sub_poly: forall U S T,
+      type U -> type S -> type T ->
+      pure_typ U = true ->
+      sub (typ_stoic U (typ_arrow S T))
+	  (typ_stoic U (typ_stoic S T)).
+
 (** Typing relation *)
 
 Inductive typing : env -> trm -> typ -> Prop :=
@@ -219,9 +245,6 @@ Inductive typing : env -> trm -> typ -> Prop :=
       (forall x, x \notin L ->
         typing (E & x ~: V) (e1 open_ee_var x) T1) ->
       typing E (trm_abs V e1) (typ_arrow V T1)
-  | typing_degen : forall E t S T,
-     typing E t (typ_stoic S T) ->
-     typing E t (typ_arrow S T)
   | typing_app : forall T1 E e1 e2 T2,
       typing E e1 (typ_arrow T1 T2) ->
       typing E e2 T1 ->
@@ -237,15 +260,12 @@ Inductive typing : env -> trm -> typ -> Prop :=
       typing E (trm_tapp e1 T) (open_tt T1 T)
   | typing_stoic : forall E S T t,
       okt E ->
-      typing (pure E) (trm_abs S t) (typ_arrow S T) ->
-      typing E (trm_abs S t) (typ_stoic S T)
-  | typing_poly : forall E U S T t,
-      pure_typ U = true ->
-      typing E t (typ_stoic U (typ_arrow S T)) ->
-      typing E t (typ_stoic U (typ_stoic S T))
-  | typing_sub : forall E U V S T t,                  (* no need in a system with subtyping *)
-      typing E t (typ_stoic (typ_arrow U V) (typ_arrow S T)) ->
-      typing E t (typ_stoic (typ_stoic U V) (typ_arrow S T)).
+      typing (pure E) t (typ_arrow S T) ->
+      typing E t (typ_stoic S T)
+  | typing_sub : forall E S T t,
+      sub S T ->
+      typing E t S ->
+      typing E t T.
 
 (** Values *)
 
@@ -458,7 +478,7 @@ Definition subst_tb (Z : var) (P : typ) (b : bind) : bind :=
 Hint Constructors type term wft ok okt value red subseq.
 
 Hint Resolve
-  typing_var typing_app typing_tapp.
+  typing_var typing_app typing_tapp sub_refl sub_trans sub_degen.
 
 (** Gathering free names already used in the proofs *)
 
@@ -1600,6 +1620,177 @@ Proof. intros. inductions E.
 Qed.
 
 (* ********************************************************************** *)
+(** * Properties of Subtyping *)
+
+Lemma sub_stoic_inv: forall T U1 U2,
+  sub T (typ_stoic U1 U2) ->
+  exists S1 S2, T = (typ_stoic S1 S2) /\ sub U1 S1.
+Proof.
+  intros. gen_eq S: (typ_stoic U1 U2). gen U1 U2.
+  inductions H; intros; substs; tryfalse; iauto.
+
+  inversions H. jauto.
+  forwards~ : IHsub2 U1 U2. destruct H1 as [M1 [M2 Y1]].
+    forwards~ : IHsub1 M1 M2; jauto.
+  inversions* H1.
+  inversions H3. iauto.
+Qed.
+
+Lemma sub_fun_inv: forall T U U1 U2,
+  sub T U ->
+  U = (typ_arrow U1 U2) \/ U = (typ_stoic U1 U2) ->
+  exists S1 S2, (T = typ_arrow S1 S2 \/ T = typ_stoic S1 S2) /\ sub U1 S1.
+Proof.
+  intros. gen U1 U2.
+  inductions H; intros; substs; tryfalse.
+  exists U1 U2. split*. destruct H0; substs; inversion* H.
+  forwards~ : IHsub2 U1 U2. destruct H2 as [M1 [M2 [Y1 Y2]]].
+    forwards~ : IHsub1 M1 M2. jauto.
+  exists U1 U2. destruct H1; inversions H1. split*.
+  destruct H1; inversions H1. exists S1 S2. iauto.
+  destruct H1; inversions H1. exists S1 S2. iauto.
+  destruct H1; inversion H1.
+  destruct H3; inversions H3. jauto.
+Qed.
+
+Lemma sub_arrow_inv: forall T U1 U2,
+  sub T (typ_arrow U1 U2) ->
+  exists S1 S2, (T = typ_arrow S1 S2 \/ T = typ_stoic S1 S2) /\ sub U1 S1.
+Proof.
+  intros. gen_eq S: (typ_arrow U1 U2). gen U1 U2.
+  inductions H; intros; substs; tryfalse.
+  inversions H. jauto.
+  forwards~ : IHsub2 U1 U2. destruct* H1 as [M1 [M2 [Y1 Y2]]]. destruct Y1.
+    substs. forwards~ : IHsub1 M1 M2. jauto.
+    substs. lets*: sub_stoic_inv H. jauto.
+  inversions H1. jauto.
+  inversions H1. jauto.
+Qed.
+
+Lemma sub_all_inv: forall T S,
+  sub S (typ_all T) ->
+  exists U, S = typ_all U /\
+            (exists L, forall X, X \notin L -> sub (U open_tt_var X)
+						   (T open_tt_var X)).
+Proof.
+  intros. gen_eq U: (typ_all T). gen T.
+  inductions H; intros; substs; tryfalse.
+  exists T. split; auto. let L := gather_vars in exists* L.
+  forwards~: IHsub2. destruct H1 as [U [Y1 Y2]]. subst.
+    forwards*: IHsub1 U. destruct H1 as [M [Y3 Y4]]. subst.
+    exists M. split*. destruct Y4 as [L1 Y4]. destruct Y2 as [L2 Y2].
+    let L3 := gather_vars in exists L3. iauto.
+  inversions H1. exists S1. split*.
+Qed.
+
+Lemma sub_all_inv2: forall T S,
+  sub (typ_all S) T ->
+  exists U, T = typ_all U /\
+            (exists L, forall X, X \notin L -> sub (S open_tt_var X)
+						   (U open_tt_var X)).
+Proof.
+  intros. gen_eq U: (typ_all S). gen S.
+  inductions H; intros; substs; tryfalse.
+  exists S0. split; auto. let L := gather_vars in exists* L.
+  forwards~: IHsub1. destruct H1 as [U2 [Y1 Y2]]. subst.
+    forwards*: IHsub2 U2. destruct H1 as [M [Y3 Y4]]. subst.
+    exists M. split*. destruct Y4 as [L1 Y4]. destruct Y2 as [L2 Y2].
+    let L3 := gather_vars in exists L3. iauto.
+  inversions H1. exists S2. split*.
+Qed.
+
+Lemma sub_arrow_inv_sub: forall S1 S2 U1 U2,
+  sub (typ_arrow S1 S2) (typ_arrow U1 U2) ->
+  sub U1 S1.
+Proof. intros. lets: sub_arrow_inv H. destruct H0 as [S3 [S4 [Y1 Y2]]].
+  destruct Y1 as [Y1 | Y1]; inversion* Y1.
+Qed.
+
+Lemma sub_stoic_inv_sub: forall S1 S2 U1 U2,
+  sub (typ_stoic S1 S2) (typ_stoic U1 U2) ->
+  sub U1 S1.
+Proof. intros. lets: sub_stoic_inv H. destruct H0 as [S3 [S4 [Y1 Y2]]].
+  inversions* Y1.
+Qed.
+
+Lemma sub_degen_inv_sub: forall S1 S2 U1 U2,
+  sub (typ_stoic S1 S2) (typ_arrow U1 U2) ->
+  sub U1 S1.
+Proof. intros. lets: sub_arrow_inv H. destruct H0 as [S3 [S4 [Y1 Y2]]].
+  destruct Y1 as [Y1 | Y1]; inversions* Y1.
+Qed.
+
+Lemma sub_degen_inv_false: forall S1 S2 U1 U2,
+  sub (typ_arrow S1 S2) (typ_stoic U1 U2) -> False.
+Proof. intros. lets: sub_stoic_inv H. false* H0. Qed.
+
+Lemma sub_base_eq: forall S, sub S typ_base -> S = typ_base.
+Proof. intros. inductions H; auto. Qed.
+
+Lemma sub_pure: forall S T, sub S T ->
+  pure_typ T = true -> pure_typ S = true.
+Proof. intros. destruct T; auto.
+  lets: sub_base_eq H. substs*.
+  lets: sub_stoic_inv H. destruct H1 as [S1 [S2 [H2 _]]]. substs*.
+  let L := gather_vars in lets: sub_all_inv H.
+    destruct H1 as [U [Ha _]]. substs*.
+Qed.
+
+Lemma sub_regular : forall E S T,
+  sub S T -> (wft E T  <-> wft E S).
+Proof.
+  intros. gen E. inductions H; try solve [split; auto]; intros.
+  firstorder.
+  split; intros Y; inversion* Y.
+  split; intros Y; inversions Y; lets: IHsub1 E; lets: IHsub2 E; iauto.
+  split; intros Y; inversions Y; lets: IHsub1 E; lets: IHsub2 E; iauto.
+  split; intros Y; inversions Y; apply_fresh wft_all as X; forwards*: H0 X (E & [:X:]).
+  split; intros Y; inversions Y; inversion* H7.
+Qed.
+
+Lemma sub_regular2 : forall S T,
+  sub S T -> (type T  <-> type S).
+Proof.
+  intros. inductions H; try solve [split; auto].
+  firstorder.
+  split; intros Y; inversion* Y.
+  split; intros Y; inversion* Y.
+  split; intros Y; inversions Y; apply_fresh type_all as X; forwards*: H0 X.
+Qed.
+
+Lemma sub_fv_tt: forall S T, sub S T -> fv_tt T = fv_tt S.
+Proof.
+  intros. inductions H; auto.
+  rewrite* IHsub2.
+  simpl. rewrite IHsub1, IHsub2. auto.
+  simpl. rewrite IHsub1, IHsub2. auto.
+  simpl. pick_fresh X. forwards*: H0 X.
+  assert (forall X T, fv_tt (T open_tt_var X) = fv_tt T \/
+		      fv_tt (T open_tt_var X) = fv_tt T \u \{X}) as Y.
+    admit.
+  admit.
+Qed.
+
+Lemma sub_subst_tt: forall Z P S T,
+  type P ->
+  sub S T ->
+  sub (subst_tt Z P S) (subst_tt Z P T).
+Proof.
+  intros. inductions H0; auto.
+  iauto.
+  simpl. auto.
+  simpl. apply* sub_arrow.
+  simpl. apply* sub_stoic.
+  simpl. apply_fresh sub_all as X. forwards*: H1 X.
+    destruct (classic (X = Z)).
+    subst. rewrite ?subst_tt_fresh; auto.
+    rewrite ?subst_tt_open_tt_var; auto.
+  simpl. apply* sub_poly. apply* pure_subst_tt.
+Qed.
+
+Hint Resolve sub_degen_inv_false sub_base_eq sub_regular sub_regular2.
+
+(* ********************************************************************** *)
 (** * Properties of Typing *)
 
 (* ********************************************************************** *)
@@ -1614,7 +1805,6 @@ Proof.
   apply* typing_var. apply* binds_weaken.
   apply_fresh* typing_abs as x. forwards~ K: (H x).
    apply_ih_bind (H0 x); eauto.
-  apply* typing_degen.
   apply* typing_app.
   apply_fresh* typing_tabs as X.
     repeat(rewrite pure_dist in *). rewrite <- concat_assoc.
@@ -1631,7 +1821,6 @@ Proof.
   forwards*: IHTyp (pure E) (pure G) (pure F). rewrite* pure_dist.
     rewrite <- ?pure_dist. apply* pure_okt.
     rewrite <- ?pure_dist in H0. apply* typing_stoic.
-  apply* typing_poly.
   apply* typing_sub.
 Qed.
 
@@ -1640,15 +1829,13 @@ Proof.
   intros. induction* H.
   pick_fresh x. forwards~ K: (H x). destructs (typing_regular K).
     apply* wft_arrow. forwards~ : H0 x. apply_empty* wft_strengthen.
-  inverts* IHtyping.
   inverts* IHtyping1.
   let L := gather_vars in (apply* (@wft_all L)). intros.
     forwards~: (H1 X). rewrite <- (@concat_empty_l bind E).
     apply pure_wft_weaken; rewrite* concat_empty_l.
   apply* wft_open.
   inversions IHtyping. apply* pure_wft.
-  inversions IHtyping. inversions H5. auto.
-  inversions IHtyping. inversions H3. auto.
+  apply* sub_regular.
 Qed.
 
 Lemma typing_weakening_env : forall E F G e T,
@@ -1663,14 +1850,12 @@ Proof. intros. inductions H.
   apply_fresh* typing_abs as x.  forwards~ : H x.
     apply_ih_bind* H0. destructs (typing_regular H2).
     applys~ okt_typ. apply* pure_wft_weaken.
-  apply* typing_degen.
   apply* typing_app.
   apply_fresh typing_tabs as X; auto.
     repeat(rewrite pure_dist in *). rewrite pure_eq in *.
     apply_ih_bind* H1. rewrite* pure_eq. forwards~ : H0 X.
   apply typing_tapp; auto. apply* pure_wft_weaken.
   apply* typing_stoic. rewrite ?pure_dist, ?pure_eq in *. auto.
-  apply* typing_poly.
   apply* typing_sub.
 Qed.
 
@@ -1683,8 +1868,7 @@ Proof. intros. induction H0; simpls; inversion H1.
   apply_fresh* typing_tabs as y. apply* pure_okt. rewrite* pure_eq.
   inversion H.
   apply* typing_stoic. rewrite* pure_eq.
-  apply* typing_poly.
-  apply* typing_sub.
+  apply* typing_sub. apply* IHtyping. apply* sub_pure.
 Qed.
 
 
@@ -1805,6 +1989,9 @@ Proof. intros. inductions H; auto.
   (* stoic *)
   destructs IHtyping. simpls. destruct (subset_union H3).
   splits_solve_subsets.
+  (* sub *)
+  splits_solve_subsets. destruct IHtyping as [_ [_ Y]]. lets: sub_fv_tt H.
+  rewrite* H1.
 Qed.
 
 Lemma typing_through_subst_ee : forall U E F x T e u,
@@ -1820,7 +2007,6 @@ Proof.
   apply_fresh* typing_abs as y.
     rewrite* subst_ee_open_ee_var.
     apply_ih_bind* H0. lets*: (typing_regular TypU).
-  apply* typing_degen.
   apply* typing_app.
   apply_fresh* typing_tabs as Y.  destruct (typing_regular TypU).
     rewrite* subst_ee_open_te_var.
@@ -1855,7 +2041,6 @@ Proof.
     rewrite ?dom_concat, in_union in HII. destruct HII.
       apply* H3. lets*: pure_dom_subset E.
       apply* H4. lets*: pure_dom_subset F.
-  apply* typing_poly.
   apply* typing_sub.
 Qed.
 
@@ -1886,7 +2071,6 @@ Proof.
     forwards~ IH: H y. destructs (typing_regular IH). destructs (okt_push_typ_inv H1).
     apply tvar_wft with (E & [:Z:] & F); auto.
     rewrite ?tvar_dist, (subseq_tvar Seq); auto.
-  apply* typing_degen.
   apply* typing_app.
   apply_fresh* typing_tabs as Y.
     unsimpl (subst_tb Z P bind_tvar).
@@ -1919,8 +2103,8 @@ Proof.
       apply subseq_trans with (pure G); auto. apply* subseq_pure_dist.
       apply subseq_okt with (E & [:Z:] & G); auto.
         apply* subseq_concat. apply* subseq_concat. apply* subseq_pure.
-  apply* typing_poly. apply* pure_subst_tt.
-  apply* typing_sub.
+  apply typing_sub with (subst_tt Z P S); iauto. apply* sub_subst_tt.
+    apply* wft_type.
 Qed.
 
 Lemma typing_through_subst_te : forall E F Z e T P,
@@ -1937,30 +2121,25 @@ Qed.
 
 (* ********************************************************************** *)
 
-Definition subtype (S T: typ) := forall E t, typing E t S -> typing E t T.
-
 Lemma typing_inv_abs : forall E S1 e1 T,
   typing E (trm_abs S1 e1) T ->
-  forall U1 U2, subtype T (typ_arrow U1 U2) ->
-     subtype U1 S1
+  forall U1 U2, sub T (typ_arrow U1 U2) ->
+     sub U1 S1
   /\ exists S2, exists L, forall x, x \notin L ->
-     typing (E & x ~: S1) (e1 open_ee_var x) S2 /\ subtype S2 U2.
+     typing (E & x ~: S1) (e1 open_ee_var x) S2.
 Proof.
   introv Typ. gen_eq e: (trm_abs S1 e1). gen S1 e1.
   induction Typ; intros S1 b1 EQ U1 U2 Sub; inversions EQ.
 
-  split. admit. exists T1 L. intros. split*. admit. (* <: on => is standard *)
-  split. admit. (* \x:S1 t : S -> T, then S <: S1  [1] *)
-    apply* IHTyp. admit. (* <: transitivity *)
-  split. admit. destruct (IHTyp S1 b1) with S1 T. auto. admit.
-    destruct H1 as [S2 [L Y1]]. exists S2 L. intros.
-    forwards*: Y1 x. destruct H2. split*. admit. (* weakening *)
-    admit. (* <: trans *)
-  split. admit. (* U -> S -> T <: U1 => U2, then U1 <: U;  use [1] and <:-trans *)
-    apply* IHTyp. admit. (* <:-trans *)
-  split. admit. (* same argument as above *)
-    apply* IHTyp. admit. (* <:-trans *)
+  split. lets*: sub_arrow_inv_sub Sub. exists* T1 L.
+  forwards: IHTyp S1 b1; auto. apply* sub_refl. admit. (* trivial type *) destruct H1.
+    split. lets*: sub_degen_inv_sub Sub. destruct H2 as [S2 [L H2]].
+    exists S2 L. intros. rewrite <- (@concat_empty_l bind E).
+    apply* typing_weakening_env; rewrite* concat_empty_l. admit. (* trivial okt *)
+  forwards*: IHTyp S1 b1.
 Admitted.
+
+(* inv tabs missing *)
 
 Lemma typing_tabs_regular: forall t T,
   typing empty (trm_tabs t) T ->
@@ -1969,8 +2148,8 @@ Proof.
   introv Typ. remember empty as E.
   remember (trm_tabs t) as e. induction* Typ; inversion* Heqe; substs.
 
-  forwards*: IHTyp. destruct H0. false.
-  forwards*: IHTyp. admit. admit.
+  forwards*: IHTyp. rewrite* pure_empty. destruct H1. false.
+  forwards*: IHTyp. destruct H1. subst. destruct (sub_all_inv2 H). iauto.
 Qed.
 
 Lemma typing_fvar_empty_false: forall x T,
@@ -1981,7 +2160,7 @@ Proof.
   induction* Typ; inversion* Heqt; substs.
 
   false* binds_empty_inv.
-
+  apply* IHTyp. rewrite* pure_empty.
 Qed.
 
 (* ********************************************************************** *)
@@ -1993,19 +2172,22 @@ Lemma preservation_result : preservation.
 Proof.
   introv Typ. gen e'. induction Typ; introv Red;
    try solve [ inversion Red ].
-  apply* typing_degen.
   (* case: app *)
   inversions Red; try solve [ apply* typing_app ].
-  forwards*: typing_inv_abs Typ1 T1 T2. admit.
+  forwards*: typing_inv_abs Typ1 T1 T2.
+  apply sub_refl. admit. (* trivial type *)
+  lets*: typing_wft Typ1.
   destruct H as [Y [S2 [L H]]]. pick_fresh x. forwards*: H x.
 
   rewrite* (@subst_ee_intro x).
+    lets*: typing_sub Y Typ2.
     apply_empty typing_through_subst_ee; substs*.
+    admit. (* lemma about environment <: weakening needed *)
     lets*: typing_regular Typ2.
 
   (* case: tapp *)
   inversions Red. try solve [ apply* typing_tapp ].
-  inversions Typ. pick_fresh X. forwards~ : H6 X.
+  inversions Typ. (* inversion lemma required *)  pick_fresh X. forwards~ : H6 X.
   rewrite* (@subst_te_intro X).
   rewrite* (@subst_tt_intro X).
   asserts_rewrite (E = E & map (subst_tb X T) empty).
@@ -2014,8 +2196,9 @@ Proof.
   rewrite <- (@concat_empty_l bind E).
   apply typing_weakening_env. rewrite* concat_empty_l.
   rewrite concat_empty_l. apply* okt_tvar.
-  (* case: poly *)
-  apply* typing_poly.
+  admit. (* inversion lemma required to get rid of this case *)
+  (* case: stoic *)
+  apply* typing_stoic.
   (* case: sub *)
   apply* typing_sub.
 Qed.
@@ -2036,8 +2219,7 @@ Proof.
    try solve [ inversion Val | inversion EQT | eauto ].
   subst. false* binds_empty_inv.
 
-  subst. inversions EQT. inversions* Val. lets*: typing_tabs_regular Typ. false H0.
-  false (typing_fvar_empty_false Typ).
+  subst. admit.
 Qed.
 
 Lemma canonical_form_tabs : forall t U1,
@@ -2049,6 +2231,7 @@ Proof.
   induction Typ; introv EQT EQE;
    try solve [ inversion Val | inversion EQT | eauto ].
   subst. false* binds_empty_inv.
+  subst. lets*: sub_all_inv H. destruct H0 as [U [Y _]]. subst*.
 Qed.
 
 Lemma progress_result : progress.
@@ -2255,6 +2438,9 @@ Qed.
 Lemma not_capsafe_caprod : forall T, type T -> ~capsafe T -> caprod T.
 Proof. intros. destruct* (capsafe_caprod_classic H). Qed.
 
+Lemma caprod_not_capsafe : forall T, caprod T -> ~ capsafe T.
+Proof. intros.  intro Y. lets*: capsafe_not_caprod Y.  Qed.
+
 Lemma healthy_env_capsafe : forall E S x, healthy E ->
    binds x (bind_typ S) E ->  capsafe S.
 Proof. introv H Hb. inductions H.
@@ -2422,6 +2608,19 @@ Proof. introv H. inductions E; simpls*.
     rewrite <- cons_to_push in H0. inversion H0.
 Qed.
 
+Lemma capsafe_sub: forall S T, type S -> capsafe S -> sub S T -> capsafe T.
+Proof.
+  intros. inductions H1; iauto.
+  inversions* H0.
+  inversions* H0. inversions H.
+    forwards*: sub_regular2 T1 S1.
+    destruct* (capsafe_decidable ((proj1 H) H2)).
+      lets*: caprod_not_capsafe H4.
+      lets*: not_capsafe_caprod H0. apply* capsafe_eff_any_free. admit.
+
+  admit. admit. admit. admit.
+Qed.
+
 Lemma healthy_env_term_capsafe_0: forall E t T,
   degree_trm t = 0 ->
   healthy E ->
@@ -2435,17 +2634,13 @@ Proof. introv Deg H Typ. inductions Typ; intros; autos.
       apply* capsafe_any_safe_free. apply* (H1 x). rewrite* <- degree_trm_eq_open_ee.
       apply* healthy_typ. lets*: not_capsafe_caprod H3.
       apply* capsafe_eff_any_free. autos* wft_type typing_wft.
-  forwards~ IH: IHTyp. inversions* IH.
   simpl in Deg. lets Degs: max_zero_inv Deg. inversions Degs.
     forwards~ : IHTyp1. forwards~ : IHTyp2.
     inversions* H2. false. autos* capsafe_not_caprod.
   simpl in Deg. inversions Deg.
   simpl in Deg. forwards~ : IHTyp. apply* capsafe_all_open_tt. apply* wft_type.
   forwards~: IHTyp. apply* healthy_pure. inversion* H1.
-  forwards~: IHTyp. inversions* H1. apply* capsafe_eff_any. inversion* H4.
-    inversion* H5.
-  forwards~: IHTyp. inversions* H0. apply* capsafe_eff_any. inversion* H4.
-    apply* capsafe_any_safe. inversion* H3.
+  forwards~: IHTyp. forwards*: capsafe_sub H1 H0.
 Qed.
 
 Lemma healthy_env_term_capsafe_k: forall E t T k,
@@ -2464,7 +2659,6 @@ Proof. introv Deg H Typ. gen t E T. inductions k; intros.
       apply* capsafe_any_safe_free. apply* (H1 x). rewrite* <- degree_trm_eq_open_ee.
       apply* healthy_typ. lets*: not_capsafe_caprod H2.
       apply* capsafe_eff_any_free. autos* wft_type typing_wft.
-  forwards~ IH: IHTyp. inversions* IH.
   simpl in Deg. forwards~ LT1: Max.max_lub_l Deg. forwards~ LT2: Max.max_lub_r Deg.
     forwards~ : IHTyp1. forwards~ : IHTyp2.
     inversions* H0. false. autos* capsafe_not_caprod.
@@ -2493,10 +2687,7 @@ Proof. introv Deg H Typ. gen t E T. inductions k; intros.
       eapply capsafe_subst_tt_caprod; eauto. rewrite* <- subst_tt_intro.
   simpl in H. forwards~ : IHTyp. apply* capsafe_all_open_tt. apply* wft_type.
   forwards~: IHTyp. apply* healthy_pure. inversion* H1.
-  forwards~: IHTyp. inversions* H1. apply* capsafe_eff_any. inversion* H4.
-    inversion* H5.
-  forwards~: IHTyp. inversions* H0. apply* capsafe_eff_any. inversion* H4.
-    apply* capsafe_any_safe. inversion* H3.
+  forwards~: IHTyp. forwards*: capsafe_sub H1 H0.
 Qed.
 
 Lemma healthy_env_term_capsafe: forall E t T,
@@ -2512,7 +2703,6 @@ Qed.
 
 Lemma capability_safety_result_2 : capability_safety_2.
 Proof. introv HL Pure Typ. inductions Typ; auto.
-  apply* IHTyp.
 
   exists T1 T2. apply* typing_stoic. rewrite* Pure.
   rewrite <- Pure. apply* IHTyp. apply* healthy_pure. rewrite* pure_eq.
@@ -2576,7 +2766,7 @@ Proof. introv Prim Typ Val. inductions Typ; auto.
   inversion Val.
   lets: primitive_pure_healthy Prim. lets*: healthy_env_term_capsafe Typ.
     inversion* H1.
-  inversion Val.
+  forwards*: IHTyp. admit. (* some case analysis here *)
 Qed.
 
 
