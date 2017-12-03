@@ -135,6 +135,10 @@ safety. The intended relation between "pure", "inhabited" and
 > A pure and inhabited environment is also a capsafe (and pure)
 > environment.
 
+## Publication
+
+1. [A Study of Capability-Based Effect Systems](https://infoscience.epfl.ch/record/219173?ln=en), *F. Liu, S. Stucki (dir), N. Amin(dir)*, master thesis, EPFL, 2016
+
 ## Reference
 
 1. [Spores](http://infoscience.epfl.ch/record/191239)  *Heather Miller et al*, 2014
