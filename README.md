@@ -36,7 +36,7 @@ variables in the environment:
 
 ``` scala
 def map(xs: List[Int], f: Int => Int): List[Int]
-def pmap(xs: List[Int], f: Int -> Int): List[Int]                //  => means f is stoic function type
+def pmap(xs: List[Int], f: Int -> Int): List[Int]                //  -> means f is stoic function type
 def print(x: Any)(implicit c: IO): ()
 
 def bar(xs: List[Int])(implicit c: IO) = {
