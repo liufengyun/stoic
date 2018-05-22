@@ -7,7 +7,7 @@ A main trait of the calculi under study is the introduction of
 _stoic functions_. Compared to normal functions which can capture
 anything from the environment, _stoic functions_ don't capture
 capabilities or _non-stoic functions_ from the environment. In
-this sense, they are capbility-disciplined.
+this sense, they are capability-disciplined.
 
 There are two major applications of the calculus:
 
